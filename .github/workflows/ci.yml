@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # 계약은 submodule로 고정되어 있고 적합성 스위트가 그 안에 산다.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: "0.10.2"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: 개발 환경
+        run: uv sync --frozen --extra dev
+
+      - name: 린트
+        run: |
+          uv run --extra dev ruff check src tests scripts
+          uv run --extra dev ruff format --check src tests scripts
+
+      - name: 타입
+        run: uv run --extra dev mypy src scripts
+
+      - name: 주석 언어
+        run: uv run --extra dev python scripts/check_comments.py src tests scripts
+
+      - name: 내부 의존
+        run: uv run --extra dev python scripts/check_internal_dependencies.py src
+
+      - name: 테스트
+        run: uv run pytest -q
+
+      - name: 계약 적합성
+        run: uv run python contract/conformance/runner/verify.py
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 이미지 빌드
+        run: docker build .
