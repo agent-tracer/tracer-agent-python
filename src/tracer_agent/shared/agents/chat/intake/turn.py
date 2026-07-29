@@ -6,22 +6,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ...runtime.ledger import LedgerSql, SqlRow, UniqueViolation
-from ..models import GRAPH_BACKEND
 from .dispatch import ExecutionDispatch
 from .ids import generate_ulid
 from .ledger import QUEUED, ChatIntakeLedger
 from .models import PostMessagePayload
 
 THREAD_NOT_FOUND = (404, "not_found", "Thread not found")
-BACKEND_MISMATCH = (
-    400,
-    "chat.execution-backend-mismatch",
-    "This surface only accepts turns requesting the graph agent backend",
-)
 BACKEND_CONFLICT = (
     409,
     "chat.execution-backend-conflict",
-    "Chat thread already has an active turn on another agent backend",
+    "Chat thread already has an active turn",
 )
 IDEMPOTENCY_CONFLICT = (
     409,
@@ -78,10 +72,6 @@ class ChatTurnIntake:
         input_hash: str,
         now: datetime,
     ) -> AcceptedChatTurn:
-        # edge가 이 백엔드를 지목한 요청만 여기로 보내므로 다른 백엔드를 부르는 본문은 잘못 온 것이다.
-        if payload.agentBackend != GRAPH_BACKEND:
-            raise ChatIntakeRejected(*BACKEND_MISMATCH)
-
         owner = await self._ledger.thread_owner(thread_id)
         if owner is None or owner != user_id:
             raise ChatIntakeRejected(*THREAD_NOT_FOUND)
@@ -90,7 +80,7 @@ class ChatTurnIntake:
         if existing is not None:
             return await self._existing(existing, input_hash)
 
-        if await self._ledger.has_active_on_other_backend(thread_id, GRAPH_BACKEND):
+        if await self._ledger.has_active_turn(thread_id):
             raise ChatIntakeRejected(*BACKEND_CONFLICT)
 
         message = await self._ledger.insert_user_message(generate_ulid(now), thread_id, payload.content, now)
@@ -101,7 +91,6 @@ class ChatTurnIntake:
             str(message["id"]),
             payload.clientRequestId,
             input_hash,
-            payload.agentBackend,
             payload.model,
             payload.language,
             now,

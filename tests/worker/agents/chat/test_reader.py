@@ -69,7 +69,7 @@ async def test_범위_토큰이_있으면_자기신고_헤더와_함께_실어_�
         httpx.AsyncClient(transport=httpx.MockTransport(handle)), BASE_URL, "user-1", "ms1.token"
     )
 
-    await client.read("list_settings", {})
+    await client.read("list_tags", {})
 
     assert seen[0].headers["authorization"] == "Bearer ms1.token"
     assert seen[0].headers[USER_HEADER] == "user-1"

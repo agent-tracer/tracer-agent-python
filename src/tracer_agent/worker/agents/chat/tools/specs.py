@@ -14,15 +14,7 @@ from .arg_descriptions import ARG_DESCRIPTIONS
 
 STATUS_VALUES = ("running", "waiting", "completed", "errored")
 SEVERITY_VALUES = ("info", "warn", "block")
-SETTING_KEYS = (
-    "anthropic.api_key",
-    "anthropic.model",
-    "ruleGen.maxRulesPerTask",
-    "taskCleanup.maxSuggestions",
-    "claude.outputLanguage",
-)
 JOB_KINDS = ("title.suggestion", "recipe.scan", "task.cleanup", "rule.generation")
-BACKENDS = ("python", "claude-sdk")
 
 
 @dataclass(frozen=True)
@@ -90,7 +82,6 @@ TOOL_SPECS: dict[str, ToolSpec] = {
         constraints={"status": EnumArg(("pending", "accepted", "dismissed"))},
     ),
     "get_job": ToolSpec(required=("jobId",)),
-    "list_settings": ToolSpec(),
     "recall_facts": ToolSpec(),
     "remember_fact": ToolSpec(required=("key", "content")),
     "update_task": ToolSpec(
@@ -129,15 +120,10 @@ TOOL_SPECS: dict[str, ToolSpec] = {
     "retire_recipe": ToolSpec(required=("recipeId",), mutation=True),
     "accept_cleanup": ToolSpec(required=("suggestionId",), mutation=True),
     "dismiss_cleanup": ToolSpec(required=("suggestionId",), mutation=True),
-    "upsert_setting": ToolSpec(
-        required=("key", "value"), mutation=True, constraints={"key": EnumArg(SETTING_KEYS)}
-    ),
-    "delete_setting": ToolSpec(required=("key",), mutation=True, constraints={"key": EnumArg(SETTING_KEYS)}),
     "enqueue_job": ToolSpec(
         required=("kind", "input"),
-        optional=("agentBackend",),
         mutation=True,
-        constraints={"kind": EnumArg(JOB_KINDS), "agentBackend": EnumArg(BACKENDS)},
+        constraints={"kind": EnumArg(JOB_KINDS)},
     ),
 }
 

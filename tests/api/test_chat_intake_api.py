@@ -16,7 +16,7 @@ from tracer_agent.shared.agents.chat.intake.dispatch import UnwiredExecutionDisp
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 PATH = "/api/v1/chat/threads/t1/messages"
-BODY: dict[str, Any] = {"clientRequestId": "r1", "content": "안녕", "agentBackend": "python"}
+BODY: dict[str, Any] = {"clientRequestId": "r1", "content": "안녕"}
 
 
 class SingleSql:

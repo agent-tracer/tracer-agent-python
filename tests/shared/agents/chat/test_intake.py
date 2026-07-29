@@ -12,7 +12,6 @@ import pytest
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.intake.models import PostMessagePayload
 from tracer_agent.shared.agents.chat.intake.turn import ChatIntakeRejected, ChatTurnIntake
-from tracer_agent.shared.agents.chat.models import GRAPH_BACKEND
 from tracer_agent.shared.agents.runtime.ledger import UniqueViolation
 
 NOW = datetime(2026, 7, 26, 0, 5, tzinfo=UTC)
@@ -35,16 +34,18 @@ class RecordingDispatch:
 
 
 class LosingInsert:
-    """멱등 조회를 지나친 뒤에야 다른 접수가 같은 자리를 차지한 상황을 만든다."""
+    """아직 커밋되지 않은 다른 접수가 같은 자리를 차지한 상황을 만든다."""
 
     def __init__(self, store: SqliteLedgerSql) -> None:
         self._store = store
         self._hidden = True
 
     async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
-        """첫 멱등 조회에는 아무것도 없다고 답하고 실행 삽입에는 유일 제약 위반을 낸다."""
+        """삽입 전 조회에는 아무것도 없다고 답하고 실행 삽입에는 유일 제약 위반을 낸다."""
         if self._hidden and "client_request_id = $3" in sql:
             self._hidden = False
+            return []
+        if "status IN ('queued', 'running')" in sql:
             return []
         if "INSERT INTO chat_executions" in sql:
             raise UniqueViolation("chat_executions_idempotency")
@@ -66,11 +67,7 @@ def thread_row(user_id: str = "u1") -> dict[str, Any]:
 
 
 def payload(**overrides: Any) -> PostMessagePayload:
-    defaults: dict[str, Any] = {
-        "clientRequestId": "r1",
-        "content": "안녕",
-        "agentBackend": GRAPH_BACKEND,
-    }
+    defaults: dict[str, Any] = {"clientRequestId": "r1", "content": "안녕"}
     return PostMessagePayload.model_validate(defaults | overrides)
 
 
@@ -183,43 +180,22 @@ async def test_이미_돌고_있는_실행에는_다시_신호하지_않는다(
     assert dispatch.signaled == []
 
 
-async def test_다른_백엔드를_부르는_본문은_잘못_온_요청이다(
+async def test_접수는_실행에_구현체를_적지_않는다(
     store: SqliteLedgerSql, dispatch: RecordingDispatch
 ) -> None:
-    with pytest.raises(ChatIntakeRejected) as rejected:
-        await ChatTurnIntake(store, dispatch).enqueue("u1", "t1", payload(agentBackend="claude-sdk"), NOW)
+    await ChatTurnIntake(store, dispatch).enqueue("u1", "t1", payload(), NOW)
 
-    assert (rejected.value.status, rejected.value.code) == (400, "chat.execution-backend-mismatch")
-    assert store.rows("chat_executions") == []
+    assert store.rows("chat_executions")[0]["requested_backend"] is None
 
 
-async def test_다른_백엔드의_턴이_아직_돌면_접수하지_않는다(
+async def test_진행_중인_턴이_있으면_접수하지_않는다(
     store: SqliteLedgerSql, dispatch: RecordingDispatch
 ) -> None:
-    store.seed(
-        "chat_executions",
-        [
-            {
-                "id": "e-sdk",
-                "user_id": "u1",
-                "thread_id": "t1",
-                "user_message_id": "m-sdk",
-                "client_request_id": "r-sdk",
-                "input_hash": "h",
-                "status": "queued",
-                "requested_backend": "claude-sdk",
-                "draft_text": "",
-                "draft_seq": 0,
-                "attempt": 0,
-                "usage": {},
-                "created_at": NOW,
-                "updated_at": NOW,
-            }
-        ],
-    )
+    intake = ChatTurnIntake(store, dispatch)
+    await intake.enqueue("u1", "t1", payload(), NOW)
 
     with pytest.raises(ChatIntakeRejected) as rejected:
-        await ChatTurnIntake(store, dispatch).enqueue("u1", "t1", payload(), NOW)
+        await intake.enqueue("u1", "t1", payload(clientRequestId="r2"), NOW)
 
     assert (rejected.value.status, rejected.value.code) == (409, "chat.execution-backend-conflict")
     assert len(store.rows("chat_executions")) == 1

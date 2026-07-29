@@ -1,4 +1,4 @@
-"""요청별 의존을 받아 chat의 37개 도구를 langchain 도구로 조립한다."""
+"""요청별 의존을 받아 chat의 35개 도구를 langchain 도구로 조립한다."""
 
 from __future__ import annotations
 

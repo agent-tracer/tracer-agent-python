@@ -89,7 +89,6 @@ ARG_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "get_job": {
         "jobId": "The AI job to report on.",
     },
-    "list_settings": {},
     "recall_facts": {},
     "remember_fact": {
         "key": (
@@ -196,27 +195,11 @@ ARG_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "dismiss_cleanup": {
         "suggestionId": "The cleanup suggestion to dismiss.",
     },
-    "upsert_setting": {
-        "key": (
-            "Which setting to write: anthropic.api_key, anthropic.model, ruleGen.maxRulesPerTask, "
-            "taskCleanup.maxSuggestions, or claude.outputLanguage."
-        ),
-        "value": "The new value as a string. Numeric settings still take their number as text.",
-    },
-    "delete_setting": {
-        "key": (
-            "Which setting to clear: anthropic.api_key, anthropic.model, ruleGen.maxRulesPerTask, "
-            "taskCleanup.maxSuggestions, or claude.outputLanguage."
-        ),
-    },
     "enqueue_job": {
         "kind": "Which job to launch: title.suggestion, recipe.scan, task.cleanup, or rule.generation.",
         "input": (
             'JSON object carrying what that kind needs, for example {"taskId":"..."} for '
             "title.suggestion and recipe.scan."
-        ),
-        "agentBackend": (
-            "Force the executor to python or claude-sdk. Omit to let the server pick the default."
         ),
     },
 }

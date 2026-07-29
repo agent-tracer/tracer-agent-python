@@ -80,18 +80,11 @@ def test_요청_스키마의_제약이_계약과_같다() -> None:
         PostMessagePayload.model_validate({"clientRequestId": "r1", "content": "안녕", "model": "   "})
 
 
-def test_실행_백엔드와_언어_선택지가_계약과_같다() -> None:
+def test_언어_선택지가_계약과_같다() -> None:
     constraints = conformance_case("chat.intake")["body"]["constraints"]
-    backends = constraints["agentBackend"]["enum"]
     languages = shared_contract("language.directives.json")["languages"]
 
     assert constraints["language"]["enum"] == languages
-
-    for backend in backends:
-        accepted = PostMessagePayload.model_validate(
-            {"clientRequestId": "r1", "content": "안녕", "agentBackend": backend}
-        )
-        assert accepted.agentBackend == backend
 
     for language in languages:
         accepted = PostMessagePayload.model_validate(
@@ -100,9 +93,7 @@ def test_실행_백엔드와_언어_선택지가_계약과_같다() -> None:
         assert accepted.language == language
 
     with pytest.raises(ValidationError):
-        PostMessagePayload.model_validate(
-            {"clientRequestId": "r1", "content": "안녕", "agentBackend": "graph"}
-        )
+        PostMessagePayload.model_validate({"clientRequestId": "r1", "content": "안녕", "language": "fr"})
 
 
 def test_접수_본문_케이스가_계약과_같은_판정을_받는다() -> None:

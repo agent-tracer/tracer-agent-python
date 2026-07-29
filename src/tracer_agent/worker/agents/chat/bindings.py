@@ -80,7 +80,6 @@ TOOL_BINDINGS: dict[str, ToolBinding] = {
     "list_recipes": _get("/api/v1/recipes", query=("status",)),
     "list_cleanup_suggestions": _get("/api/v1/task-cleanup/suggestions", query=("status",)),
     "get_job": _get("/api/v1/jobs/{jobId}", path_args=("jobId",)),
-    "list_settings": _get("/api/v1/settings"),
     "update_task": _write(
         "PATCH", "/api/v1/tasks/{taskId}", path_args=("taskId",), body=_same("title", "status")
     ),
@@ -134,9 +133,7 @@ TOOL_BINDINGS: dict[str, ToolBinding] = {
         "/api/v1/task-cleanup/suggestions/{suggestionId}/dismiss",
         path_args=("suggestionId",),
     ),
-    "upsert_setting": _write("PUT", "/api/v1/settings/{key}", path_args=("key",), body=_same("value")),
-    "delete_setting": _write("DELETE", "/api/v1/settings/{key}", path_args=("key",)),
-    "enqueue_job": _write("POST", "/api/v1/jobs", body=_same("kind", "input", "agentBackend")),
+    "enqueue_job": _write("POST", "/api/v1/jobs", body=_same("kind", "input")),
     "recall_facts": _get("/api/v1/chat/memories"),
     # 확인 게이트 없이 즉시 upsert하는 유일한 쓰기라 gate는 write가 아니라 none으로 남는다.
     "remember_fact": ToolBinding(

@@ -5,14 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...runtime.ledger import SqlRow
 from ...shared.models import Language, TrimmedStr
 
-ChatBackend = Literal["python", "claude-sdk"]
 ModelName = Annotated[TrimmedStr, Field(min_length=1)]
 
 
@@ -24,14 +23,12 @@ class PostMessagePayload(BaseModel):
     clientRequestId: TrimmedStr = Field(min_length=1, max_length=200)
     content: TrimmedStr = Field(min_length=1, max_length=10_000)
     model: ModelName | None = None
-    agentBackend: ChatBackend | None = None
     language: Language | None = None
 
     def input_hash(self) -> str:
         """같은 요청 식별자가 같은 입력인지 가릴 해시를 tracer-api와 같은 바이트로 만든다."""
         payload = {
             "content": self.content,
-            "agentBackend": self.agentBackend,
             "model": self.model,
             "language": self.language,
         }
