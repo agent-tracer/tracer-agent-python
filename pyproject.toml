@@ -3,7 +3,29 @@ name = "tracer-agent-python"
 version = "0.1.0"
 description = "LangGraph로 구현한 에이전트 서비스"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "langgraph>=1.0",
+    "langchain-core>=1.0",
+    "langchain-anthropic>=1.0",
+    "anthropic>=0.42.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.27.0",
+    "asyncpg>=0.30.0",
+    "aiokafka>=0.12.0",
+    "opensearch-py[async]>=2.8.0",
+    "opentelemetry-api>=1.38.0",
+    "opentelemetry-sdk>=1.38.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.38.0",
+    "opentelemetry-instrumentation-system-metrics>=0.59b0",
+    "langsmith>=0.9.8",
+    "langchain>=1.3.12",
+    "langgraph-checkpoint-postgres>=3.1.0",
+    "psycopg[binary]>=3.3.4",
+    "temporalio>=1.9.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -11,7 +33,14 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
+    "asyncpg-stubs>=0.30.0",
+    "grandalf>=0.8",
+    "pyyaml>=6.0",
 ]
+
+[project.scripts]
+tracer-agent = "tracer_agent.api.__main__:main"
+tracer-agent-worker = "tracer_agent.worker.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -35,9 +64,22 @@ select = ["E", "F", "I", "UP", "B", "A", "SLF", "ARG", "SIM", "C4", "PIE", "PERF
 [tool.ruff.lint.per-file-ignores]
 # 테스트는 표본 데이터 한 줄 표현을 위해 긴 줄을 허용한다.
 "tests/*" = ["E501"]
+# 워크플로 등록 결과는 Temporal이 비공개 정의 객체로만 내보인다.
+"tests/worker/workflows/test_chat_workflows.py" = ["E501", "SLF001"]
+"tests/worker/workflows/test_jobs_workflows.py" = ["E501", "SLF001"]
 
 [tool.mypy]
 python_version = "3.12"
 packages = ["tracer_agent"]
 mypy_path = "src"
 strict = true
+
+# aiokafka는 타입 표식을 배포하지 않으므로 생산자 표면은 이 서비스의 Protocol이 붙든다.
+[[tool.mypy.overrides]]
+module = ["aiokafka.*"]
+ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.161.5",
+]

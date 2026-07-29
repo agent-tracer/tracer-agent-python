@@ -7,10 +7,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-AGENT_GRAPH = "agent_graph"
-API_ROOT = f"{AGENT_GRAPH}.api"
-WORKER_ROOT = f"{AGENT_GRAPH}.worker"
-SHARED_ROOT = f"{AGENT_GRAPH}.shared"
+PACKAGE_ROOT = "tracer_agent"
+API_ROOT = f"{PACKAGE_ROOT}.api"
+WORKER_ROOT = f"{PACKAGE_ROOT}.worker"
+SHARED_ROOT = f"{PACKAGE_ROOT}.shared"
 AGENTS_PACKAGE = f"{SHARED_ROOT}.agents"
 API_LAYER = "api"
 WORKER_LAYER = "worker"
@@ -94,7 +94,7 @@ def _source_layer(module: str) -> str | None:
 
 
 def _target_layer(module: str) -> str | None:
-    if not (module == AGENT_GRAPH or module.startswith(f"{AGENT_GRAPH}.")):
+    if not (module == PACKAGE_ROOT or module.startswith(f"{PACKAGE_ROOT}.")):
         return None
     if module == API_ROOT or module.startswith(f"{API_ROOT}."):
         return API_LAYER
