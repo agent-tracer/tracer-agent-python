@@ -8,7 +8,7 @@ from ...runtime.ledger import LedgerSql, SqlRow
 
 QUEUED = "queued"
 
-_SELECT_THREAD_OWNER = "SELECT user_id FROM agent_chat_thread_view WHERE id = $1"
+_SELECT_THREAD_OWNER = "SELECT user_id FROM chat_threads WHERE id = $1"
 
 _SELECT_BY_IDEMPOTENCY = """
 SELECT * FROM chat_executions
@@ -48,7 +48,7 @@ class ChatIntakeLedger:
         self._sql = sql
 
     async def thread_owner(self, thread_id: str) -> str | None:
-        """스레드의 주인을 계약 뷰로만 읽고 없으면 아무것도 내지 않는다."""
+        """스레드의 주인을 계약 표에서 읽고 없으면 아무것도 내지 않는다."""
         rows = await self._sql.fetch(_SELECT_THREAD_OWNER, thread_id)
         return str(rows[0]["user_id"]) if rows else None
 

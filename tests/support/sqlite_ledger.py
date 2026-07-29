@@ -31,8 +31,6 @@ CREATE TABLE chat_threads (
     updated_at TEXT NOT NULL
 );
 
-CREATE VIEW agent_chat_thread_view AS SELECT id, user_id, summary FROM chat_threads;
-
 CREATE TABLE chat_executions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
