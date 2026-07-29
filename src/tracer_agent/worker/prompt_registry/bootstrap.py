@@ -1,4 +1,4 @@
-"""python 백엔드가 부팅마다 프롬프트 조각을 tracer-api의 내부 창구에 등록하고 해석한다."""
+"""python 백엔드가 부팅마다 프롬프트 조각을 agent-api의 내부 창구에 등록하고 해석한다."""
 
 from __future__ import annotations
 
@@ -42,35 +42,41 @@ _FRAGMENT_REGISTRIES: tuple[Mapping[str, LanPromptFragment], ...] = (
 
 
 async def register_and_resolve_fragments(
-    client: httpx.AsyncClient, tracer_api_url: str, profile: str
+    client: httpx.AsyncClient, agent_api_url: str, profile: str
 ) -> Mapping[tuple[str, str], Mapping[str, object]]:
     manifest = [
         _manifest_entry(fragment) for registry in _FRAGMENT_REGISTRIES for fragment in registry.values()
     ]
     try:
         response = await client.post(
-            f"{tracer_api_url.rstrip('/')}{FRAGMENT_REGISTER_PATH}",
+            f"{agent_api_url.rstrip('/')}{FRAGMENT_REGISTER_PATH}",
             json={"profile": profile, "manifest": manifest},
             timeout=REGISTER_TIMEOUT_S,
         )
         response.raise_for_status()
     except (httpx.HTTPError, ValueError) as error:
         raise PromptRegistrationError(f"fragment registration failed: {error}") from error
-    payload = response.json()
-    if not isinstance(payload, list):
-        raise PromptRegistrationError("fragment registration returned a non-list payload")
-    return _verified_snapshot(manifest, payload)
+    return _verified_snapshot(manifest, _envelope_data(response.json()))
 
 
 async def resolve_fragments_or_fallback(
-    client: httpx.AsyncClient, tracer_api_url: str, profile: str
+    client: httpx.AsyncClient, agent_api_url: str, profile: str
 ) -> Mapping[tuple[str, str], Mapping[str, object]] | None:
     """조각 해석이 실패하면 파일 기본값으로 물러서고 그 사실을 경고 로그로 남긴다."""
     try:
-        return await register_and_resolve_fragments(client, tracer_api_url, profile)
+        return await register_and_resolve_fragments(client, agent_api_url, profile)
     except PromptRegistrationError as error:
         _log.warning("agent.prompt.fallback reason=%s", error)
         return None
+
+
+def _envelope_data(payload: object) -> list[object]:
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise PromptRegistrationError("fragment registration returned a failure envelope")
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise PromptRegistrationError("fragment registration returned a non-list payload")
+    return data
 
 
 def _manifest_entry(fragment: LanPromptFragment) -> dict[str, object]:

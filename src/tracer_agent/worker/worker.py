@@ -92,7 +92,7 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
         # 코드 pin이 DB production 채널과 같은지만 읽어서 검사하며, 실행은 이 값을 쓰지 않는다.
         await assert_prompt_registry_synced_at(settings.tracer_dsn())
         prompt_fragments = await resolve_fragments_or_fallback(
-            http_client, settings.tracer_api_url, settings.monitor_profile
+            http_client, settings.agent_api_url, settings.monitor_profile
         )
     except BaseException:
         await http_client.aclose()
@@ -118,7 +118,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         # 코드 pin이 DB production 채널과 같은지만 읽어서 검사하며, 실행은 이 값을 쓰지 않는다.
         await assert_prompt_registry_synced_at(settings.tracer_dsn())
         prompt_fragments = await resolve_fragments_or_fallback(
-            http_client, settings.tracer_api_url, settings.monitor_profile
+            http_client, settings.agent_api_url, settings.monitor_profile
         )
     except BaseException:
         await http_client.aclose()

@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     temporal_namespace: str = "default"
     # 단가표도 한도도 자격도 이 서비스가 갖지 않으므로 실행 봉투를 이 주소에서 받아 온다.
     tracer_api_url: str = "http://tracer-api:3902"
+    # 프롬프트는 에이전트의 데이터이므로 워커가 자기 배포 단위의 창구에서 이번 실행이 쓸 판을 받아 온다.
+    agent_api_url: str = "http://agent-api:8800"
 
     # LangSmith SDK가 같은 환경변수를 직접 읽으며 명시적 opt-in 전에는 trace를 보내지 않는다.
     langsmith_tracing: bool = False

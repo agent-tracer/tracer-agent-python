@@ -17,7 +17,7 @@ from tracer_agent.worker.prompt_registry.bootstrap import (
     resolve_fragments_or_fallback,
 )
 
-BASE_URL = "http://tracer-api:3902"
+BASE_URL = "http://agent-api:8800"
 
 
 def client(handler) -> httpx.AsyncClient:  # type: ignore[no-untyped-def]
@@ -53,7 +53,7 @@ def resolved_from_request(request: httpx.Request) -> list[dict[str, object]]:
 async def test_조각_등록이_검증된_묶음을_온전히_지킨다() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == f"{BASE_URL}/internal/prompts/fragments/register-and-resolve"
-        return httpx.Response(200, json=resolved_from_request(request))
+        return httpx.Response(200, json={"ok": True, "data": resolved_from_request(request)})
 
     async with client(respond) as http_client:
         snapshot = await register_and_resolve_fragments(http_client, BASE_URL, "local")
@@ -76,9 +76,18 @@ async def test_조각_등록이_어긋나면_닫힌_채로_실패한다(failure:
             rows[0]["contentHash"] = "tampered"
         else:
             rows[0]["backend"] = "claude-sdk"
-        return httpx.Response(200, json=rows)
+        return httpx.Response(200, json={"ok": True, "data": rows})
 
     async with client(respond) as http_client:
+        with pytest.raises(PromptRegistrationError):
+            await register_and_resolve_fragments(http_client, BASE_URL, "prd")
+
+
+async def test_봉투가_아닌_응답이면_조각_등록이_실패한다() -> None:
+    def bare(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=resolved_from_request(request))
+
+    async with client(bare) as http_client:
         with pytest.raises(PromptRegistrationError):
             await register_and_resolve_fragments(http_client, BASE_URL, "prd")
 
@@ -106,7 +115,7 @@ async def test_조각_창구가_닿지_않으면_파일_기본값으로_물러�
 
 async def test_조각_해석이_되면_스냅샷을_그대로_돌려준다() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=resolved_from_request(request))
+        return httpx.Response(200, json={"ok": True, "data": resolved_from_request(request)})
 
     async with client(respond) as http_client:
         snapshot = await resolve_fragments_or_fallback(http_client, BASE_URL, "local")
