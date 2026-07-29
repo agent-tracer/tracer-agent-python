@@ -13,6 +13,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.2 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 COPY src ./src
+# 계약은 적합성 스위트가 이미지 안에서 돌기 위해 함께 실린다.
+COPY contract ./contract
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 EXPOSE 8800
