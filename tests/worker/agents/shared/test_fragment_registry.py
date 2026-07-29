@@ -46,7 +46,7 @@ _REGISTRIES = {
 _PROMPT_HASHES = {
     "chat.system": (
         LAN_ASSISTANT_SYSTEM_PROMPT,
-        "2db0bf4a170cfe48b798c6892db93a98b01849b007116946031d2e1416a8ffa4",
+        "7eb4f16e263c58e412a65651ecb3ab4afba84d1ae8cd16d65f2dd0664dbb0b04",
     ),
     "recipe.investigator": (
         LAN_RECIPE_INVESTIGATOR_SYSTEM_PROMPT,
@@ -80,7 +80,7 @@ _PROMPT_HASHES = {
 
 
 @pytest.mark.parametrize("name", sorted(_PROMPT_HASHES))
-def test_레지스트리_도입_전후_시스템_프롬프트가_같다(name: str) -> None:
+def test_조립된_시스템_프롬프트가_고정된_문장을_낸다(name: str) -> None:
     prompt, expected_hash = _PROMPT_HASHES[name]
     assert hashlib.sha256(prompt.encode("utf-8")).hexdigest() == expected_hash
 

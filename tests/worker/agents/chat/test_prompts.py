@@ -21,6 +21,8 @@ def test_시스템_프롬프트는_정체성과_도구_전반_정책만_말한�
     # 사실 주입만 하고 쓰기 지침을 빼면 모델이 remember_fact를 한 번도 부르지 않는다.
     assert "remember_fact" in SYSTEM_PROMPT
     assert "stable preferences" in SYSTEM_PROMPT
+    # 도구가 닿지 않는 자원을 정체성 문장이 세면 사용자가 그것을 시키고 실패를 본다.
+    assert "settings" not in SYSTEM_PROMPT
 
 
 def test_도구_하나의_사용법은_도구_설명에_두고_프롬프트에_적지_않는다() -> None:
