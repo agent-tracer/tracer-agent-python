@@ -1,0 +1,3 @@
+[submodule "contract"]
+	path = contract
+	url = ../tracer-agent-contract
