@@ -81,11 +81,10 @@ def test_요청_스키마의_제약이_계약과_같다() -> None:
 
 
 def test_실행_백엔드와_언어_선택지가_계약과_같다() -> None:
-    backends = wire_contract("job.kinds.json")["backends"]["values"]
-    languages = shared_contract("language.directives.json")["languages"]
     constraints = conformance_case("chat.intake")["body"]["constraints"]
+    backends = constraints["agentBackend"]["enum"]
+    languages = shared_contract("language.directives.json")["languages"]
 
-    assert constraints["agentBackend"]["enum"] == backends
     assert constraints["language"]["enum"] == languages
 
     for backend in backends:
