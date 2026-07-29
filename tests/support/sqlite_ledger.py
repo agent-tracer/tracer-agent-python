@@ -31,6 +31,14 @@ CREATE TABLE chat_threads (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE app_settings (
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope, key)
+);
+
 CREATE TABLE chat_executions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

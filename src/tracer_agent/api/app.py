@@ -25,6 +25,16 @@ from ..shared.agents.prompt_registry.router import (
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
+from ..shared.agents.settings.router import (
+    SETTING_MODELS_PATH,
+    SETTING_PATH,
+    SETTINGS_PATH,
+    delete_setting,
+    list_setting_models,
+    list_settings,
+    put_setting,
+)
+from ..shared.agents.settings.secret import SettingCipher
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
@@ -44,6 +54,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     shutdown_observability = configure_observability()
     application.state.executions = LedgerPoolProvider(settings.execution_dsn())
     application.state.execution_sql = PooledSql(application.state.executions)
+    encryption_key = settings.monitor_settings_encryption_key
+    application.state.setting_cipher = SettingCipher(
+        None if encryption_key is None else encryption_key.get_secret_value(),
+        settings.monitor_profile,
+    )
     application.state.execution_updates = UpdatePublisher(
         settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
     )
@@ -77,6 +92,10 @@ def create_app() -> FastAPI:
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)
+    application.get(SETTINGS_PATH)(list_settings)
+    application.get(SETTING_MODELS_PATH)(list_setting_models)
+    application.put(SETTING_PATH)(put_setting)
+    application.delete(SETTING_PATH)(delete_setting)
     # 배포 단위 사이에서만 오가는 창구라 게이트웨이가 바깥에 열지 않는다.
     application.post(PROMPT_FRAGMENTS_REGISTER_PATH)(register_and_resolve_prompt_fragments)
     application.post(PROMPT_REGISTER_PATH, status_code=CREATED_STATUS)(register_prompt)

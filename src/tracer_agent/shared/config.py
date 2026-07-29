@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # TS 배포 단위와 같은 어휘를 쓰며 local만 LangSmith에 프롬프트·응답 원문을 보낸다.
     monitor_profile: Literal["local", "prd"] = "prd"
+    # 저장된 자격을 감추고 되돌리는 키를 이 값에서 유도하며 prd는 이것 없이 자격을 다루지 않는다.
+    monitor_settings_encryption_key: SecretStr | None = None
 
     tracer_agent_host: str = "0.0.0.0"
     tracer_agent_port: int = 8800
