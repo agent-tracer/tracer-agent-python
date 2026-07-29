@@ -1,0 +1,260 @@
+"""title·recipe·cleanup 요청을 돌리고 종료 상태를 원장에 적은 뒤 완료 창구로 배달하는 액티비티다."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+from opensearchpy import AsyncOpenSearch
+from temporalio import activity
+from temporalio.exceptions import is_cancelled_exception
+
+from ...shared.agents.recipe_scan.models import RecipeScanRequest
+from ...shared.agents.runtime.ledger import LedgerPoolProvider, SqlSource
+from ...shared.agents.shared.models import AgentResponse, PromptFragmentSnapshotDTO
+from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO, ResolvedPromptFragmentDTO
+from ...shared.agents.task_cleanup.models import TaskCleanupRequest
+from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
+from ...shared.workflows.jobs_envelope import JobEnvelopeSource
+from ...shared.workflows.jobs_ledger import GraphJobLedger
+from ...shared.workflows.jobs_spec import (
+    JOB_HEARTBEAT_INTERVAL_S,
+    RUN_AGENT_JOB_ACTIVITY,
+    SETTLE_CANCELED_JOB_ACTIVITY,
+    AgentJobKind,
+    AgentJobRequest,
+)
+from ..agents.recipe_scan.agent import run_recipe_scan
+from ..agents.recipe_scan.prompts import PROMPT_VERSION as RECIPE_PROMPT_VERSION
+from ..agents.runtime.execution.completion import run_and_deliver
+from ..agents.runtime.execution.runner import AgentBody, execute
+from ..agents.runtime.execution.trace import ExecutionTrace
+from ..agents.runtime.pricing import ModelRates
+from ..agents.task_cleanup.agent import run_task_cleanup
+from ..agents.task_cleanup.prompts import PROMPT_VERSION as CLEANUP_PROMPT_VERSION
+from ..agents.task_cleanup.reader import load_cleanup_batch
+from ..agents.title_suggestion.agent import run_title_suggestion
+from ..agents.title_suggestion.prompts import PROMPT_VERSION as TITLE_PROMPT_VERSION
+from ..agents.title_suggestion.reader import load_title_context
+from .jobs_writer import GraphJobExecutionWriter
+
+JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
+
+
+class AgentJobActivities:
+    """워커가 열어 둔 원장과 검색 연결로 잡 셋을 그래프째 돌리는 액티비티 하나를 낸다."""
+
+    def __init__(
+        self,
+        ledger: LedgerPoolProvider,
+        search: AsyncOpenSearch,
+        http_client: httpx.AsyncClient,
+        execution_sql: SqlSource,
+        prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+        envelopes: JobEnvelopeSource | None = None,
+    ) -> None:
+        self._ledger = ledger
+        self._search = search
+        self._http = http_client
+        self._execution_sql = execution_sql
+        self._prompt_fragments = prompt_fragments
+        self._envelopes = envelopes
+
+    @activity.defn(name=RUN_AGENT_JOB_ACTIVITY)
+    async def run(self, request: AgentJobRequest) -> None:
+        """요청 종류에 맞는 그래프를 돌리고 결과를 완료 창구로 배달한다."""
+        payload = await self._resolve_payload(request)
+        heartbeat = asyncio.ensure_future(_heartbeat())
+        try:
+            await self._dispatch(request.kind, payload)
+        except BaseException as error:
+            # 그래프를 돌리기 전에 죽으면 원장이 running도 못 거쳐 대기 중에 그대로 남는다.
+            if not is_cancelled_exception(error):
+                await self._settle_failed_before_dispatch(request, error)
+            raise
+        finally:
+            heartbeat.cancel()
+
+    async def _settle_failed_before_dispatch(self, request: AgentJobRequest, error: BaseException) -> None:
+        """그래프 실행 전 실패를 원장에 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
+        execution_id = request.payload.get("executionId")
+        if not isinstance(execution_id, str) or not execution_id:
+            return
+        async with self._execution_sql.connect() as sql:
+            await GraphJobLedger(sql).settle(
+                execution_id, "failed", None, str(error)[:2000], datetime.now(UTC)
+            )
+
+    @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
+    async def settle_canceled(self, execution_id: str) -> None:
+        """실행 액티비티가 못 돈 취소를 원장에서 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
+        async with self._execution_sql.connect() as sql:
+            await GraphJobLedger(sql).settle(
+                execution_id, "canceled", None, "canceled before execution started", datetime.now(UTC)
+            )
+
+    async def _dispatch(self, kind: AgentJobKind, payload: dict[str, Any]) -> None:
+        """요청 종류에 맞는 그래프를 골라 돌린다."""
+        if kind == "title-suggestion":
+            if "context" not in payload:
+                # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 컨텍스트를 이 시점에 스스로 조립한다.
+                context = await load_title_context(self._ledger, payload["userId"], payload["taskId"])
+                payload = {**payload, "context": context.model_dump(mode="json")}
+            title_req = TitleSuggestionRequest.model_validate(payload)
+
+            async def title_body(
+                trace: ExecutionTrace, req: TitleSuggestionRequest = title_req
+            ) -> dict[str, object]:
+                return await run_title_suggestion(req, self._ledger, trace, self._prompt_fragments)
+
+            await self._run_and_deliver(kind, title_req, title_body, TITLE_PROMPT_VERSION)
+            return
+        if kind == "task-cleanup":
+            if "batch" not in payload:
+                # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 후보 배치를 이 시점에 스스로 조립한다.
+                now = datetime.now(UTC)
+                batch = await load_cleanup_batch(self._ledger, payload["userId"], now)
+                payload = {
+                    **payload,
+                    "batch": batch.model_dump(mode="json"),
+                    "scannedAt": now.isoformat(),
+                }
+            cleanup_req = TaskCleanupRequest.model_validate(payload)
+
+            async def cleanup_body(
+                trace: ExecutionTrace, req: TaskCleanupRequest = cleanup_req
+            ) -> dict[str, object]:
+                return await run_task_cleanup(req, self._ledger, trace, self._prompt_fragments)
+
+            await self._run_and_deliver(kind, cleanup_req, cleanup_body, CLEANUP_PROMPT_VERSION)
+            return
+        recipe_req = RecipeScanRequest.model_validate(payload)
+
+        async def recipe_body(
+            trace: ExecutionTrace, req: RecipeScanRequest = recipe_req
+        ) -> dict[str, object]:
+            return await run_recipe_scan(req, self._ledger, self._search, trace, self._prompt_fragments)
+
+        await self._run_and_deliver(kind, recipe_req, recipe_body, RECIPE_PROMPT_VERSION)
+
+    async def _resolve_payload(self, request: AgentJobRequest) -> dict[str, Any]:
+        """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 tracer-api에서 자격을 당겨온다."""
+        if _has_credentials(request.payload):
+            return request.payload
+        if self._envelopes is None:
+            raise ValueError("agent job request has no credentials and no envelope source is wired")
+        user_id = request.payload.get("userId")
+        if not isinstance(user_id, str) or not user_id:
+            raise ValueError("agent job request has no user id to pull an envelope for")
+        envelope = await self._envelopes.issue(request.kind, user_id)
+        merged: dict[str, Any] = {
+            **request.payload,
+            "apiKey": envelope.api_key,
+            "modelRates": envelope.model_rates,
+            "limits": envelope.limits,
+        }
+        if not _has_model(request.payload):
+            merged["model"] = envelope.model
+            merged["fallbackModel"] = envelope.fallback_model
+        return merged
+
+    async def _run_and_deliver(
+        self,
+        kind: AgentJobKind,
+        req: JobRequest,
+        body: AgentBody,
+        prompt_version: str,
+    ) -> None:
+        integrity = req.promptIntegrity
+
+        async def run_once() -> AgentResponse:
+            return await execute(
+                kind,
+                req.model,
+                req.deadlineMs,
+                body,
+                req.jobId,
+                req.idempotencyKey,
+                None,
+                None,
+                req.idempotency_input_hash(),
+                req.executionId,
+                req.attemptId,
+                prompt_version,
+                fragment_snapshots=(
+                    [_fragment_snapshot(item) for item in integrity.fragments]
+                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
+                    else None
+                ),
+                resolved_prompt_hash=(
+                    integrity.resolvedPromptHash
+                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
+                    else None
+                ),
+                resolved_prompt_hashes=(
+                    integrity.resolvedPromptHashes
+                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
+                    else None
+                ),
+            )
+
+        if req.executionId is not None:
+            async with self._execution_sql.connect() as sql:
+                await GraphJobLedger(sql).mark_running(req.executionId, datetime.now(UTC))
+
+        async def settle(response: AgentResponse) -> None:
+            if req.executionId is None:
+                return
+            status, error = _status_and_error(response)
+            cost_usd = ModelRates(req.modelRates).estimate_cost_usd(
+                response.actualModel or response.modelUsed, response.usage
+            )
+            observation = (
+                response.observation.model_dump(mode="json") if response.observation is not None else None
+            )
+            async with self._execution_sql.connect() as sql:
+                await GraphJobExecutionWriter(sql).finalize(
+                    req.executionId,
+                    req.userId,
+                    status,
+                    cost_usd,
+                    error,
+                    observation,
+                    datetime.now(UTC),
+                    response.data,
+                )
+
+        await run_and_deliver(self._http, req.completionCallback, run_once, settle)
+
+
+def _has_credentials(payload: dict[str, Any]) -> bool:
+    api_key = payload.get("apiKey")
+    return isinstance(api_key, str) and len(api_key) > 0
+
+
+def _has_model(payload: dict[str, Any]) -> bool:
+    model = payload.get("model")
+    return isinstance(model, str) and len(model) > 0
+
+
+async def _heartbeat() -> None:
+    while True:
+        await asyncio.sleep(JOB_HEARTBEAT_INTERVAL_S)
+        activity.heartbeat()
+
+
+def _fragment_snapshot(fragment: ResolvedPromptFragmentDTO) -> PromptFragmentSnapshotDTO:
+    payload = fragment.model_dump(mode="python", exclude={"content", "codeName", "backend", "language"})
+    return PromptFragmentSnapshotDTO.model_validate(payload)
+
+
+def _status_and_error(response: AgentResponse) -> tuple[str, str | None]:
+    """응답의 오류 유무와 서브타입만으로 원장이 쓸 종료 상태를 가른다."""
+    if response.error is None:
+        return "completed", None
+    if response.error.subtype == "cancelled":
+        return "canceled", response.error.summary
+    return "failed", response.error.summary
