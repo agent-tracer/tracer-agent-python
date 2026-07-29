@@ -1,0 +1,186 @@
+"""부팅이 올린 조각 묶음을 원장에 심고 이번 실행이 쓸 판을 채널에서 고른다."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from ..runtime.ledger import LedgerSql, SqlRow
+from ..shared.fragment_integrity import fragment_content_hash, fragment_placeholders
+from .ids import generate_ulid
+from .models import (
+    CODE_DEFAULT_ORIGIN,
+    DATABASE_OVERRIDE_SOURCE,
+    PRODUCTION_CHANNEL,
+    FragmentManifestEntry,
+    RegisterAndResolveFragmentsPayload,
+    channel_for_profile,
+)
+
+# 파일 기본값으로 심은 판의 작성자 자리이며 사람이 쓴 판과 구분된다.
+CODE_DEFAULT_AUTHOR = "agent-boot"
+
+_FIND_DEFINITION = "SELECT id FROM prompt_fragment_definitions WHERE definition_key = $1"
+
+_INSERT_DEFINITION = (
+    "INSERT INTO prompt_fragment_definitions "
+    "(id, definition_key, agent_name, backend, language, fragment_name, code_name, created_at) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"
+)
+
+_VERSION_COLUMNS = (
+    "id, semantic_version, content, content_hash, placeholders, tool_contract_version, output_schema_version"
+)
+
+_FIND_VERSION = (
+    f"SELECT {_VERSION_COLUMNS} FROM prompt_fragment_versions "
+    "WHERE definition_id = $1 AND semantic_version = $2"
+)
+
+_INSERT_VERSION = (
+    "INSERT INTO prompt_fragment_versions "
+    "(id, definition_id, semantic_version, content, content_hash, placeholders, "
+    "tool_contract_version, output_schema_version, origin, created_by, created_at) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) "
+    f"RETURNING {_VERSION_COLUMNS}"
+)
+
+_FIND_BINDING = "SELECT id FROM prompt_fragment_bindings WHERE template_key = $1 AND fragment_slot = $2"
+
+_INSERT_BINDING = (
+    "INSERT INTO prompt_fragment_bindings "
+    "(id, template_key, fragment_slot, definition_id, code_default_version, created_at, updated_at) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $6)"
+)
+
+_FIND_ANY_CHANNEL = "SELECT id FROM prompt_fragment_channels WHERE definition_id = $1"
+
+_INSERT_CHANNEL = (
+    "INSERT INTO prompt_fragment_channels (id, definition_id, channel, version_id, updated_at) "
+    "VALUES ($1, $2, $3, $4, $5)"
+)
+
+_FIND_CHANNEL_VERSION = (
+    "SELECT v.id, v.semantic_version, v.content, v.content_hash, v.placeholders, "
+    "v.tool_contract_version, v.output_schema_version "
+    "FROM prompt_fragment_channels c JOIN prompt_fragment_versions v ON v.id = c.version_id "
+    "WHERE c.definition_id = $1 AND c.channel = $2"
+)
+
+
+class PromptFragmentRegistration:
+    """조각 정의와 판과 자리와 채널을 한 트랜잭션 안에서 세우고 실행이 쓸 본문을 낸다."""
+
+    def __init__(self, sql: LedgerSql) -> None:
+        self._sql = sql
+
+    async def register_and_resolve(
+        self, payload: RegisterAndResolveFragmentsPayload, now: datetime
+    ) -> list[dict[str, Any]]:
+        """묶음의 항목마다 없는 행만 심고 채널이 가리키는 판을 자리마다 낸다."""
+        channel = channel_for_profile(payload.profile)
+        resolved: list[dict[str, Any]] = []
+        async with self._sql.transaction():
+            for entry in payload.manifest:
+                definition_id = await self._definition_id(entry, now)
+                version = await self._default_version(entry, definition_id, now)
+                await self._bind(entry, definition_id, now)
+                await self._seed_channel(definition_id, channel, str(version["id"]), now)
+                chosen = await self._channel_version(definition_id, channel)
+                if chosen is None:
+                    continue
+                resolved.extend(_resolved_items(entry, definition_id, chosen))
+        return resolved
+
+    async def _definition_id(self, entry: FragmentManifestEntry, now: datetime) -> str:
+        found = await self._sql.fetch(_FIND_DEFINITION, entry.definitionKey)
+        if found:
+            return str(found[0]["id"])
+        created = await self._sql.fetch(
+            _INSERT_DEFINITION,
+            generate_ulid(now),
+            entry.definitionKey,
+            entry.agentName,
+            entry.backend,
+            entry.language,
+            entry.fragmentName,
+            entry.codeName,
+            now,
+        )
+        return str(created[0]["id"])
+
+    async def _default_version(
+        self, entry: FragmentManifestEntry, definition_id: str, now: datetime
+    ) -> SqlRow:
+        found = await self._sql.fetch(_FIND_VERSION, definition_id, entry.defaultVersion)
+        if found:
+            return found[0]
+        created = await self._sql.fetch(
+            _INSERT_VERSION,
+            generate_ulid(now),
+            definition_id,
+            entry.defaultVersion,
+            entry.defaultContent,
+            fragment_content_hash(entry.defaultContent),
+            list(fragment_placeholders(entry.defaultContent)),
+            entry.toolContractVersion,
+            entry.outputSchemaVersion,
+            CODE_DEFAULT_ORIGIN,
+            CODE_DEFAULT_AUTHOR,
+            now,
+        )
+        return created[0]
+
+    async def _bind(self, entry: FragmentManifestEntry, definition_id: str, now: datetime) -> None:
+        for binding in entry.bindings:
+            found = await self._sql.fetch(_FIND_BINDING, binding.templateKey, binding.fragmentSlot)
+            if found:
+                continue
+            await self._sql.fetch(
+                _INSERT_BINDING,
+                generate_ulid(now),
+                binding.templateKey,
+                binding.fragmentSlot,
+                definition_id,
+                entry.defaultVersion,
+                now,
+            )
+
+    async def _seed_channel(self, definition_id: str, channel: str, version_id: str, now: datetime) -> None:
+        if await self._sql.fetch(_FIND_ANY_CHANNEL, definition_id):
+            return
+        await self._sql.fetch(_INSERT_CHANNEL, generate_ulid(now), definition_id, channel, version_id, now)
+
+    async def _channel_version(self, definition_id: str, channel: str) -> SqlRow | None:
+        for candidate in dict.fromkeys((channel, PRODUCTION_CHANNEL)):
+            found = await self._sql.fetch(_FIND_CHANNEL_VERSION, definition_id, candidate)
+            if found:
+                return found[0]
+        return None
+
+
+def _resolved_items(
+    entry: FragmentManifestEntry, definition_id: str, version: SqlRow
+) -> list[dict[str, Any]]:
+    content = str(version["content"])
+    is_code_default = version["semantic_version"] == entry.defaultVersion and content == entry.defaultContent
+    return [
+        {
+            "templateKey": binding.templateKey,
+            "fragmentSlot": binding.fragmentSlot,
+            "definitionId": definition_id,
+            "definitionKey": entry.definitionKey,
+            "codeName": entry.codeName,
+            "backend": entry.backend,
+            "language": entry.language,
+            "versionId": str(version["id"]),
+            "semanticVersion": str(version["semantic_version"]),
+            "content": content,
+            "contentHash": str(version["content_hash"]),
+            "placeholders": list(version["placeholders"]),
+            "toolContractVersion": str(version["tool_contract_version"]),
+            "outputSchemaVersion": str(version["output_schema_version"]),
+            "source": CODE_DEFAULT_ORIGIN if is_code_default else DATABASE_OVERRIDE_SOURCE,
+        }
+        for binding in entry.bindings
+    ]

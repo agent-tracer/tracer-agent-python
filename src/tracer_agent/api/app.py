@@ -15,6 +15,13 @@ from ..shared.agents.chat.intake.router import (
     cancel_chat_turn,
     enqueue_chat_turn,
 )
+from ..shared.agents.prompt_registry.router import (
+    CREATED_STATUS,
+    PROMPT_FRAGMENTS_REGISTER_PATH,
+    PROMPT_REGISTER_PATH,
+    register_and_resolve_prompt_fragments,
+    register_prompt,
+)
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
@@ -70,6 +77,9 @@ def create_app() -> FastAPI:
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)
+    # 배포 단위 사이에서만 오가는 창구라 게이트웨이가 바깥에 열지 않는다.
+    application.post(PROMPT_FRAGMENTS_REGISTER_PATH)(register_and_resolve_prompt_fragments)
+    application.post(PROMPT_REGISTER_PATH, status_code=CREATED_STATUS)(register_prompt)
     return application
 
 

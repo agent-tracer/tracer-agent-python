@@ -2,19 +2,36 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from ....shared.agents.shared.fragment_integrity import (
+    canonical_fragment_content,
+    fragment_content_hash,
+    fragment_placeholders,
+)
+
 if TYPE_CHECKING:
     from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO
 
+__all__ = [
+    "LanPromptFragment",
+    "LanPromptFragmentBinding",
+    "ResolvedFragmentSnapshot",
+    "build_lan_fragment_registry",
+    "canonical_fragment_content",
+    "fragment_content",
+    "fragment_content_hash",
+    "fragment_placeholders",
+    "integrity_snapshot",
+    "lan_code_name",
+    "resolved_fragment_content",
+]
+
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
-_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 @dataclass(frozen=True)
@@ -39,20 +56,6 @@ class LanPromptFragment:
     def template_keys(self) -> tuple[str, ...]:
         """bindings에서 이전 조회자가 읽던 template key만 돌려준다."""
         return tuple(binding.template_key for binding in self.bindings)
-
-
-def canonical_fragment_content(content: str) -> str:
-    """줄바꿈만 LF로 맞추고 NFC 정규화하며 공백과 끝 개행은 보존한다."""
-    return unicodedata.normalize("NFC", content.replace("\r\n", "\n").replace("\r", "\n"))
-
-
-def fragment_content_hash(content: str) -> str:
-    canonical = canonical_fragment_content(content)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def fragment_placeholders(content: str) -> tuple[str, ...]:
-    return tuple(sorted(set(_PLACEHOLDER.findall(content))))
 
 
 def lan_code_name(slot: str) -> str:
