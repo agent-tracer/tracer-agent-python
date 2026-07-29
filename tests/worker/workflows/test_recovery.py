@@ -1,4 +1,4 @@
-"""기동 스윕이 주인 잃은 running을 되돌리고 자기 백엔드의 턴만 다시 태우는지 검증한다."""
+"""기동 스윕이 주인 잃은 running을 되돌리고 아직 끝나지 않은 턴을 다시 태우는지 검증한다."""
 
 from __future__ import annotations
 
@@ -55,7 +55,6 @@ def execution_row(**overrides: Any) -> dict[str, Any]:
         "client_request_id": "r1",
         "input_hash": "h1",
         "status": "queued",
-        "requested_backend": "python",
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -80,21 +79,18 @@ async def test_주인_잃은_running을_되돌리고_다시_태운다(store: Sql
     assert dispatch.signaled == [("e1", "t1")]
 
 
-async def test_다른_백엔드의_턴은_이_워커가_집지_않는다(store: SqliteLedgerSql) -> None:
+async def test_아직_끝나지_않은_턴을_접수_순서대로_다시_태운다(store: SqliteLedgerSql) -> None:
+    store.seed("chat_executions", [execution_row(id="e1", client_request_id="r1")])
     store.seed(
         "chat_executions",
-        [execution_row(id="e-sdk", client_request_id="r-sdk", requested_backend="claude-sdk")],
-    )
-    store.seed(
-        "chat_executions",
-        [execution_row(id="e-null", client_request_id="r-null", requested_backend=None)],
+        [execution_row(id="e2", client_request_id="r2", thread_id="t2", status="running")],
     )
     dispatch = RecordingDispatch()
 
     swept = await resume_active_executions(SingleSqlSource(store), dispatch, NOW)
 
-    assert swept.resumed == 0
-    assert dispatch.signaled == []
+    assert swept.resumed == 2
+    assert dispatch.signaled == [("e1", "t1"), ("e2", "t2")]
 
 
 async def test_이미_끝난_턴은_다시_태우지_않는다(store: SqliteLedgerSql) -> None:

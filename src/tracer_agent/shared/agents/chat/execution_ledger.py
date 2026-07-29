@@ -14,9 +14,9 @@ THREAD_BUSY = "thread-busy"
 
 _SELECT = "SELECT * FROM chat_executions WHERE id = $1"
 
-_SELECT_ACTIVE_ON_BACKEND = """
+_SELECT_ACTIVE = """
 SELECT id, thread_id FROM chat_executions
- WHERE status IN ('queued', 'running') AND requested_backend = $1
+ WHERE status IN ('queued', 'running')
  ORDER BY id
 """
 
@@ -156,9 +156,9 @@ class ChatExecutionLedger:
         rows = await self._sql.fetch(_SELECT, execution_id)
         return rows[0] if rows else None
 
-    async def list_active_on_backend(self, backend: str) -> list[SqlRow]:
-        """이 백엔드가 소유한 아직 끝나지 않은 실행을 접수 순서대로 낸다."""
-        return await self._sql.fetch(_SELECT_ACTIVE_ON_BACKEND, backend)
+    async def list_active(self) -> list[SqlRow]:
+        """아직 끝나지 않은 실행을 접수 순서대로 낸다."""
+        return await self._sql.fetch(_SELECT_ACTIVE)
 
     async def recover_stale_running(
         self, idle_before: datetime, now: datetime, thread_id: str | None = None
