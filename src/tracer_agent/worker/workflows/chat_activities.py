@@ -114,7 +114,7 @@ class ChatExecutionActivities:
                 resolved_prompt_hashes=(
                     [
                         ResolvedPromptTemplateHashDTO(
-                            templateKey="lan.chat.assistant.system",
+                            templateKey="chat.assistant.system",
                             contentHash=fragment_content_hash(build_system_prompt(self._prompt_fragments)),
                         )
                     ]
@@ -234,7 +234,7 @@ def _prompt_observation(
         return None
     result: list[PromptFragmentSnapshotDTO] = []
     for (template_key, fragment_slot), fragment in fragments.items():
-        if template_key != "lan.chat.assistant.system":
+        if template_key != "chat.assistant.system":
             continue
         result.append(
             PromptFragmentSnapshotDTO(

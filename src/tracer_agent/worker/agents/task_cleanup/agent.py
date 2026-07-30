@@ -40,10 +40,10 @@ async def run_task_cleanup(
         prompt_fragments,
         build_resolved_prompt_bundle,
         {
-            "investigatorSystemPrompt": "lan.task-cleanup.investigator.system",
-            "triageSystemPrompt": "lan.task-cleanup.triage.system",
-            "inspectSystemPrompt": "lan.task-cleanup.inspect.system",
-            "repairDirective": "lan.task-cleanup.investigator.repair",
+            "investigatorSystemPrompt": "task-cleanup.investigator.system",
+            "triageSystemPrompt": "task-cleanup.triage.system",
+            "inspectSystemPrompt": "task-cleanup.inspect.system",
+            "repairDirective": "task-cleanup.investigator.repair",
         },
     )
     chat = make_chat(

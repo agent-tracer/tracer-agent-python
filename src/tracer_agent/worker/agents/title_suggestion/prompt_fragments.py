@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..shared.fragment_registry import build_lan_fragment_registry
+from ..shared.fragment_registry import build_fragment_registry
 
 # 역할 문장과 조립 순서는 이 백엔드가 쥐고, 역할과 무관한 사실만 여기에 그대로 옮겨 둔다.
 FRAGMENTS: dict[str, str] = {
@@ -26,14 +26,14 @@ distinct alternatives. Do not repeat the current title, use placeholder titles, 
 evidence does not show. Then return the complete repaired suggestion list.""",
 }
 
-LAN_TITLE_SUGGESTION_FRAGMENT_REGISTRY = build_lan_fragment_registry(
+TITLE_SUGGESTION_FRAGMENT_REGISTRY = build_fragment_registry(
     agent="title-suggestion",
     language="en",
     contents=FRAGMENTS,
     usages={
-        "contextShape": ("lan.title-suggestion.investigator.system",),
-        "titleSpec": ("lan.title-suggestion.investigator.system",),
-        "answerShape": ("lan.title-suggestion.investigator.system",),
-        "repairDirective": ("lan.title-suggestion.investigator.repair",),
+        "contextShape": ("title-suggestion.investigator.system",),
+        "titleSpec": ("title-suggestion.investigator.system",),
+        "answerShape": ("title-suggestion.investigator.system",),
+        "repairDirective": ("title-suggestion.investigator.repair",),
     },
 )

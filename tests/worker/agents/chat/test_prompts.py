@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tracer_agent.shared.agents.chat.models import ChatFact
-from tracer_agent.worker.agents.chat.prompt_fragments import LAN_CHAT_FRAGMENT_REGISTRY
+from tracer_agent.worker.agents.chat.prompt_fragments import CHAT_FRAGMENT_REGISTRY
 from tracer_agent.worker.agents.chat.prompts import SYSTEM_PROMPT, build_context_prompt, build_system_prompt
 from tracer_agent.worker.agents.shared.fragment_registry import fragment_content_hash, fragment_placeholders
 
@@ -37,7 +37,7 @@ def test_도구_하나의_사용법은_도구_설명에_두고_프롬프트에_�
 
 def test_DB_override는_지정한_fragment_slot만_바꾼다() -> None:
     snapshot: dict[tuple[str, str], dict[str, object]] = {}
-    for fragment in LAN_CHAT_FRAGMENT_REGISTRY.values():
+    for fragment in CHAT_FRAGMENT_REGISTRY.values():
         binding = fragment.bindings[0]
         content = fragment.content
         source = "code-default"
@@ -60,8 +60,8 @@ def test_DB_override는_지정한_fragment_slot만_바꾼다() -> None:
         }
     resolved = build_system_prompt(snapshot)
     assert "Use the evaluated grounding policy." in resolved
-    assert LAN_CHAT_FRAGMENT_REGISTRY["LAN_MEMORY_RULE"].content in resolved
-    assert LAN_CHAT_FRAGMENT_REGISTRY["LAN_GROUNDING_RULES"].content not in resolved
+    assert CHAT_FRAGMENT_REGISTRY["CHAT_MEMORY_RULE"].content in resolved
+    assert CHAT_FRAGMENT_REGISTRY["CHAT_GROUNDING_RULES"].content not in resolved
 
 
 def test_턴별로_바뀌는_값은_선행_컨텍스트_메시지가_싣는다() -> None:

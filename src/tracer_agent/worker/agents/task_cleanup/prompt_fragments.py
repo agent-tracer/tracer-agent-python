@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..shared.fragment_registry import build_lan_fragment_registry
+from ..shared.fragment_registry import build_fragment_registry
 
 # 역할 문장과 조립 순서는 이 백엔드가 쥐고, 역할과 무관한 사실만 여기에 그대로 옮겨 둔다.
 FRAGMENTS: dict[str, str] = {
@@ -70,20 +70,20 @@ archival when its own events are cited. If the task turns out to hold real work,
 archive is as useful an answer as approving it.""",
 }
 
-LAN_TASK_CLEANUP_FRAGMENT_REGISTRY = build_lan_fragment_registry(
+TASK_CLEANUP_FRAGMENT_REGISTRY = build_fragment_registry(
     agent="task-cleanup",
     language="en",
     contents=FRAGMENTS,
     usages={
-        "reviewGuarantee": ("lan.task-cleanup.investigator.system",),
-        "reviewerSourcing": ("lan.task-cleanup.investigator.system",),
-        "evidenceDiscipline": ("lan.task-cleanup.investigator.system",),
-        "suggestionRules": ("lan.task-cleanup.investigator.system",),
-        "redispatchProtocol": ("lan.task-cleanup.investigator.system",),
-        "repairDirective": ("lan.task-cleanup.investigator.repair",),
-        "candidateFields": ("lan.task-cleanup.triage.system",),
-        "triagePolicy": ("lan.task-cleanup.triage.system",),
-        "inspectWeighting": ("lan.task-cleanup.triage.system",),
-        "reviewerCharter": ("lan.task-cleanup.inspect.system",),
+        "reviewGuarantee": ("task-cleanup.investigator.system",),
+        "reviewerSourcing": ("task-cleanup.investigator.system",),
+        "evidenceDiscipline": ("task-cleanup.investigator.system",),
+        "suggestionRules": ("task-cleanup.investigator.system",),
+        "redispatchProtocol": ("task-cleanup.investigator.system",),
+        "repairDirective": ("task-cleanup.investigator.repair",),
+        "candidateFields": ("task-cleanup.triage.system",),
+        "triagePolicy": ("task-cleanup.triage.system",),
+        "inspectWeighting": ("task-cleanup.triage.system",),
+        "reviewerCharter": ("task-cleanup.inspect.system",),
     },
 )

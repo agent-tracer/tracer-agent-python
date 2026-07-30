@@ -9,7 +9,7 @@ from tracer_agent.shared.agents.shared.models import Language
 
 from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
 from ..shared.prompt_fragments import render
-from .prompt_fragments import LAN_RECIPE_SCAN_FRAGMENT_REGISTRY
+from .prompt_fragments import RECIPE_SCAN_FRAGMENT_REGISTRY
 
 # 프롬프트 버전은 실행 궤적과 평가 코퍼스에서 의미 변화의 경계를 식별하는 값이다.
 PROMPT_VERSION = "recipe-scan-native-v8"
@@ -44,32 +44,32 @@ LANGUAGE_DIRECTIVES: dict[Language, str] = {
 
 
 def _fragment(key: str, template: str, snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    return render(resolved_fragment_content(LAN_RECIPE_SCAN_FRAGMENT_REGISTRY, key, template, snapshot))
+    return render(resolved_fragment_content(RECIPE_SCAN_FRAGMENT_REGISTRY, key, template, snapshot))
 
 
-LAN_INVESTIGATOR_SYSTEM_PROMPT = "\n".join(
+INVESTIGATOR_SYSTEM_PROMPT = "\n".join(
     [
         "You are the coordinator of a recipe-scan investigation. You mine the specialists' reports for",
         'reusable "recipes".',
         f"Prompt version: {PROMPT_VERSION}.",
         "",
-        _fragment("LAN_RECIPE_DEFINITION", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_RECIPE_DEFINITION", "recipe-scan.investigator.system"),
         "",
-        _fragment("LAN_EVIDENCE_SOURCING", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_EVIDENCE_SOURCING", "recipe-scan.investigator.system"),
         "",
         "How to work:",
-        _fragment("LAN_TURN_SPLITTING", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_TURN_SPLITTING", "recipe-scan.investigator.system"),
         "",
-        _fragment("LAN_CITATION_DISCIPLINE", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_CITATION_DISCIPLINE", "recipe-scan.investigator.system"),
         "",
-        _fragment("LAN_CANDIDATE_BUDGET", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_CANDIDATE_BUDGET", "recipe-scan.investigator.system"),
         "",
-        _fragment("LAN_REDISPATCH_PROTOCOL", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_REDISPATCH_PROTOCOL", "recipe-scan.investigator.system"),
         "",
-        _fragment("LAN_OUTPUT_FIELDS", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_OUTPUT_FIELDS", "recipe-scan.investigator.system"),
         "",
         "Rules:",
-        _fragment("LAN_QUALITY_RULES", "lan.recipe-scan.investigator.system"),
+        _fragment("RECIPE_SCAN_QUALITY_RULES", "recipe-scan.investigator.system"),
         "",
         "When the evidence is enough, stop calling tools and emit the structured output.",
     ]
@@ -80,7 +80,7 @@ REPAIR_DIRECTIVE = "\n".join(
         "Deterministic provenance validation rejected your output:",
         "{errors}",
         "",
-        _fragment("LAN_REPAIR_DIRECTIVE", "lan.recipe-scan.investigator.repair"),
+        _fragment("RECIPE_SCAN_REPAIR_DIRECTIVE", "recipe-scan.investigator.repair"),
     ]
 )
 
@@ -101,16 +101,16 @@ def build_user_prompt(
     return "\n".join(lines) + render_plan(plan) + render_reports(reports)
 
 
-LAN_SURVEY_SYSTEM_PROMPT = "\n".join(
+SURVEY_SYSTEM_PROMPT = "\n".join(
     [
         "You plan one recipe-scan investigation before it starts.",
         f"Prompt version: {PROMPT_VERSION}.",
         "",
-        _fragment("LAN_SPECIALIST_CATALOG", "lan.recipe-scan.survey.system"),
+        _fragment("RECIPE_SCAN_SPECIALIST_CATALOG", "recipe-scan.survey.system"),
         "",
-        _fragment("LAN_DISPATCH_WEIGHTING", "lan.recipe-scan.survey.system"),
+        _fragment("RECIPE_SCAN_DISPATCH_WEIGHTING", "recipe-scan.survey.system"),
         "",
-        _fragment("LAN_EMPTY_PLAN", "lan.recipe-scan.survey.system"),
+        _fragment("RECIPE_SCAN_EMPTY_PLAN", "recipe-scan.survey.system"),
     ]
 )
 
@@ -145,22 +145,18 @@ def build_survey_prompt(task_id: str, user_prompt: str | None) -> str:
 
 
 # 예산 소진을 무엇으로 세는지는 실행 기계가 소유하므로 조각이 아니라 이 백엔드가 마지막 문장을 쓴다.
-LAN_PROBE_SYSTEM_PROMPT = "\n".join(
+PROBE_SYSTEM_PROMPT = "\n".join(
     [
         "You are one specialist in a recipe-scan investigation.",
         f"Prompt version: {PROMPT_VERSION}.",
         "",
-        _fragment("LAN_SPECIALIST_CHARTER", "lan.recipe-scan.probe.system"),
+        _fragment("RECIPE_SCAN_SPECIALIST_CHARTER", "recipe-scan.probe.system"),
         "",
-        _fragment("LAN_SPECIALIST_REPORTING", "lan.recipe-scan.probe.system"),
+        _fragment("RECIPE_SCAN_SPECIALIST_REPORTING", "recipe-scan.probe.system"),
         "If your budget runs out with the question still open, say so in exhausted so the coordinator",
         "can decide whether to spend more.",
     ]
 )
-
-INVESTIGATOR_SYSTEM_PROMPT = LAN_INVESTIGATOR_SYSTEM_PROMPT
-SURVEY_SYSTEM_PROMPT = LAN_SURVEY_SYSTEM_PROMPT
-PROBE_SYSTEM_PROMPT = LAN_PROBE_SYSTEM_PROMPT
 
 
 def build_probe_prompt(task_id: str, question: str) -> str:
@@ -181,10 +177,10 @@ def build_resolved_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = Non
     if snapshot is None:
         return {**PROMPT_BUNDLE, "repairDirective": REPAIR_DIRECTIVE}
     templates = {
-        "investigatorSystemPrompt": "lan.recipe-scan.investigator.system",
-        "probeSystemPrompt": "lan.recipe-scan.probe.system",
-        "surveySystemPrompt": "lan.recipe-scan.survey.system",
-        "repairDirective": "lan.recipe-scan.investigator.repair",
+        "investigatorSystemPrompt": "recipe-scan.investigator.system",
+        "probeSystemPrompt": "recipe-scan.probe.system",
+        "surveySystemPrompt": "recipe-scan.survey.system",
+        "repairDirective": "recipe-scan.investigator.repair",
     }
     source = {**PROMPT_BUNDLE, "repairDirective": REPAIR_DIRECTIVE}
     return {
@@ -197,7 +193,7 @@ def build_resolved_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = Non
 
 def _replace_fragments(prompt: str, template: str, snapshot: ResolvedFragmentSnapshot) -> str:
     resolved = prompt
-    for code_name, fragment in LAN_RECIPE_SCAN_FRAGMENT_REGISTRY.items():
+    for code_name, fragment in RECIPE_SCAN_FRAGMENT_REGISTRY.items():
         if template not in fragment.template_keys:
             continue
         local = render(fragment.content)

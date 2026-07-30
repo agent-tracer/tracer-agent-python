@@ -9,7 +9,7 @@ from tracer_agent.shared.agents.task_cleanup.models import InspectReport
 
 from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
 from ..shared.prompt_fragments import render
-from .prompt_fragments import LAN_TASK_CLEANUP_FRAGMENT_REGISTRY
+from .prompt_fragments import TASK_CLEANUP_FRAGMENT_REGISTRY
 
 PROMPT_VERSION = "task-cleanup-native-v6"
 
@@ -37,10 +37,10 @@ LANGUAGE_DIRECTIVES: dict[Language, str] = {
 
 
 def _fragment(key: str, template: str, snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    return render(resolved_fragment_content(LAN_TASK_CLEANUP_FRAGMENT_REGISTRY, key, template, snapshot))
+    return render(resolved_fragment_content(TASK_CLEANUP_FRAGMENT_REGISTRY, key, template, snapshot))
 
 
-LAN_INVESTIGATOR_SYSTEM_PROMPT = "\n".join(
+INVESTIGATOR_SYSTEM_PROMPT = "\n".join(
     [
         "You are the coordinator of a task-cleanup scan for Agent Tracer, an observability tool that",
         "records coding-agent sessions.",
@@ -48,17 +48,17 @@ LAN_INVESTIGATOR_SYSTEM_PROMPT = "\n".join(
         "",
         "Your job is to decide which cleanup candidates should be archived, and to write one short",
         "rationale for each.",
-        _fragment("LAN_REVIEW_GUARANTEE", "lan.task-cleanup.investigator.system"),
+        _fragment("TASK_CLEANUP_REVIEW_GUARANTEE", "task-cleanup.investigator.system"),
         "",
-        _fragment("LAN_REVIEWER_SOURCING", "lan.task-cleanup.investigator.system"),
+        _fragment("TASK_CLEANUP_REVIEWER_SOURCING", "task-cleanup.investigator.system"),
         "",
         "Evidence discipline. This is the rule that matters:",
-        _fragment("LAN_EVIDENCE_DISCIPLINE", "lan.task-cleanup.investigator.system"),
+        _fragment("TASK_CLEANUP_EVIDENCE_DISCIPLINE", "task-cleanup.investigator.system"),
         "",
         "Rules:",
-        _fragment("LAN_SUGGESTION_RULES", "lan.task-cleanup.investigator.system"),
+        _fragment("TASK_CLEANUP_SUGGESTION_RULES", "task-cleanup.investigator.system"),
         "",
-        _fragment("LAN_REDISPATCH_PROTOCOL", "lan.task-cleanup.investigator.system"),
+        _fragment("TASK_CLEANUP_REDISPATCH_PROTOCOL", "task-cleanup.investigator.system"),
         "",
         "Return the suggestions as structured output conforming to the provided schema.",
     ]
@@ -69,7 +69,7 @@ REPAIR_DIRECTIVE = "\n".join(
         "Deterministic validation rejected part of your output:",
         "{errors}",
         "",
-        _fragment("LAN_REPAIR_DIRECTIVE", "lan.task-cleanup.investigator.repair"),
+        _fragment("TASK_CLEANUP_REPAIR_DIRECTIVE", "task-cleanup.investigator.repair"),
     ]
 )
 
@@ -90,31 +90,27 @@ def build_user_prompt(
     ) + render_reports(reports)
 
 
-LAN_TRIAGE_SYSTEM_PROMPT = "\n".join(
+TRIAGE_SYSTEM_PROMPT = "\n".join(
     [
         "You open the cleanup scan by choosing which candidates to hand to reviewers.",
         f"Prompt version: {PROMPT_VERSION}.",
         "",
-        _fragment("LAN_CANDIDATE_FIELDS", "lan.task-cleanup.triage.system"),
+        _fragment("TASK_CLEANUP_CANDIDATE_FIELDS", "task-cleanup.triage.system"),
         "",
-        _fragment("LAN_TRIAGE_POLICY", "lan.task-cleanup.triage.system"),
+        _fragment("TASK_CLEANUP_TRIAGE_POLICY", "task-cleanup.triage.system"),
         "",
-        _fragment("LAN_INSPECT_WEIGHTING", "lan.task-cleanup.triage.system"),
+        _fragment("TASK_CLEANUP_INSPECT_WEIGHTING", "task-cleanup.triage.system"),
     ]
 )
 
-LAN_INSPECT_SYSTEM_PROMPT = "\n".join(
+INSPECT_SYSTEM_PROMPT = "\n".join(
     [
         "You judge one cleanup candidate by reading what actually happened in it.",
         f"Prompt version: {PROMPT_VERSION}.",
         "",
-        _fragment("LAN_REVIEWER_CHARTER", "lan.task-cleanup.inspect.system"),
+        _fragment("TASK_CLEANUP_REVIEWER_CHARTER", "task-cleanup.inspect.system"),
     ]
 )
-
-INVESTIGATOR_SYSTEM_PROMPT = LAN_INVESTIGATOR_SYSTEM_PROMPT
-TRIAGE_SYSTEM_PROMPT = LAN_TRIAGE_SYSTEM_PROMPT
-INSPECT_SYSTEM_PROMPT = LAN_INSPECT_SYSTEM_PROMPT
 
 
 def build_triage_prompt(candidate_count: int) -> str:
@@ -157,10 +153,10 @@ def build_resolved_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = Non
     if snapshot is None:
         return {**PROMPT_BUNDLE, "repairDirective": REPAIR_DIRECTIVE}
     templates = {
-        "inspectSystemPrompt": "lan.task-cleanup.inspect.system",
-        "investigatorSystemPrompt": "lan.task-cleanup.investigator.system",
-        "triageSystemPrompt": "lan.task-cleanup.triage.system",
-        "repairDirective": "lan.task-cleanup.investigator.repair",
+        "inspectSystemPrompt": "task-cleanup.inspect.system",
+        "investigatorSystemPrompt": "task-cleanup.investigator.system",
+        "triageSystemPrompt": "task-cleanup.triage.system",
+        "repairDirective": "task-cleanup.investigator.repair",
     }
     source = {**PROMPT_BUNDLE, "repairDirective": REPAIR_DIRECTIVE}
     return {
@@ -170,7 +166,7 @@ def build_resolved_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = Non
 
 def _replace_fragments(prompt: str, template: str, snapshot: ResolvedFragmentSnapshot) -> str:
     resolved = prompt
-    for code_name, fragment in LAN_TASK_CLEANUP_FRAGMENT_REGISTRY.items():
+    for code_name, fragment in TASK_CLEANUP_FRAGMENT_REGISTRY.items():
         if template not in fragment.template_keys:
             continue
         local = render(fragment.content)

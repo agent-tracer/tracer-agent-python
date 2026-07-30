@@ -44,8 +44,8 @@ async def run_title_suggestion(
         prompt_fragments,
         build_prompt_bundle,
         {
-            "investigatorSystemPrompt": "lan.title-suggestion.investigator.system",
-            "repairDirective": "lan.title-suggestion.investigator.repair",
+            "investigatorSystemPrompt": "title-suggestion.investigator.system",
+            "repairDirective": "title-suggestion.investigator.repair",
         },
     )
     chat = make_chat(

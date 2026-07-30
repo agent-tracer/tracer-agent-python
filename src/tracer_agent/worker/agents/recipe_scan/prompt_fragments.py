@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..shared.fragment_registry import build_lan_fragment_registry
+from ..shared.fragment_registry import build_fragment_registry
 
 # 역할 문장과 조립 순서는 이 백엔드가 쥐고, 역할과 무관한 사실만 여기에 그대로 옮겨 둔다.
 FRAGMENTS: dict[str, str] = {
@@ -129,24 +129,24 @@ see what you read. Every excerpt must name the event it came from. Verify with $
 before you report: an ID the coordinator cannot cite is worse than no evidence at all.""",
 }
 
-LAN_RECIPE_SCAN_FRAGMENT_REGISTRY = build_lan_fragment_registry(
+RECIPE_SCAN_FRAGMENT_REGISTRY = build_fragment_registry(
     agent="recipe-scan",
     language="en",
     contents=FRAGMENTS,
     usages={
-        "recipeDefinition": ("lan.recipe-scan.investigator.system",),
-        "evidenceSourcing": ("lan.recipe-scan.investigator.system",),
-        "citationDiscipline": ("lan.recipe-scan.investigator.system",),
-        "turnSplitting": ("lan.recipe-scan.investigator.system",),
-        "candidateBudget": ("lan.recipe-scan.investigator.system",),
-        "redispatchProtocol": ("lan.recipe-scan.investigator.system",),
-        "outputFields": ("lan.recipe-scan.investigator.system",),
-        "qualityRules": ("lan.recipe-scan.investigator.system",),
-        "repairDirective": ("lan.recipe-scan.investigator.repair",),
-        "specialistCatalog": ("lan.recipe-scan.survey.system",),
-        "dispatchWeighting": ("lan.recipe-scan.survey.system",),
-        "emptyPlan": ("lan.recipe-scan.survey.system",),
-        "specialistCharter": ("lan.recipe-scan.probe.system",),
-        "specialistReporting": ("lan.recipe-scan.probe.system",),
+        "recipeDefinition": ("recipe-scan.investigator.system",),
+        "evidenceSourcing": ("recipe-scan.investigator.system",),
+        "citationDiscipline": ("recipe-scan.investigator.system",),
+        "turnSplitting": ("recipe-scan.investigator.system",),
+        "candidateBudget": ("recipe-scan.investigator.system",),
+        "redispatchProtocol": ("recipe-scan.investigator.system",),
+        "outputFields": ("recipe-scan.investigator.system",),
+        "qualityRules": ("recipe-scan.investigator.system",),
+        "repairDirective": ("recipe-scan.investigator.repair",),
+        "specialistCatalog": ("recipe-scan.survey.system",),
+        "dispatchWeighting": ("recipe-scan.survey.system",),
+        "emptyPlan": ("recipe-scan.survey.system",),
+        "specialistCharter": ("recipe-scan.probe.system",),
+        "specialistReporting": ("recipe-scan.probe.system",),
     },
 )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..shared.fragment_registry import build_lan_fragment_registry
+from ..shared.fragment_registry import build_fragment_registry
 
 # 역할 문장과 조립 순서는 이 백엔드가 쥐고, 역할과 무관한 사실만 여기에 그대로 옮겨 둔다.
 FRAGMENTS: dict[str, str] = {
@@ -26,13 +26,13 @@ that you have remembered something. Save only stable preferences or durable fact
 works, never one-off details of the current task.""",
 }
 
-LAN_CHAT_FRAGMENT_REGISTRY = build_lan_fragment_registry(
+CHAT_FRAGMENT_REGISTRY = build_fragment_registry(
     agent="chat",
     language="en",
     contents=FRAGMENTS,
     usages={
-        "toolExecutionSemantics": ("lan.chat.assistant.system",),
-        "groundingRules": ("lan.chat.assistant.system",),
-        "memoryRule": ("lan.chat.assistant.system",),
+        "toolExecutionSemantics": ("chat.assistant.system",),
+        "groundingRules": ("chat.assistant.system",),
+        "memoryRule": ("chat.assistant.system",),
     },
 )

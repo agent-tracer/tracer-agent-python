@@ -7,7 +7,7 @@ from tracer_agent.shared.agents.shared.models import Language
 
 from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
 from ..shared.prompt_fragments import render
-from .prompt_fragments import LAN_CHAT_FRAGMENT_REGISTRY
+from .prompt_fragments import CHAT_FRAGMENT_REGISTRY
 
 PROMPT_VERSION = "chat-native-v3"
 
@@ -20,11 +20,11 @@ LANGUAGE_DIRECTIVES: dict[Language, str] = {
 }
 
 
-_TEMPLATE = "lan.chat.assistant.system"
+_TEMPLATE = "chat.assistant.system"
 
 
 def _fragment(key: str, snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    return render(resolved_fragment_content(LAN_CHAT_FRAGMENT_REGISTRY, key, _TEMPLATE, snapshot))
+    return render(resolved_fragment_content(CHAT_FRAGMENT_REGISTRY, key, _TEMPLATE, snapshot))
 
 
 def build_system_prompt(snapshot: ResolvedFragmentSnapshot | None = None) -> str:
@@ -39,20 +39,20 @@ def build_system_prompt(snapshot: ResolvedFragmentSnapshot | None = None) -> str
             "Your job is to work out what the user is actually asking for, reach for the tools that "
             "answer it,",
             "ground your reply in what they return, and propose the changes their work needs.",
-            _fragment("LAN_TOOL_EXECUTION_SEMANTICS", snapshot),
+            _fragment("CHAT_TOOL_EXECUTION_SEMANTICS", snapshot),
             "",
             "How to work:",
-            _fragment("LAN_GROUNDING_RULES", snapshot),
+            _fragment("CHAT_GROUNDING_RULES", snapshot),
             "",
             "Memory:",
-            _fragment("LAN_MEMORY_RULE", snapshot),
+            _fragment("CHAT_MEMORY_RULE", snapshot),
         ]
     )
 
 
-LAN_ASSISTANT_SYSTEM_PROMPT = build_system_prompt()
+ASSISTANT_SYSTEM_PROMPT = build_system_prompt()
 
-SYSTEM_PROMPT = LAN_ASSISTANT_SYSTEM_PROMPT
+SYSTEM_PROMPT = ASSISTANT_SYSTEM_PROMPT
 
 
 def build_context_prompt(summary: str | None, facts: list[ChatFact], language: Language) -> str:

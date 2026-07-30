@@ -42,10 +42,10 @@ async def run_recipe_scan(
         prompt_fragments,
         build_resolved_prompt_bundle,
         {
-            "investigatorSystemPrompt": "lan.recipe-scan.investigator.system",
-            "probeSystemPrompt": "lan.recipe-scan.probe.system",
-            "surveySystemPrompt": "lan.recipe-scan.survey.system",
-            "repairDirective": "lan.recipe-scan.investigator.repair",
+            "investigatorSystemPrompt": "recipe-scan.investigator.system",
+            "probeSystemPrompt": "recipe-scan.probe.system",
+            "surveySystemPrompt": "recipe-scan.survey.system",
+            "repairDirective": "recipe-scan.investigator.repair",
         },
     )
     chat = make_chat(
