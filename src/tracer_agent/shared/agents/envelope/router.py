@@ -19,7 +19,8 @@ CHAT_ENVELOPE_PATH = "/internal/chat/executions/{execution_id}/envelope"
 JOB_ENVELOPE_PATH = "/internal/jobs/{kind}/envelope"
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
-MISSING_API_KEY = (400, "envelope.missing-api-key", "No model credential is stored for this user")
+CHAT_KEY_MISSING = (400, "chat.llm-key-missing", "Model credential is not configured")
+JOB_KEY_MISSING = (400, "job.llm-key-missing", "Model credential is not configured")
 
 _SELECT_EXECUTION = "SELECT user_id, model FROM chat_executions WHERE id = $1"
 
@@ -35,7 +36,7 @@ async def issue_chat_execution_envelope(execution_id: str, request: Request) -> 
     row = rows[0]
     api_key = await _api_key(request, str(row["user_id"]))
     if api_key is None:
-        return error_envelope(*MISSING_API_KEY)
+        return error_envelope(*CHAT_KEY_MISSING)
 
     data = chat_envelope(
         execution_id=execution_id,
@@ -63,7 +64,7 @@ async def issue_job_execution_envelope(kind: str, request: Request) -> JSONRespo
 
     api_key = await _api_key(request, payload.userId)
     if api_key is None:
-        return error_envelope(*MISSING_API_KEY)
+        return error_envelope(*JOB_KEY_MISSING)
 
     data = job_envelope(api_key=api_key, catalog=CATALOG[kind])
     return JSONResponse(status_code=200, content={"ok": True, "data": data})

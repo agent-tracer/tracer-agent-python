@@ -9,12 +9,15 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.contract import conformance_case
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
+from tracer_agent.shared.agents.envelope.router import CHAT_KEY_MISSING, JOB_KEY_MISSING
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 CHAT_PATH = "/internal/chat/executions/{execution_id}/envelope"
 JOB_PATH = "/internal/jobs/{kind}/envelope"
+REJECTION = conformance_case("job.intake")["response"]["envelopeRejection"]
 NOW = datetime(2026, 7, 30, tzinfo=UTC)
 API_KEY = "sk-ant-test"
 
@@ -151,8 +154,22 @@ def test_자격이_없으면_대화_봉투를_내지_않는다(
 
     res = client.post(CHAT_PATH.format(execution_id="e1"))
 
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "envelope.missing-api-key"
+    assert res.status_code == REJECTION["status"]
+    assert res.json()["error"]["code"] == REJECTION["chat"]["code"]
+
+
+def test_자격이_없으면_잡_봉투를_내지_않는다(client: TestClient, credentials: FakeCredentials) -> None:
+    credentials.stored = None
+
+    res = client.post(JOB_PATH.format(kind="recipe.scan"), json={"userId": "u1"})
+
+    assert res.status_code == REJECTION["status"]
+    assert res.json()["error"]["code"] == REJECTION["jobs"]["code"]
+
+
+def test_자격_거절_코드가_창구마다_갈린다() -> None:
+    assert (CHAT_KEY_MISSING[0], CHAT_KEY_MISSING[1]) == (REJECTION["status"], REJECTION["chat"]["code"])
+    assert (JOB_KEY_MISSING[0], JOB_KEY_MISSING[1]) == (REJECTION["status"], REJECTION["jobs"]["code"])
 
 
 def test_잡_봉투는_계약이_정한_칸을_모두_싣는다(client: TestClient) -> None:
