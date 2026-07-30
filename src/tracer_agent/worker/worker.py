@@ -107,7 +107,7 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
         await http_client.aclose()
         raise
     opened = ChatWorkerResources(
-        ledger=LedgerPoolProvider(settings.execution_dsn()),
+        ledger=LedgerPoolProvider(settings.tracer_dsn()),
         http_client=http_client,
         checkpoints=ChatCheckpointProvider(settings.checkpoint_dsn()),
         wakeup=UpdatePublisher(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC),
@@ -136,8 +136,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         ledger=LedgerPoolProvider(settings.tracer_dsn()),
         search=create_search_client(settings.opensearch_node),
         http_client=http_client,
-        # 잡 원장·관측은 자기 실행에만 쓰기가 열린 별도 역할로 적는다.
-        execution=LedgerPoolProvider(settings.execution_dsn()),
+        execution=LedgerPoolProvider(settings.tracer_dsn()),
         prompt_fragments=prompt_fragments,
     )
     try:

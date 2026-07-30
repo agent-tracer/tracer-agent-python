@@ -14,6 +14,9 @@ from temporalio.client import Client
 TASK_QUEUE_PREFIX_ENV = "AGENT_TASK_QUEUE_PREFIX"
 DEFAULT_TASK_QUEUE_PREFIX = "agent"
 
+# LangGraph checkpoint 표는 이 구현체의 실행 상태이므로 계약이 소유한 표와 다른 스키마에 둔다.
+CHECKPOINT_SCHEMA = "agent_langgraph"
+
 
 def task_queue(key: str) -> str:
     """계약이 정한 큐 키 앞에 배포가 준 접두사를 붙여 큐의 완전한 이름을 만든다."""
@@ -35,14 +38,8 @@ class Settings(BaseSettings):
     tracer_db_host: str = "tracer-db"
     tracer_db_port: int = 5432
     tracer_db_name: str = "tracer"
-    # 계약인 뷰에만 SELECT가 열린 역할이라 기반 테이블과 쓰기는 데이터베이스가 거부한다.
-    agent_db_reader_user: str = "agent_reader"
-    agent_db_reader_password: str = "agentreader"
-    agent_db_checkpoint_user: str = "agent_checkpoint_writer"
-    agent_db_checkpoint_password: str = "agentcheckpoint"
-    # chat과 잡 셋 실행 행과 그 산출물에만 쓰기가 열린 역할이라 다른 도메인 테이블은 데이터베이스가 거부한다.
-    agent_db_execution_user: str = "agent_execution_writer"
-    agent_db_execution_password: str = "agentexecution"
+    tracer_db_user: str = "root"
+    tracer_db_password: str = "root"
 
     opensearch_node: str = "http://opensearch:9200"
     kafka_brokers: str = "redpanda:29092"
@@ -92,19 +89,13 @@ class Settings(BaseSettings):
         return await Client.connect(self.temporal_address, namespace=self.temporal_namespace)
 
     def tracer_dsn(self) -> str:
-        """읽기 전용 역할로 원장 뷰에 붙는 접속 문자열을 만든다."""
-        credentials = f"{self.agent_db_reader_user}:{self.agent_db_reader_password}"
+        """앱 계정으로 원장에 붙는 접속 문자열을 만든다."""
+        credentials = f"{self.tracer_db_user}:{self.tracer_db_password}"
         return f"postgresql://{credentials}@{self.tracer_db_host}:{self.tracer_db_port}/{self.tracer_db_name}"
 
     def checkpoint_dsn(self) -> str:
-        """에이전트 실행 checkpoint 테이블에만 쓰는 접속 문자열을 만든다."""
-        credentials = f"{self.agent_db_checkpoint_user}:{self.agent_db_checkpoint_password}"
-        return f"postgresql://{credentials}@{self.tracer_db_host}:{self.tracer_db_port}/{self.tracer_db_name}"
-
-    def execution_dsn(self) -> str:
-        """chat과 잡 셋의 자기 실행 원장에만 쓰는 접속 문자열을 만든다."""
-        credentials = f"{self.agent_db_execution_user}:{self.agent_db_execution_password}"
-        return f"postgresql://{credentials}@{self.tracer_db_host}:{self.tracer_db_port}/{self.tracer_db_name}"
+        """checkpoint 표만 놓인 스키마로 search_path를 고정한 접속 문자열을 만든다."""
+        return f"{self.tracer_dsn()}?options=-csearch_path%3D{CHECKPOINT_SCHEMA}"
 
 
 @lru_cache

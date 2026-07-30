@@ -111,7 +111,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     settings.configure_langsmith()
     shutdown_observability = configure_observability()
-    application.state.executions = LedgerPoolProvider(settings.execution_dsn())
+    application.state.executions = LedgerPoolProvider(settings.tracer_dsn())
     application.state.execution_sql = PooledSql(application.state.executions)
     encryption_key = settings.monitor_settings_encryption_key
     application.state.setting_cipher = SettingCipher(
