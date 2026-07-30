@@ -10,6 +10,7 @@ from temporalio.exceptions import is_cancelled_exception
 
 from ...shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
+    GENERATE_TASK_QUEUE,
     JOB_CANCEL_SETTLE_TIMEOUT_S,
     JOB_HEARTBEAT_TIMEOUT_S,
     JOB_MAX_ATTEMPTS,
@@ -40,6 +41,7 @@ class AgentJobWorkflow:
         await workflow.execute_activity(
             RUN_AGENT_JOB_ACTIVITY,
             request,
+            task_queue=GENERATE_TASK_QUEUE,
             start_to_close_timeout=timedelta(seconds=JOB_TIMEOUT_S),
             heartbeat_timeout=timedelta(seconds=JOB_HEARTBEAT_TIMEOUT_S),
             # 기본값 TRY_CANCEL은 원장 정리 전에 취소를 확정해 종료 기록을 건너뛰므로 완료를 기다린다.

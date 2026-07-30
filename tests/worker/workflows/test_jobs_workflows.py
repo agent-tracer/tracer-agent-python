@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
 from temporalio import workflow
 
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
+    GENERATE_TASK_QUEUE,
     RUN_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
     AgentJobRequest,
@@ -27,3 +31,17 @@ def test_워크플로가_잡_요청_하나를_입력으로_받는다() -> None:
 
 def test_취소_닫기_액티비티_이름이_실행_액티비티와_갈린다() -> None:
     assert SETTLE_CANCELED_JOB_ACTIVITY != RUN_AGENT_JOB_ACTIVITY
+
+
+async def test_모델을_부르는_긴_액티비티를_생성_큐에_얹는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    scheduled: list[dict[str, Any]] = []
+
+    async def record(name: str, _arg: Any, **options: Any) -> None:
+        scheduled.append({"name": name, **options})
+
+    monkeypatch.setattr(workflow, "execute_activity", record)
+
+    await AgentJobWorkflow().run(AgentJobRequest("title-suggestion", {}))
+
+    assert scheduled[0]["name"] == RUN_AGENT_JOB_ACTIVITY
+    assert scheduled[0]["task_queue"] == GENERATE_TASK_QUEUE

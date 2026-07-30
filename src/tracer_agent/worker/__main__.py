@@ -1,4 +1,4 @@
-"""워커 부트스트랩: `python -m tracer_agent.worker <chat|jobs>`."""
+"""워커 부트스트랩: `python -m tracer_agent.worker <chat|jobs|generate>`."""
 
 from __future__ import annotations
 

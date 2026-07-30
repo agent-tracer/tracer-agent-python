@@ -1,4 +1,4 @@
-"""잡 큐와 워크플로 이름과 액티비티 배치가 계약과 같은지 검증한다."""
+"""잡 큐와 워크플로 이름과 긴 생성의 큐 배치가 계약과 같은지 검증한다."""
 
 from __future__ import annotations
 
@@ -7,8 +7,11 @@ from tracer_agent.shared.config import DEFAULT_TASK_QUEUE_PREFIX
 from tracer_agent.shared.workflows.chat_spec import CHAT_TASK_QUEUE
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
+    GENERATE_QUEUE_KEY,
+    GENERATE_TASK_QUEUE,
     GRAPH_JOB_QUEUE,
     JOBS_QUEUE_KEY,
+    RUN_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
     agent_job_workflow_id,
 )
@@ -19,12 +22,13 @@ _QUEUE_OF = {activity["name"]: activity["queue"] for activity in _AGENT_JOB["act
 
 
 def test_큐_이름을_접두사와_계약의_키가_만든다() -> None:
-    assert JOBS_QUEUE_KEY in _CONTRACT["queues"]
+    assert {JOBS_QUEUE_KEY, GENERATE_QUEUE_KEY} <= set(_CONTRACT["queues"])
     assert GRAPH_JOB_QUEUE.split("-", 1) == [DEFAULT_TASK_QUEUE_PREFIX, JOBS_QUEUE_KEY]
+    assert GENERATE_TASK_QUEUE.split("-", 1) == [DEFAULT_TASK_QUEUE_PREFIX, GENERATE_QUEUE_KEY]
 
 
-def test_잡_큐가_chat_큐와_나뉘어_있다() -> None:
-    assert GRAPH_JOB_QUEUE != CHAT_TASK_QUEUE
+def test_세_큐가_서로_나뉘어_있다() -> None:
+    assert len({GRAPH_JOB_QUEUE, GENERATE_TASK_QUEUE, CHAT_TASK_QUEUE}) == 3
 
 
 def test_워크플로_이름이_계약이_적은_이름과_같다() -> None:
@@ -41,6 +45,10 @@ def test_워크플로_식별자가_계약이_적은_모양을_따른다() -> Non
 def test_워크플로_식별자가_잡_종류마다_나뉜다() -> None:
     assert agent_job_workflow_id("title-suggestion", "k1") != agent_job_workflow_id("recipe-scan", "k1")
     assert agent_job_workflow_id("title-suggestion", "k1") != agent_job_workflow_id("title-suggestion", "k2")
+
+
+def test_모델을_부르는_긴_액티비티가_generate_큐에서_실행된다() -> None:
+    assert _QUEUE_OF[RUN_AGENT_JOB_ACTIVITY] == GENERATE_QUEUE_KEY
 
 
 def test_취소_닫기_액티비티가_jobs_큐에서_실행된다() -> None:
