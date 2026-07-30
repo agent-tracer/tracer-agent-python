@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger, ChatExecutionSpend
-from tracer_agent.shared.agents.chat.models import GRAPH_BACKEND
+from tracer_agent.shared.agents.chat.models import EXECUTION_BACKEND
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.runtime.wakeup import UpdatePublisher
 from tracer_agent.shared.agents.shared.models import AgentRunObservationDTO, AgentStepDTO
@@ -169,7 +169,7 @@ class ChatExecutionWriter:
 
     async def _record_thread_turn(self, outcome: ChatTurnOutcome, now: datetime) -> None:
         rows = await self._sql.fetch(
-            _RECORD_THREAD_TURN, outcome.thread_id, GRAPH_BACKEND, now, outcome.user_id
+            _RECORD_THREAD_TURN, outcome.thread_id, EXECUTION_BACKEND, now, outcome.user_id
         )
         # 목록 정렬 기준을 밀지 못했다면 남의 스레드에 적으려 한 것이므로 턴 전체를 되감는다.
         if not rows:
