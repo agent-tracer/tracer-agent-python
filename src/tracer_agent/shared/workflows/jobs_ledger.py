@@ -11,12 +11,17 @@ from ..agents.shared.models import AgentStepDTO
 
 _CLAIM = """
 INSERT INTO ai_jobs (
-    id, user_id, kind, executor, status, attempts, task_id, idempotency_key, input,
-    created_at, updated_at
+    id, user_id, kind, executor, status, attempts, task_id, idempotency_key,
+    idempotency_input_hash, input, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, 'pending', 0, $5, $6, $7, $8, $8)
+VALUES ($1, $2, $3, $4, 'pending', 0, $5, $6, $7, $8, $9, $9)
 ON CONFLICT (id) DO NOTHING
 RETURNING id
+"""
+
+_FIND_BY_IDEMPOTENCY = """
+SELECT * FROM ai_jobs
+ WHERE user_id = $1 AND kind = $2 AND idempotency_key = $3
 """
 
 _MARK_RUNNING = """
@@ -92,22 +97,36 @@ class JobLedger:
         executor: str,
         task_id: str | None,
         idempotency_key: str | None,
+        idempotency_input_hash: str | None,
         job_input: dict[str, Any],
         now: datetime,
     ) -> bool:
-        """이 식별자나 이 멱등키의 행이 이미 있으면 새로 세우지 않고 거짓을 낸다."""
+        """이 멱등키의 행이 이미 있으면 새로 세우지 않고 거짓을 낸다."""
         try:
             rows = await self._sql.fetch(
-                _CLAIM, job_id, user_id, kind, executor, task_id, idempotency_key, job_input, now
+                _CLAIM,
+                job_id,
+                user_id,
+                kind,
+                executor,
+                task_id,
+                idempotency_key,
+                idempotency_input_hash,
+                job_input,
+                now,
             )
         except UniqueViolation:
-            # 다른 식별자가 같은 (user_id, kind, idempotency_key)를 이미 썼다는 뜻이다.
             return False
         return len(rows) == 1
 
     async def find(self, job_id: str) -> SqlRow | None:
         """잡 원장 행 하나를 있는 그대로 읽는다."""
         rows = await self._sql.fetch(_FIND, job_id)
+        return rows[0] if rows else None
+
+    async def find_by_idempotency(self, user_id: str, kind: str, key: str) -> SqlRow | None:
+        """이 사용자와 종류에서 그 멱등키가 이미 세운 잡 한 행을 읽는다."""
+        rows = await self._sql.fetch(_FIND_BY_IDEMPOTENCY, user_id, kind, key)
         return rows[0] if rows else None
 
     async def mark_running(self, job_id: str, now: datetime) -> bool:

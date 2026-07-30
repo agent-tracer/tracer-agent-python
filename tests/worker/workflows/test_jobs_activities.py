@@ -86,7 +86,7 @@ class FakeEnvelopeSource:
 
 async def claim(store: SqliteLedgerSql, job_id: str) -> None:
     """액티비티가 전진시킬 대기 행 하나를 세운다."""
-    await JobLedger(store).claim(job_id, "user-1", "title.suggestion", "temporal", None, None, {}, NOW)
+    await JobLedger(store).claim(job_id, "user-1", "title.suggestion", "temporal", None, None, None, {}, NOW)
 
 
 @pytest.fixture

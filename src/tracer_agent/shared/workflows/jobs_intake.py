@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -27,6 +28,11 @@ DEFAULT_USER_ID = "local"
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 UNSUPPORTED_KIND = (400, "job.kind-not-supported", "This backend does not accept this job kind directly yet")
 NOT_FOUND = (404, "not_found", "Job execution not found")
+IDEMPOTENCY_CONFLICT = (
+    409,
+    "job.idempotency-conflict",
+    "Idempotency key was already used with different job input",
+)
 ENVELOPE_UNAVAILABLE = (502, "job.envelope-unavailable", "Could not obtain model and credential envelope")
 
 # 세 잡 모두 이 창구가 직접 받으며, 문맥과 후보 배치는 워커가 실행 액티비티에서 스스로 조립한다.
@@ -156,7 +162,8 @@ async def enqueue_job(request: Request) -> JSONResponse:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
     user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    execution_id = enqueue.idempotencyKey or str(uuid.uuid4())
+    idempotency_key = _idempotency_key(enqueue.idempotencyKey)
+    input_hash = None if idempotency_key is None else _input_hash(enqueue.input)
     now = datetime.now(UTC)
 
     envelopes = request.app.state.job_envelopes
@@ -165,26 +172,37 @@ async def enqueue_job(request: Request) -> JSONResponse:
         await envelopes.issue(enqueue.kind, user_id)
     except ApplicationError as unavailable:
         return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
+    execution_id = str(uuid.uuid4())
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
         ledger = JobLedger(sql)
-        await ledger.claim(
+        created = await ledger.claim(
             execution_id,
             user_id,
             enqueue.kind,
             JOB_EXECUTOR,
             _task_id(job_input),
-            enqueue.idempotencyKey,
+            idempotency_key,
+            input_hash,
             enqueue.input,
             now,
         )
-        row = await ledger.find(execution_id)
+        if created:
+            row = await ledger.find(execution_id)
+        elif idempotency_key is not None:
+            row = await ledger.find_by_idempotency(user_id, enqueue.kind, idempotency_key)
+        else:
+            row = None
     if row is None:
         return error_envelope(*NOT_FOUND)
+    if not created and row["idempotency_input_hash"] != input_hash:
+        return error_envelope(*IDEMPOTENCY_CONFLICT)
 
-    dispatch: TemporalJobDispatch = request.app.state.job_dispatch
-    payload = _build_payload(job_input, user_id, execution_id, enqueue.idempotencyKey)
-    await dispatch.start(kind, execution_id, payload)
+    job_id = str(row["id"])
+    if created or row["status"] == "pending":
+        dispatch: TemporalJobDispatch = request.app.state.job_dispatch
+        payload = _build_payload(job_input, user_id, job_id, idempotency_key)
+        await dispatch.start(kind, job_id, payload)
 
     return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
@@ -210,6 +228,18 @@ def resolve_user_id(header: str | None) -> str:
     """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
     trimmed = (header or "").strip()
     return trimmed if trimmed else DEFAULT_USER_ID
+
+
+def _idempotency_key(value: str | None) -> str | None:
+    """공백뿐인 멱등키는 키를 싣지 않은 것과 같게 본다."""
+    trimmed = (value or "").strip()
+    return trimmed or None
+
+
+def _input_hash(job_input: dict[str, Any]) -> str:
+    """같은 멱등키로 다시 온 접수가 같은 입력인지를 가르는 안정 해시다."""
+    encoded = json.dumps(job_input, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:

@@ -36,6 +36,7 @@ async def claim(
         "temporal",
         task_id,
         idempotency_key,
+        None if idempotency_key is None else "hash-1",
         {"taskId": task_id} if task_id else {},
         NOW,
     )
@@ -74,6 +75,24 @@ async def test_같은_멱등키가_다른_식별자로_와도_거짓을_낸다(s
     assert await claim(ledger, job_id="j2", idempotency_key="idem-1") is False
 
     assert len(store.rows("ai_jobs")) == 1
+
+
+async def test_멱등키로_먼저_세운_잡과_그_입력_해시를_찾는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger, idempotency_key="idem-1")
+
+    row = await ledger.find_by_idempotency("u1", "title.suggestion", "idem-1")
+
+    assert row is not None
+    assert row["id"] == "j1"
+    assert row["idempotency_input_hash"] == "hash-1"
+
+
+async def test_쓰인_적_없는_멱등키는_빈_자리를_낸다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger, idempotency_key="idem-1")
+
+    assert await ledger.find_by_idempotency("u1", "title.suggestion", "idem-2") is None
 
 
 async def test_멱등키가_없으면_서로_다른_잡이_각자_행을_세운다(store: SqliteLedgerSql) -> None:

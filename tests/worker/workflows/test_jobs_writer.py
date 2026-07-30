@@ -50,7 +50,7 @@ def observation(**overrides: Any) -> dict[str, Any]:
 
 async def claim(store: SqliteLedgerSql, job_id: str = "j1") -> None:
     """종결을 받을 대기 행 하나를 세운다."""
-    await JobLedger(store).claim(job_id, "u1", "title.suggestion", "temporal", None, None, {}, NOW)
+    await JobLedger(store).claim(job_id, "u1", "title.suggestion", "temporal", None, None, None, {}, NOW)
 
 
 def outcome(**overrides: Any) -> JobOutcome:

@@ -28,7 +28,9 @@ NOW = datetime(2026, 7, 30, tzinfo=UTC)
 async def seed_job(store: SqliteLedgerSql, user_id: str = "local") -> None:
     """조회가 읽을 잡 한 행과 그 궤적을 심는다."""
     ledger = JobLedger(store)
-    await ledger.claim("j1", user_id, "recipe.scan", "temporal", "task-1", None, {"taskId": "task-1"}, NOW)
+    await ledger.claim(
+        "j1", user_id, "recipe.scan", "temporal", "task-1", None, None, {"taskId": "task-1"}, NOW
+    )
     await ledger.mark_running("j1", NOW)
     await ledger.record_steps(
         "j1",
@@ -124,7 +126,7 @@ async def test_궤적_한_줄은_값이_있는_자리만_싣는다(client: TestC
 
 
 async def test_궤적이_없는_잡은_빈_목록을_낸다(client: TestClient, store: SqliteLedgerSql) -> None:
-    await JobLedger(store).claim("j2", "local", "task.cleanup", "temporal", None, None, {}, NOW)
+    await JobLedger(store).claim("j2", "local", "task.cleanup", "temporal", None, None, None, {}, NOW)
 
     res = client.get(f"{PATH}/j2/steps")
 
@@ -144,11 +146,19 @@ async def seed_history(store: SqliteLedgerSql) -> None:
         ]
     ):
         await ledger.claim(
-            job_id, "local", kind, "temporal", task_id, None, {}, NOW + timedelta(seconds=index)
+            job_id,
+            "local",
+            kind,
+            "temporal",
+            task_id,
+            None,
+            None,
+            {},
+            NOW + timedelta(seconds=index),
         )
         if status != "pending":
             await ledger.settle(job_id, status, {}, {}, None, NOW + timedelta(seconds=index))
-    await ledger.claim("other", "u2", "recipe.scan", "temporal", "task-1", None, {}, NOW)
+    await ledger.claim("other", "u2", "recipe.scan", "temporal", "task-1", None, None, {}, NOW)
 
 
 class Test원장의_잡_종류:

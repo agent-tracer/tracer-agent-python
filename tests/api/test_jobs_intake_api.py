@@ -139,15 +139,51 @@ def test_자기신고_헤더가_사용자를_정한다(client: TestClient, dispa
     assert payload["userId"] == "u2"
 
 
-def test_idempotencyKey가_있으면_실행_식별자로_쓰인다(client: TestClient, dispatch: FakeJobDispatch) -> None:
+def test_접수가_잡_식별자를_만들고_멱등키를_그대로_쓰지_않는다(
+    client: TestClient, dispatch: FakeJobDispatch, store: SqliteLedgerSql
+) -> None:
     res = client.post(
         PATH,
         json={"kind": "recipe.scan", "input": {"taskId": "task-1"}, "idempotencyKey": "idem-1"},
     )
 
-    assert res.json()["data"]["job"]["id"] == "idem-1"
+    job_id = res.json()["data"]["job"]["id"]
+    assert job_id != "idem-1"
     _kind, key, _payload = dispatch.started[0]
-    assert key == "idem-1"
+    assert key == job_id
+    row = store.rows("ai_jobs")[0]
+    assert row["id"] == job_id
+    assert row["idempotency_key"] == "idem-1"
+
+
+def test_같은_멱등키에_같은_입력이면_먼저_만든_잡을_낸다(client: TestClient, store: SqliteLedgerSql) -> None:
+    body = {"kind": "recipe.scan", "input": {"taskId": "task-1"}, "idempotencyKey": "idem-1"}
+
+    first = client.post(PATH, json=body)
+    second = client.post(PATH, json=body)
+
+    assert (first.status_code, second.status_code) == (202, 202)
+    assert first.json()["data"]["job"]["id"] == second.json()["data"]["job"]["id"]
+    assert len(store.rows("ai_jobs")) == 1
+
+
+def test_같은_멱등키에_다른_입력이면_409를_낸다(
+    client: TestClient, dispatch: FakeJobDispatch, store: SqliteLedgerSql
+) -> None:
+    client.post(
+        PATH,
+        json={"kind": "recipe.scan", "input": {"taskId": "task-1"}, "idempotencyKey": "idem-1"},
+    )
+
+    res = client.post(
+        PATH,
+        json={"kind": "recipe.scan", "input": {"taskId": "task-2"}, "idempotencyKey": "idem-1"},
+    )
+
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "job.idempotency-conflict"
+    assert len(store.rows("ai_jobs")) == 1
+    assert len(dispatch.started) == 1
 
 
 def test_title_suggestion_접수는_202와_실행_식별자를_낸다(
