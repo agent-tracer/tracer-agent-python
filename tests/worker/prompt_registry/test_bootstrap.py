@@ -9,12 +9,11 @@ import pytest
 
 from tests.support.contract import shared_contract
 from tracer_agent.worker.agents.shared.fragment_registry import fragment_content_hash, fragment_placeholders
-from tracer_agent.worker.agents.task_cleanup.prompt_fragments import LAN_TASK_CLEANUP_FRAGMENT_REGISTRY
+from tracer_agent.worker.agents.task_cleanup.prompt_fragments import TASK_CLEANUP_FRAGMENT_REGISTRY
 from tracer_agent.worker.prompt_registry.bootstrap import (
     PromptRegistrationError,
     _manifest_entry,
     register_and_resolve_fragments,
-    resolve_fragments_or_fallback,
 )
 
 BASE_URL = "http://agent-api:8800"
@@ -60,9 +59,9 @@ async def test_조각_등록이_검증된_묶음을_온전히_지킨다() -> Non
     assert len(snapshot) == 31
 
 
-def test_lan_묶음_항목이_언어_중립_계약과_같다() -> None:
+def test_묶음_항목이_언어_중립_계약과_같다() -> None:
     expected = shared_contract("prompt.fragment.manifest.json")["manifest"][0]
-    actual = _manifest_entry(LAN_TASK_CLEANUP_FRAGMENT_REGISTRY["LAN_REPAIR_DIRECTIVE"])
+    actual = _manifest_entry(TASK_CLEANUP_FRAGMENT_REGISTRY["TASK_CLEANUP_REPAIR_DIRECTIVE"])
     assert actual == expected
 
 
@@ -99,26 +98,3 @@ async def test_창구를_쓸_수_없으면_조각_등록이_실패한다() -> No
     async with client(unavailable) as http_client:
         with pytest.raises(PromptRegistrationError):
             await register_and_resolve_fragments(http_client, BASE_URL, "prd")
-
-
-async def test_조각_창구가_닿지_않으면_파일_기본값으로_물러선다(caplog: pytest.LogCaptureFixture) -> None:
-    def unavailable(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(503, text="down")
-
-    async with client(unavailable) as http_client:
-        with caplog.at_level("WARNING"):
-            snapshot = await resolve_fragments_or_fallback(http_client, BASE_URL, "prd")
-
-    assert snapshot is None
-    assert "agent.prompt.fallback" in caplog.text
-
-
-async def test_조각_해석이_되면_스냅샷을_그대로_돌려준다() -> None:
-    def respond(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True, "data": resolved_from_request(request)})
-
-    async with client(respond) as http_client:
-        snapshot = await resolve_fragments_or_fallback(http_client, BASE_URL, "local")
-
-    assert snapshot is not None
-    assert len(snapshot) == 31

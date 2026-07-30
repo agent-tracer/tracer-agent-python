@@ -9,18 +9,20 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 PRODUCTION_CHANNEL = "production"
+STAGING_CHANNEL = "staging"
 CODE_DEFAULT_ORIGIN = "code-default"
 DATABASE_OVERRIDE_SOURCE = "database-override"
 
-# 두 구현체가 같은 본문을 실행하도록 어느 배포 프로파일도 production 채널 하나만 본다.
-_PROFILE_CHANNELS: Mapping[str, str] = MappingProxyType(
-    {"local": PRODUCTION_CHANNEL, "prd": PRODUCTION_CHANNEL}
-)
+# 배포 프로파일마다 실행에 쓰는 조각 채널이며 값은 계약의 조각 레지스트리 선언이 소유한다.
+PROFILE_CHANNELS: Mapping[str, str] = MappingProxyType({"local": STAGING_CHANNEL, "prd": PRODUCTION_CHANNEL})
 
 
 def channel_for_profile(profile: str) -> str:
-    """배포 프로파일이 볼 채널을 정하며 정해진 것이 없으면 production을 본다."""
-    return _PROFILE_CHANNELS.get(profile, PRODUCTION_CHANNEL)
+    """이 배포가 실행에 쓸 조각 채널이며 선언되지 않은 프로파일은 거절한다."""
+    channel = PROFILE_CHANNELS.get(profile)
+    if channel is None:
+        raise ValueError(f"prompt-fragment.unknown-profile:{profile}")
+    return channel
 
 
 class FragmentBindingInput(BaseModel):

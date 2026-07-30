@@ -186,7 +186,7 @@ CREATE UNIQUE INDEX ai_job_steps_job_attempt_seq
 
 CREATE TABLE prompt_fragment_definitions (
     id TEXT PRIMARY KEY,
-    definition_key TEXT NOT NULL UNIQUE,
+    definition_key TEXT NOT NULL,
     agent_name TEXT NOT NULL,
     backend TEXT NOT NULL,
     language TEXT NOT NULL,
@@ -194,6 +194,9 @@ CREATE TABLE prompt_fragment_definitions (
     code_name TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX prompt_fragment_definitions_backend_key
+    ON prompt_fragment_definitions (backend, definition_key);
 
 CREATE TABLE prompt_fragment_versions (
     id TEXT PRIMARY KEY,
@@ -216,6 +219,7 @@ CREATE UNIQUE INDEX prompt_fragment_versions_scope
 
 CREATE TABLE prompt_fragment_bindings (
     id TEXT PRIMARY KEY,
+    backend TEXT NOT NULL,
     template_key TEXT NOT NULL,
     fragment_slot TEXT NOT NULL,
     definition_id TEXT NOT NULL,
@@ -224,8 +228,8 @@ CREATE TABLE prompt_fragment_bindings (
     updated_at TEXT NOT NULL
 );
 
-CREATE UNIQUE INDEX prompt_fragment_bindings_slot
-    ON prompt_fragment_bindings (template_key, fragment_slot);
+CREATE UNIQUE INDEX prompt_fragment_bindings_backend_slot
+    ON prompt_fragment_bindings (backend, template_key, fragment_slot);
 
 CREATE TABLE prompt_fragment_channels (
     id TEXT PRIMARY KEY,

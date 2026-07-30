@@ -2,48 +2,46 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from types import MappingProxyType
 
 import httpx
 
-from ..agents.chat.prompt_fragments import LAN_CHAT_FRAGMENT_REGISTRY
-from ..agents.recipe_scan.prompt_fragments import LAN_RECIPE_SCAN_FRAGMENT_REGISTRY
+from ..agents.chat.prompt_fragments import CHAT_FRAGMENT_REGISTRY
+from ..agents.recipe_scan.prompt_fragments import RECIPE_SCAN_FRAGMENT_REGISTRY
 from ..agents.shared.fragment_registry import (
-    LanPromptFragment,
+    PromptFragment,
     fragment_content_hash,
     fragment_placeholders,
 )
-from ..agents.task_cleanup.prompt_fragments import LAN_TASK_CLEANUP_FRAGMENT_REGISTRY
-from ..agents.title_suggestion.prompt_fragments import LAN_TITLE_SUGGESTION_FRAGMENT_REGISTRY
+from ..agents.task_cleanup.prompt_fragments import TASK_CLEANUP_FRAGMENT_REGISTRY
+from ..agents.title_suggestion.prompt_fragments import TITLE_SUGGESTION_FRAGMENT_REGISTRY
 
-_log = logging.getLogger(__name__)
-
-# 배포 단위 사이에서만 오가는 창구이며 edge가 바깥에 열지 않는다.
+# 배포 단위 사이에서만 오가는 창구이며 게이트웨이가 바깥에 열지 않는다.
 REGISTER_TIMEOUT_S = 20.0
 FRAGMENT_REGISTER_PATH = "/internal/prompts/fragments/register-and-resolve"
 
-# claude-sdk 등록이 쓰는 것과 같은 상수값이되 두 백엔드가 각자 다른 시점에 자기 계약을 올릴 수 있다.
+# 두 백엔드가 각자 다른 시점에 자기 계약을 올릴 수 있으므로 값이 같아도 각자 든다.
 TOOL_CONTRACT_VERSION = "1"
 OUTPUT_SCHEMA_VERSION = "1"
 
 
 class PromptRegistrationError(Exception):
-    """등록 창구가 실패했을 때 원인을 그대로 담아, 부팅을 멈출지는 호출자가 정한다."""
+    """등록 창구가 실패했거나 받은 판이 코드 선언과 어긋났음을 담으며 부팅을 멈춘다."""
 
 
-_FRAGMENT_REGISTRIES: tuple[Mapping[str, LanPromptFragment], ...] = (
-    LAN_CHAT_FRAGMENT_REGISTRY,
-    LAN_RECIPE_SCAN_FRAGMENT_REGISTRY,
-    LAN_TASK_CLEANUP_FRAGMENT_REGISTRY,
-    LAN_TITLE_SUGGESTION_FRAGMENT_REGISTRY,
+_FRAGMENT_REGISTRIES: tuple[Mapping[str, PromptFragment], ...] = (
+    CHAT_FRAGMENT_REGISTRY,
+    RECIPE_SCAN_FRAGMENT_REGISTRY,
+    TASK_CLEANUP_FRAGMENT_REGISTRY,
+    TITLE_SUGGESTION_FRAGMENT_REGISTRY,
 )
 
 
 async def register_and_resolve_fragments(
     client: httpx.AsyncClient, agent_api_url: str, profile: str
 ) -> Mapping[tuple[str, str], Mapping[str, object]]:
+    """네 에이전트의 조각을 등록하고 받은 판을 코드 선언과 대조해 실행 snapshot으로 고정한다."""
     manifest = [
         _manifest_entry(fragment) for registry in _FRAGMENT_REGISTRIES for fragment in registry.values()
     ]
@@ -59,17 +57,6 @@ async def register_and_resolve_fragments(
     return _verified_snapshot(manifest, _envelope_data(response.json()))
 
 
-async def resolve_fragments_or_fallback(
-    client: httpx.AsyncClient, agent_api_url: str, profile: str
-) -> Mapping[tuple[str, str], Mapping[str, object]] | None:
-    """조각 해석이 실패하면 파일 기본값으로 물러서고 그 사실을 경고 로그로 남긴다."""
-    try:
-        return await register_and_resolve_fragments(client, agent_api_url, profile)
-    except PromptRegistrationError as error:
-        _log.warning("agent.prompt.fallback reason=%s", error)
-        return None
-
-
 def _envelope_data(payload: object) -> list[object]:
     if not isinstance(payload, dict) or payload.get("ok") is not True:
         raise PromptRegistrationError("fragment registration returned a failure envelope")
@@ -79,8 +66,8 @@ def _envelope_data(payload: object) -> list[object]:
     return data
 
 
-def _manifest_entry(fragment: LanPromptFragment) -> dict[str, object]:
-    agent_name = fragment.definition_key.split(".")[1]
+def _manifest_entry(fragment: PromptFragment) -> dict[str, object]:
+    agent_name = fragment.definition_key.rsplit(".", 2)[0]
     fragment_name = fragment.bindings[0].fragment_slot
     return {
         "backend": "python",

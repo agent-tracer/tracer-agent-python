@@ -23,14 +23,14 @@ ENTRY: dict[str, Any] = {
     "backend": "python",
     "agentName": "task-cleanup",
     "language": "en",
-    "codeName": "LAN_REPAIR_DIRECTIVE",
-    "definitionKey": "lan.task-cleanup.repair-directive.en",
+    "codeName": "TASK_CLEANUP_REPAIR_DIRECTIVE",
+    "definitionKey": "task-cleanup.repair-directive.en",
     "fragmentName": "repairDirective",
     "defaultVersion": "v1",
     "defaultContent": CONTENT,
     "toolContractVersion": "1",
     "outputSchemaVersion": "1",
-    "bindings": [{"templateKey": "lan.task-cleanup.investigator.repair", "fragmentSlot": "repairDirective"}],
+    "bindings": [{"templateKey": "task-cleanup.investigator.repair", "fragmentSlot": "repairDirective"}],
 }
 BODY: dict[str, Any] = {"profile": "local", "manifest": [ENTRY]}
 
@@ -118,7 +118,7 @@ def _seed_edited_fragment(store: SqliteLedgerSql, content: str) -> None:
             {
                 "id": "channel-1",
                 "definition_id": "definition-1",
-                "channel": "production",
+                "channel": "staging",
                 "version_id": "version-edited",
                 "updated_at": now,
             }
@@ -133,7 +133,7 @@ def test_조각_등록이_정의와_판과_자리와_채널을_세운다(client:
     body = res.json()
     assert body["ok"] is True
     resolved = body["data"][0]
-    assert resolved["templateKey"] == "lan.task-cleanup.investigator.repair"
+    assert resolved["templateKey"] == "task-cleanup.investigator.repair"
     assert resolved["fragmentSlot"] == "repairDirective"
     assert resolved["content"] == CONTENT
     assert resolved["contentHash"] == fragment_content_hash(CONTENT)
@@ -142,7 +142,7 @@ def test_조각_등록이_정의와_판과_자리와_채널을_세운다(client:
     assert store.rows("prompt_fragment_definitions")[0]["definition_key"] == ENTRY["definitionKey"]
     assert store.rows("prompt_fragment_versions")[0]["origin"] == "code-default"
     assert store.rows("prompt_fragment_bindings")[0]["code_default_version"] == "v1"
-    assert store.rows("prompt_fragment_channels")[0]["channel"] == "production"
+    assert store.rows("prompt_fragment_channels")[0]["channel"] == "staging"
 
 
 def test_두_번째_부팅이_같은_행을_다시_심지_않는다(client: TestClient, store: SqliteLedgerSql) -> None:
@@ -167,6 +167,32 @@ def test_데이터베이스가_가진_판을_파일_값이_덮지_않는다(clie
     assert resolved["semanticVersion"] == "v2"
     assert resolved["source"] == "database-override"
     assert store.rows("prompt_fragment_versions")[0]["content"] == edited
+
+
+def test_prd_배포가_production_채널에_판을_심는다(client: TestClient, store: SqliteLedgerSql) -> None:
+    res = client.post(FRAGMENTS_PATH, json={**BODY, "profile": "prd"})
+
+    assert res.status_code == 200
+    assert store.rows("prompt_fragment_channels")[0]["channel"] == "production"
+
+
+def test_두_축이_같은_자리를_올려도_정의와_자리가_축마다_남는다(
+    client: TestClient, store: SqliteLedgerSql
+) -> None:
+    other = {**ENTRY, "backend": "claude-sdk", "defaultContent": "다른 축의 판"}
+
+    client.post(FRAGMENTS_PATH, json=BODY)
+    resolved = client.post(FRAGMENTS_PATH, json={**BODY, "manifest": [other]}).json()["data"][0]
+
+    assert resolved["content"] == "다른 축의 판"
+    assert len(store.rows("prompt_fragment_definitions")) == 2
+    assert len(store.rows("prompt_fragment_bindings")) == 2
+    assert [row["backend"] for row in store.rows("prompt_fragment_bindings")] == ["python", "claude-sdk"]
+
+
+def test_선언되지_않은_프로파일이면_조각을_해석하지_않는다(client: TestClient) -> None:
+    with pytest.raises(ValueError, match="unknown-profile"):
+        client.post(FRAGMENTS_PATH, json={**BODY, "profile": "unknown"})
 
 
 def test_본문이_스키마를_어기면_400_오류_봉투를_낸다(client: TestClient) -> None:

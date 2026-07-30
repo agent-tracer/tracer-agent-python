@@ -35,7 +35,7 @@ from ..shared.workflows.jobs_spec import (
     NOTIFICATIONS_TOPIC,
 )
 from .agents.chat.checkpoint import ChatCheckpointProvider
-from .prompt_registry.bootstrap import resolve_fragments_or_fallback
+from .prompt_registry.bootstrap import register_and_resolve_fragments
 from .workflows.chat_activities import ChatExecutionActivities
 from .workflows.chat_workflows import ChatExecutionWorkflow, ChatThreadWorkflow
 from .workflows.envelope import ChatEnvelopeClient
@@ -65,7 +65,7 @@ class ChatWorkerResources:
     http_client: httpx.AsyncClient
     checkpoints: ChatCheckpointProvider
     wakeup: UpdatePublisher
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None
+    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]]
 
     async def close(self) -> None:
         """열린 연결을 모두 닫는다."""
@@ -81,7 +81,7 @@ class JobWorkerResources:
 
     http_client: httpx.AsyncClient
     execution: LedgerPoolProvider
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None
+    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]]
     notifications: UpdatePublisher
 
     async def close(self) -> None:
@@ -96,7 +96,7 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
     """chat 액티비티가 쓸 바깥 연결을 열고 끝나면 닫는다."""
     http_client = httpx.AsyncClient(timeout=CHAT_HTTP_TIMEOUT_S)
     try:
-        prompt_fragments = await resolve_fragments_or_fallback(
+        prompt_fragments = await register_and_resolve_fragments(
             http_client, settings.agent_api_url, settings.monitor_profile
         )
     except BaseException:
@@ -120,7 +120,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
     """잡 셋 액티비티가 쓸 바깥 연결을 열고 끝나면 닫는다."""
     http_client = httpx.AsyncClient(timeout=JOB_HTTP_TIMEOUT_S)
     try:
-        prompt_fragments = await resolve_fragments_or_fallback(
+        prompt_fragments = await register_and_resolve_fragments(
             http_client, settings.agent_api_url, settings.monitor_profile
         )
     except BaseException:
