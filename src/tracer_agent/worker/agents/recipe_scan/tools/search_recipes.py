@@ -4,18 +4,13 @@ from __future__ import annotations
 
 import json
 
-from opensearchpy.exceptions import (
-    ConnectionError as OpenSearchConnectionError,
-)
-from opensearchpy.exceptions import (
-    ConnectionTimeout as OpenSearchConnectionTimeout,
-)
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..search import RecipeSearchReader
 from .provenance import add_recipe_revs, loaded
 
@@ -38,18 +33,13 @@ SEARCH_RECIPES_DESCRIPTION = (
 
 
 class SearchRecipesTool(AgentTool[SearchRecipesArgs]):
-    """수정 대상이 될 수 있는 레시피를 색인에서 찾고 개정 근거를 올린다."""
+    """수정 대상이 될 수 있는 레시피를 추적 창구에서 찾고 개정 근거를 올린다."""
 
     name = SEARCH_RECIPES
     description = SEARCH_RECIPES_DESCRIPTION
     args_model = SearchRecipesArgs
-    # 색인(opensearch)만 읽으므로 연결 계열 오류만 일시적이며 검증·도메인 오류는 재시도하지 않는다.
-    transient_errors = (
-        OpenSearchConnectionError,
-        OpenSearchConnectionTimeout,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, search: RecipeSearchReader, catalog: ProvenanceCatalog) -> None:
         self._search = search

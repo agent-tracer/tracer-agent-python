@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import pytest
 from anthropic import AuthenticationError
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeSearch, FakeToolLoopChat
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
@@ -22,20 +21,18 @@ _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"
 def _event_row(event_id: str, turn_id: str, title: str) -> dict[str, object]:
     return {
         "id": event_id,
-        "seq": 1,
-        "turn_id": turn_id,
+        "seq": "1",
+        "turnId": turn_id,
         "kind": "execute_tool",
         "title": title,
-        "body": None,
-        "tool_name": None,
-        "file_paths": [],
+        "filePaths": [],
         "metadata": {},
-        "occurred_at": datetime(2026, 7, 14, tzinfo=UTC),
+        "occurredAt": "2026-07-14T00:00:00Z",
     }
 
 
-def _default_ledger() -> FakeLedger:
-    return FakeLedger(
+def _default_ledger() -> FakeTracerApi:
+    return FakeTracerApi(
         [
             _event_row("event-1", "turn-1", "마이그레이션"),
             _event_row("event-2", "turn-2", "대시보드"),
@@ -45,13 +42,14 @@ def _default_ledger() -> FakeLedger:
                 "id": "rule-1",
                 "name": "규칙",
                 "expectation": {"kind": "action", "tool": "Bash"},
-                "task_id": "t1",
-                "anchor_event_id": "event-1",
+                "taskId": "t1",
+                "anchorEventId": "event-1",
                 "source": "agent",
                 "severity": "info",
                 "rationale": None,
                 "signature": "sig-1",
-                "created_at": datetime(2026, 7, 14, tzinfo=UTC),
+                "reviewState": "active",
+                "createdAt": "2026-07-14T00:00:00Z",
             }
         ],
     )
@@ -120,7 +118,7 @@ def _evidence_probes() -> dict[str, list[Any]]:
 async def _run(
     monkeypatch: pytest.MonkeyPatch,
     chat: FakeToolLoopChat,
-    ledger: FakeLedger | None = None,
+    ledger: FakeTracerApi | None = None,
 ) -> AgentResponse:
     req = _request()
     monkeypatch.setattr(recipe_mod, "make_chat", lambda *_a, **_k: chat)
@@ -129,7 +127,7 @@ async def _run(
         "recipe-scan",
         req.model,
         req.deadlineMs,
-        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, FakeSearch(), usage),
+        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage),
     )
 
 
@@ -160,7 +158,7 @@ async def test_도구를_한_번도_부르지_않아도_빈_결과로_끝난다(
 
     assert res.error is None and res.data["recipes"] == []
     # 도구를 부르지 않았으니 원장을 한 번도 조회하지 않는다.
-    assert ledger.queries == []
+    assert ledger.calls == []
     narrate("recipe-scan :: 도구를 한 번도 부르지 않아도 빈 결과로 끝난다", res)
 
 
@@ -175,7 +173,7 @@ async def test_띄울_전문가가_없으면_조율자를_부르지_않고_빈_�
 
     assert res.error is None and res.data["recipes"] == []
     assert not any(step.nodeName in {"probe", "investigate"} for step in res.steps)
-    assert ledger.queries == []
+    assert ledger.calls == []
     assert any("survey -> no specialists" in step.content for step in res.steps)
     narrate("recipe-scan :: 띄울 전문가가 없으면 조율자를 부르지 않고 빈 결과로 끝난다", res)
 

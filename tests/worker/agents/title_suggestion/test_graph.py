@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeToolLoopChat
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
@@ -45,9 +45,9 @@ _EVENT_ROWS = [
         "kind": "agent_tracer.user.message",
         "title": "토큰 누수 수정",
         "body": None,
-        "tool_name": None,
-        "file_paths": ["src/auth.ts"],
-        "occurred_at": datetime(2026, 7, 19, 3, 0, tzinfo=UTC),
+        "toolName": None,
+        "filePaths": ["src/auth.ts"],
+        "occurredAt": datetime(2026, 7, 19, 3, 0, tzinfo=UTC).isoformat(),
     }
 ]
 
@@ -72,13 +72,13 @@ def _request(**overrides: Any) -> TitleSuggestionRequest:
 async def _run(
     monkeypatch: pytest.MonkeyPatch,
     turns: list[Any],
-    ledger: FakeLedger | None = None,
+    ledger: FakeTracerApi | None = None,
     **request_overrides: Any,
-) -> tuple[FakeToolLoopChat, AgentResponse, FakeLedger]:
+) -> tuple[FakeToolLoopChat, AgentResponse, FakeTracerApi]:
     chat = FakeToolLoopChat(turns)
     monkeypatch.setattr(title_mod, "make_chat", lambda *_args, **_kwargs: chat)
     req = _request(**request_overrides)
-    fake_ledger = ledger or FakeLedger()
+    fake_ledger = ledger or FakeTracerApi()
     result = await execute(
         "title-suggestion",
         req.model,
@@ -94,7 +94,7 @@ async def test_대화_발췌로_충분하면_도구를_부르지_않고_제목�
     _chat, res, ledger = await _run(monkeypatch, [_SUGGESTIONS])
 
     assert res.error is None
-    assert ledger.queries == []
+    assert ledger.calls == []
     assert [item["title"] for item in res.data["suggestions"]] == [
         "인증 토큰 누수 수정",
         "인증 회귀 테스트 추가",
@@ -112,7 +112,7 @@ async def test_현재_제목이_적절하면_빈_결과를_낸다(monkeypatch: p
 async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ledger = FakeLedger(_EVENT_ROWS)
+    ledger = FakeTracerApi(_EVENT_ROWS)
     turns: list[Any] = [
         [{"name": "get_task_events", "args": {"taskId": "task-1"}}],
         _SUGGESTIONS,
@@ -121,8 +121,9 @@ async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다
     _chat, res, fake_ledger = await _run(monkeypatch, turns, ledger)
 
     assert res.error is None
-    # 조회는 태스크와 사용자 범위로 좁혀지고 상한보다 한 행 더 읽어 truncated를 판단한다.
-    assert fake_ledger.queries == [{"desc": False, "args": ["task-1", "user-1", None, 101]}]
+    # 조회는 그 태스크의 타임라인 창구 하나로 좁혀지고 읽기 방향과 상한을 인자로 싣는다.
+    assert [call["path"] for call in fake_ledger.calls] == ["/api/v1/tasks/task-1/timeline"]
+    assert fake_ledger.calls[0]["params"]["order"] == "asc"
     assert [step.toolName for step in res.steps if step.role == "tool"] == ["get_task_events"]
     narrate("title-suggestion :: 발췌가 부족하면 태스크 이벤트를 직접 읽는다", res)
 

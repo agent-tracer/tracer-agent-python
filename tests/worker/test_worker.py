@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.support.fakes import FakeLedger, FakeSearch
+from tests.support.fakes import TRACER_API_URL, FakeLedgerPool
 from tracer_agent.shared.agents.runtime.ledger import PooledSql
 from tracer_agent.worker.worker import (
     QUEUE_ARGS,
@@ -16,7 +16,7 @@ from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities
 
 
 def _activities() -> AgentJobActivities:
-    return AgentJobActivities(FakeLedger(), FakeSearch(), None, PooledSql(FakeLedger()))  # type: ignore[arg-type]
+    return AgentJobActivities(TRACER_API_URL, None, PooledSql(FakeLedgerPool()))  # type: ignore[arg-type]
 
 
 def test_기동_인자가_계약의_큐_키_셋이다() -> None:

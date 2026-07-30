@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from tests.support.contract import agent_spec
-from tests.support.fakes import FakeLedger
+from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.task_cleanup.models import (
     CLEANUP_REVIEWER_ROLE,
     MAX_EVIDENCE_EVENT_IDS,
@@ -54,7 +54,7 @@ def _tool(name: str) -> Any:
 
 def _langchain_tools() -> dict[str, Any]:
     registry = build_cleanup_registry(
-        CleanupLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
+        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
         CleanupBatch(),
         {},
         {},

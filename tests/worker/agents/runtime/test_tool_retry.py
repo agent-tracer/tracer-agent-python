@@ -9,7 +9,7 @@ from asyncpg import CannotConnectNowError, PostgresConnectionError
 from langchain.tools import tool
 from opensearchpy.exceptions import ConnectionError as OpenSearchConnectionError
 
-from tests.support.fakes import FakeLedger, FakeSearch, FakeToolLoopChat, mk_rates
+from tests.support.fakes import FakeToolLoopChat, FakeTracerApi, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeDraft
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
@@ -18,11 +18,12 @@ from tracer_agent.worker.agents.recipe_scan.tools import build_recipe_registry
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
 from tracer_agent.worker.agents.runtime.llm.standard_agent import StandardAgentContext
+from tracer_agent.worker.agents.runtime.tracer_client import TracerApiUnavailable
 from tracer_agent.worker.agents.task_cleanup.tools import GetTaskEventsTool
 
 RECIPE_TRANSIENT = build_recipe_registry(
-    RecipeLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
-    RecipeSearchReader(FakeSearch(), "user-1"),  # type: ignore[arg-type]
+    RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+    RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
     ProvenanceCatalog(),
     agent_name="recipe-scan",
 ).transient_errors()
@@ -56,15 +57,16 @@ def _context() -> StandardAgentContext:
 
 
 def test_재시도_대상은_연결_계열_일시_오류만이다() -> None:
-    # 원장과 색인의 연결 오류만 일시적이며, 검증·도메인 오류는 이 목록에 없다.
-    assert PostgresConnectionError in RECIPE_TRANSIENT
-    assert CannotConnectNowError in RECIPE_TRANSIENT
-    assert OpenSearchConnectionError in RECIPE_TRANSIENT
+    # 창구에 닿지 못한 것만 일시적이며, 검증·도메인 오류는 이 목록에 없다.
+    assert TracerApiUnavailable in RECIPE_TRANSIENT
     assert ConnectionError in RECIPE_TRANSIENT and TimeoutError in RECIPE_TRANSIENT
     assert ValueError not in RECIPE_TRANSIENT
-    # 색인을 읽지 않는 task-cleanup은 색인 오류를 재시도 대상에 두지 않는다.
-    assert PostgresConnectionError in CLEANUP_TRANSIENT
-    assert OpenSearchConnectionError not in CLEANUP_TRANSIENT
+    # 두 에이전트가 같은 창구를 부르므로 재시도 대상이 같다.
+    assert TracerApiUnavailable in CLEANUP_TRANSIENT
+    # 원장과 색인에 직접 붙지 않으므로 그 오류는 재시도 대상이 아니다.
+    assert PostgresConnectionError not in RECIPE_TRANSIENT
+    assert CannotConnectNowError not in RECIPE_TRANSIENT
+    assert OpenSearchConnectionError not in RECIPE_TRANSIENT
 
 
 async def test_일시_오류는_도구_계층에서_재시도해_실행이_이어진다() -> None:
@@ -89,11 +91,11 @@ async def test_일시_오류는_도구_계층에서_재시도해_실행이_이�
 
 
 async def test_소진해도_실패하면_오류가_그대로_올라온다() -> None:
-    flaky, calls = _flaky_tool(9, PostgresConnectionError("ledger down"))
+    flaky, calls = _flaky_tool(9, TracerApiUnavailable("tracer api down"))
     chat = FakeToolLoopChat([[{"name": "get_task_events", "args": {"taskId": "t1"}}]])
     agent = build_recipe_agent(chat, "system", (flaky,), RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
-    with pytest.raises(PostgresConnectionError):
+    with pytest.raises(TracerApiUnavailable):
         await agent.ainvoke(
             {"messages": [{"role": "user", "content": "go"}]},
             context=_context(),

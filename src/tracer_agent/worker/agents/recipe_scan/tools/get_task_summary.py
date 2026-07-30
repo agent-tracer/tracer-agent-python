@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 
-from asyncpg import CannotConnectNowError, PostgresConnectionError
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..reader import RecipeLedgerReader
 from ..summary import build_task_summary
 
@@ -42,18 +42,13 @@ GET_TASK_SUMMARY_DESCRIPTION = (
 
 
 class GetTaskSummaryTool(AgentTool[GetTaskSummaryArgs]):
-    """앵커 태스크의 저비용 요약을 원장 뷰에서 읽는다."""
+    """앵커 태스크의 저비용 요약을 추적 창구에서 읽는다."""
 
     name = GET_TASK_SUMMARY
     description = GET_TASK_SUMMARY_DESCRIPTION
     args_model = GetTaskSummaryArgs
-    # 원장(asyncpg)만 읽으므로 연결 계열 오류만 일시적이며 검증·도메인 오류는 재시도하지 않는다.
-    transient_errors = (
-        PostgresConnectionError,
-        CannotConnectNowError,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, reader: RecipeLedgerReader) -> None:
         self._reader = reader

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
-from tests.support.fakes import FakeLedger, FakeSearch, FakeToolLoopChat
+from tests.support.fakes import FakeToolLoopChat, FakeTracerApi
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
@@ -33,20 +33,20 @@ def _loop_supersteps(agent: CompiledStateGraph[Any, Any, Any, Any]) -> int:
 def _agents() -> list[tuple[str, CompiledStateGraph[Any, Any, Any, Any], int, int]]:
     chat = FakeToolLoopChat([])
     cleanup_registry = build_cleanup_registry(
-        CleanupLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
+        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
         CleanupBatch(),
         {},
         {},
         agent_name="task-cleanup",
     )
     recipe_registry = build_recipe_tool_registry(
-        RecipeLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeSearch(), "user-1"),  # type: ignore[arg-type]
+        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
         ProvenanceCatalog(),
         agent_name="recipe-scan",
     )
     title_registry = build_title_registry(
-        TitleLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
+        TitleLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
         agent_name="title-suggestion",
     )
     return [

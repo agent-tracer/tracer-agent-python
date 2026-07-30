@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     tracer_db_user: str = "root"
     tracer_db_password: str = "root"
 
-    opensearch_node: str = "http://opensearch:9200"
     kafka_brokers: str = "redpanda:29092"
     temporal_address: str = "temporal:7233"
     temporal_namespace: str = "default"

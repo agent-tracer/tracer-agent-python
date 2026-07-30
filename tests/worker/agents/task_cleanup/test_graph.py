@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeToolLoopChat
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
@@ -52,9 +52,9 @@ def _event_rows(*event_ids: str) -> list[dict[str, Any]]:
             "kind": "execute_tool",
             "title": "무의미한 활동",
             "body": None,
-            "tool_name": None,
-            "file_paths": [],
-            "occurred_at": datetime(2026, 7, 14, tzinfo=UTC),
+            "toolName": None,
+            "filePaths": [],
+            "occurredAt": datetime(2026, 7, 14, tzinfo=UTC).isoformat(),
         }
         for event_id in event_ids
     ]
@@ -79,7 +79,9 @@ def _reviewer(task_id: str, report: dict[str, object], *, read: bool = True) -> 
     return {f"Task to judge: {task_id}": turns}
 
 
-async def _run(_chat: FakeToolLoopChat, ledger: FakeLedger, *candidates: dict[str, object]) -> AgentResponse:
+async def _run(
+    _chat: FakeToolLoopChat, ledger: FakeTracerApi, *candidates: dict[str, object]
+) -> AgentResponse:
     req = _request(*candidates)
     return await execute(
         "task-cleanup",
@@ -92,7 +94,7 @@ async def _run(_chat: FakeToolLoopChat, ledger: FakeLedger, *candidates: dict[st
 async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함께_제안한다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ledger = FakeLedger(_event_rows("event-1"))
+    ledger = FakeTracerApi(_event_rows("event-1"))
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     worker_turns = {
         **_triage({"taskId": "task-1", "weight": 2}),
@@ -132,8 +134,8 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
     res = await _run(chat, ledger, *candidates)
 
     assert res.error is None
-    # 선별자가 고른 후보 하나만 검토자가 이벤트를 사용자 범위로 조회한다.
-    assert ledger.queries == [{"desc": False, "args": ["task-1", "user-1", None, 101]}]
+    # 선별자가 고른 후보 하나만 검토자가 그 태스크의 타임라인 창구로 조회한다.
+    assert [call["path"] for call in ledger.calls] == ["/api/v1/tasks/task-1/timeline"]
     assert res.data["suggestions"] == [
         {
             "kind": "archive",
@@ -147,7 +149,7 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
 
 
 async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch: pytest.MonkeyPatch) -> None:
-    ledger = FakeLedger()
+    ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=False)]
     worker_turns = {
         **_triage({"taskId": "task-1", "weight": 1}),
@@ -186,7 +188,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch:
 async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받지_않는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ledger = FakeLedger()
+    ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     # 선별자는 빈 껍데기 task-2만 배정하고, 조율자가 아무도 읽지 않은 task-1을 멋대로 제안한다.
     worker_turns = {
@@ -226,7 +228,7 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
 async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_없이도_받는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ledger = FakeLedger()
+    ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True)]
     worker_turns = {
         **_triage({"taskId": "task-1", "weight": 1}),
@@ -260,7 +262,7 @@ async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_�
 
 
 async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다(monkeypatch: pytest.MonkeyPatch) -> None:
-    ledger = FakeLedger()
+    ledger = FakeTracerApi()
     candidates: list[dict[str, object]] = []
     chat = FakeToolLoopChat([{"suggestions": []}])
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
@@ -274,7 +276,7 @@ async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다(monk
 async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열어보고_완주한다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ledger = FakeLedger(_event_rows("event-1"))
+    ledger = FakeTracerApi(_event_rows("event-1"))
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=True)]
     archivable = {"archivable": True, "reason": "의미 있는 활동이 없다", "citedEventIds": ["event-1"]}
     worker_turns = {
@@ -341,7 +343,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
 
     res = await _run(
         chat,
-        FakeLedger(),
+        FakeTracerApi(),
         _candidate("task-1", has_events=True),
         _candidate("task-2", has_events=True),
     )
@@ -361,7 +363,7 @@ async def test_고른_후보만_각자_예산으로_병렬_조사된다(monkeypa
 
     res = await _run(
         chat,
-        FakeLedger(),
+        FakeTracerApi(),
         _candidate("task-1", has_events=True),
         _candidate("task-2", has_events=True),
     )

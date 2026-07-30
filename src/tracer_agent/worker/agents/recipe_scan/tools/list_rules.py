@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
-from asyncpg import CannotConnectNowError, PostgresConnectionError
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..reader import RecipeLedgerReader
 from .provenance import add_rule_ids, loaded
 
@@ -35,13 +35,8 @@ class ListRulesTool(AgentTool[ListRulesArgs]):
     name = LIST_RULES
     description = LIST_RULES_DESCRIPTION
     args_model = ListRulesArgs
-    # 원장(asyncpg)만 읽으므로 연결 계열 오류만 일시적이며 검증·도메인 오류는 재시도하지 않는다.
-    transient_errors = (
-        PostgresConnectionError,
-        CannotConnectNowError,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, reader: RecipeLedgerReader, catalog: ProvenanceCatalog) -> None:
         self._reader = reader

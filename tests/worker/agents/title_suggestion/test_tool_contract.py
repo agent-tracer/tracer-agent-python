@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.support.contract import agent_spec
-from tests.support.fakes import FakeLedger
+from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.title_suggestion.models import (
     MAX_CONTEXT_TURNS,
     RECENT_TURN_LIMIT,
@@ -34,7 +34,7 @@ def _contract() -> Any:
 
 def _langchain_tool() -> Any:
     registry = build_title_registry(
-        TitleLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
+        TitleLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
         agent_name="title-suggestion",
     )
     return registry.langchain_tools()[0]
@@ -48,9 +48,9 @@ def _row(event_id: str) -> dict[str, Any]:
         "kind": "agent_tracer.user.message",
         "title": "마이그레이션을 추가해줘",
         "body": "본문",
-        "tool_name": "Bash",
-        "file_paths": ["src/app.ts"],
-        "occurred_at": datetime(2026, 7, 14, tzinfo=UTC),
+        "toolName": "Bash",
+        "filePaths": ["src/app.ts"],
+        "occurredAt": datetime(2026, 7, 14, tzinfo=UTC).isoformat(),
     }
 
 
@@ -124,7 +124,7 @@ def test_읽기_방향의_기본값과_허용_값이_계약과_같다() -> None:
 
 async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     responses = _contract()["responses"][GET_TASK_EVENTS]
-    reader = TitleLedgerReader(FakeLedger([_row("event-1"), _row("event-2")]), "user-1")  # type: ignore[arg-type]
+    reader = TitleLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))  # type: ignore[arg-type]
 
     page = await reader.task_events("task-1", 1, None, "asc")
 

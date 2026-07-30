@@ -5,10 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from opensearchpy import AsyncOpenSearch
-
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanRequest
-from tracer_agent.shared.agents.runtime.ledger import LedgerPoolProvider
 
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
@@ -17,6 +14,7 @@ from ..runtime.llm.structured_agent import recursion_config
 from ..runtime.node import node_registry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
+from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_runtime import resolve_execution_prompt_bundle
 from .graph import RECIPE_SCAN_GRAPH
@@ -34,8 +32,7 @@ AGENT_NAME = "recipe-scan"
 
 async def run_recipe_scan(
     req: RecipeScanRequest,
-    ledger: LedgerPoolProvider,
-    search: AsyncOpenSearch,
+    tracer: TracerApiClient,
     usage: ExecutionTrace,
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
 ) -> dict[str, Any]:
@@ -63,8 +60,8 @@ async def run_recipe_scan(
         if fallback_model is not None
         else None
     )
-    reader = RecipeLedgerReader(ledger, req.userId)
-    search_reader = RecipeSearchReader(search, req.userId)
+    reader = RecipeLedgerReader(tracer)
+    search_reader = RecipeSearchReader(tracer)
     budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates))
     context = ValidationGraphContext(
         AGENT_NAME,

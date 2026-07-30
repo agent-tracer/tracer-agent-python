@@ -10,7 +10,13 @@ from typing import Any
 import httpx
 import pytest
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeSearch, FakeToolLoopChat
+from tests.support.fakes import (
+    TRACER_API_URL,
+    WIRE_LIMITS,
+    WIRE_MODEL_RATES,
+    FakeLedgerPool,
+    FakeToolLoopChat,
+)
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
@@ -92,7 +98,7 @@ async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
-    activities = AgentJobActivities(FakeLedger(), FakeSearch(), http, PooledSql(FakeLedger()))  # type: ignore[arg-type]
+    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()))  # type: ignore[arg-type]
     payload = {
         "model": "claude-haiku-4-5",
         "apiKey": "sk-test",
@@ -115,7 +121,7 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
-    activities = AgentJobActivities(FakeLedger(), FakeSearch(), http, PooledSql(FakeLedger()))  # type: ignore[arg-type]
+    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()))  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
         "apiKey": "sk-test",
@@ -138,7 +144,7 @@ async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(recipe_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"recipes": []}]))
-    activities = AgentJobActivities(FakeLedger(), FakeSearch(), http, PooledSql(FakeLedger()))  # type: ignore[arg-type]
+    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()))  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
         "apiKey": "sk-test",
@@ -162,7 +168,7 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e1")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
+        TRACER_API_URL, http, _StaticSql(execution_sql)
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -197,7 +203,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e2")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql), envelopes=envelopes
+        TRACER_API_URL, http, _StaticSql(execution_sql), envelopes=envelopes
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -217,7 +223,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
 
 
 async def test_페이로드에_자격도_실행_식별자도_없으면_거부한다(http: CapturingCompletionClient) -> None:
-    activities = AgentJobActivities(FakeLedger(), FakeSearch(), http, PooledSql(FakeLedger()))  # type: ignore[arg-type]
+    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()))  # type: ignore[arg-type]
     payload = {"model": "claude-haiku-4-5", "taskId": "task-1"}
 
     with pytest.raises(ValueError):
@@ -230,7 +236,7 @@ async def test_실행_액티비티가_돌기_전에_취소되면_원장이_취�
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e3")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
+        TRACER_API_URL, http, _StaticSql(execution_sql)
     )
 
     await activities.settle_canceled("e3")
@@ -244,7 +250,7 @@ async def test_그래프를_돌리기_전에_죽으면_원장이_failed로_닫�
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e5")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        FakeLedger(owned=False), FakeSearch(), http, _StaticSql(execution_sql)
+        TRACER_API_URL, http, _StaticSql(execution_sql)
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -271,7 +277,7 @@ async def test_이미_종결된_행은_취소_닫기가_건드리지_않는다(h
     await claim(execution_sql, "e4")
     await JobLedger(execution_sql).settle("e4", "completed", {}, {}, None, NOW)
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
+        TRACER_API_URL, http, _StaticSql(execution_sql)
     )
 
     await activities.settle_canceled("e4")

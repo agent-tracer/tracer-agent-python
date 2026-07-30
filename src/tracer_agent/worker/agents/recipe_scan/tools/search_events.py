@@ -1,22 +1,17 @@
-"""색인에서 이벤트를 검색하고 태스크를 가로지른 이벤트를 근거로 올리는 도구를 소유한다."""
+"""이벤트를 검색하고 태스크를 가로지른 이벤트를 근거로 올리는 도구를 소유한다."""
 
 from __future__ import annotations
 
 import json
 from typing import Literal
 
-from opensearchpy.exceptions import (
-    ConnectionError as OpenSearchConnectionError,
-)
-from opensearchpy.exceptions import (
-    ConnectionTimeout as OpenSearchConnectionTimeout,
-)
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..search import RecipeSearchReader
 from .provenance import add_events, loaded
 
@@ -78,18 +73,13 @@ SEARCH_EVENTS_DESCRIPTION = (
 
 
 class SearchEventsTool(AgentTool[SearchEventsArgs]):
-    """색인에서 교정과 지시와 마찰 근거 이벤트를 찾고 돌려준 이벤트를 근거로 올린다."""
+    """교정과 지시와 마찰 근거 이벤트를 찾고 돌려준 이벤트를 근거로 올린다."""
 
     name = SEARCH_EVENTS
     description = SEARCH_EVENTS_DESCRIPTION
     args_model = SearchEventsArgs
-    # 색인(opensearch)만 읽으므로 연결 계열 오류만 일시적이며 검증·도메인 오류는 재시도하지 않는다.
-    transient_errors = (
-        OpenSearchConnectionError,
-        OpenSearchConnectionTimeout,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, search: RecipeSearchReader, catalog: ProvenanceCatalog) -> None:
         self._search = search

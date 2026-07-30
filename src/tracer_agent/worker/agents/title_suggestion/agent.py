@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from tracer_agent.shared.agents.runtime.ledger import LedgerPoolProvider
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
 
 from ..runtime.execution.trace import ExecutionTrace
@@ -15,6 +14,7 @@ from ..runtime.llm.structured_agent import recursion_config
 from ..runtime.node import node_registry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
+from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_runtime import resolve_execution_prompt_bundle
 from .graph import TITLE_SUGGESTION_GRAPH
@@ -34,7 +34,7 @@ AGENT_NAME = "title-suggestion"
 
 async def run_title_suggestion(
     req: TitleSuggestionRequest,
-    ledger: LedgerPoolProvider,
+    tracer: TracerApiClient,
     usage: ExecutionTrace,
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
 ) -> dict[str, Any]:
@@ -60,7 +60,7 @@ async def run_title_suggestion(
         if fallback_model is not None
         else None
     )
-    reader = TitleLedgerReader(ledger, req.userId)
+    reader = TitleLedgerReader(tracer)
     budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates))
     context = ValidationGraphContext(
         AGENT_NAME,

@@ -1,21 +1,15 @@
-"""앵커와 제목이 닮은 태스크를 원장과 색인으로 찾는 도구를 소유한다."""
+"""앵커와 제목이 닮은 태스크를 추적 창구로 찾는 도구를 소유한다."""
 
 from __future__ import annotations
 
 import json
 
-from asyncpg import CannotConnectNowError, PostgresConnectionError
-from opensearchpy.exceptions import (
-    ConnectionError as OpenSearchConnectionError,
-)
-from opensearchpy.exceptions import (
-    ConnectionTimeout as OpenSearchConnectionTimeout,
-)
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..reader import RecipeLedgerReader
 from ..search import RecipeSearchReader
 
@@ -38,20 +32,13 @@ FIND_SIMILAR_TASKS_DESCRIPTION = (
 
 
 class FindSimilarTasksTool(AgentTool[FindSimilarTasksArgs]):
-    """앵커의 제목을 원장에서 읽어 색인에서 닮은 태스크를 찾는다."""
+    """앵커의 제목을 읽어 제목이 닮은 태스크를 찾는다."""
 
     name = FIND_SIMILAR_TASKS
     description = FIND_SIMILAR_TASKS_DESCRIPTION
     args_model = FindSimilarTasksArgs
-    # 앵커 조회는 원장(asyncpg), 유사 검색은 색인(opensearch)이라 두 백엔드의 연결 오류가 모두 일시적이다.
-    transient_errors = (
-        PostgresConnectionError,
-        CannotConnectNowError,
-        OpenSearchConnectionError,
-        OpenSearchConnectionTimeout,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, reader: RecipeLedgerReader, search: RecipeSearchReader) -> None:
         self._reader = reader

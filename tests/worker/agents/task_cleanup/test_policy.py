@@ -15,6 +15,7 @@ from tracer_agent.worker.agents.task_cleanup.policy import (
     CleanupTaskSnapshot,
     qualify_candidates,
     validate_suggestions,
+    without_active_children,
 )
 
 
@@ -103,7 +104,7 @@ _OLD = _NOW - timedelta(days=30)
 def test_최근에_활동한_태스크는_후보에서_빠진다() -> None:
     recent = _task("t1", "제목", last_event_at=_NOW - timedelta(minutes=1), updated_at=_NOW)
 
-    candidates = qualify_candidates([recent], {}, _NOW)
+    candidates = qualify_candidates([recent], _NOW)
 
     assert candidates == []
 
@@ -111,7 +112,7 @@ def test_최근에_활동한_태스크는_후보에서_빠진다() -> None:
 def test_활성_자식이_있는_태스크는_사유가_있어도_후보에서_빠진다() -> None:
     task = _task("t1", "test", last_event_at=None, updated_at=_OLD)
 
-    candidates = qualify_candidates([task], {"t1": 1}, _NOW)
+    candidates = without_active_children(qualify_candidates([task], _NOW), {"t1": 1})
 
     assert candidates == []
 
@@ -119,7 +120,7 @@ def test_활성_자식이_있는_태스크는_사유가_있어도_후보에서_�
 def test_이벤트가_없으면_no_events_사유가_붙는다() -> None:
     task = _task("t1", "제목", last_event_at=None, updated_at=_OLD)
 
-    candidates = qualify_candidates([task], {}, _NOW)
+    candidates = qualify_candidates([task], _NOW)
 
     assert len(candidates) == 1
     assert candidates[0].candidateReasons == ["no-events"]
@@ -132,7 +133,7 @@ def test_같은_제목이_둘_이상이면_duplicate_title_사유가_붙는다()
         _task("t2", "같은 제목", last_event_at=_OLD, updated_at=_OLD),
     ]
 
-    candidates = qualify_candidates(tasks, {}, _NOW)
+    candidates = qualify_candidates(tasks, _NOW)
 
     assert {c.id for c in candidates} == {"t1", "t2"}
     for candidate in candidates:
@@ -142,7 +143,7 @@ def test_같은_제목이_둘_이상이면_duplicate_title_사유가_붙는다()
 def test_자리표시자_제목은_placeholder_title_사유가_붙는다() -> None:
     task = _task("t1", "  TODO  ", last_event_at=_OLD, updated_at=_OLD)
 
-    candidates = qualify_candidates([task], {}, _NOW)
+    candidates = qualify_candidates([task], _NOW)
 
     assert candidates[0].candidateReasons == ["placeholder-title"]
 
@@ -156,7 +157,7 @@ def test_활성_상태로_오래_멈춘_태스크는_stale_사유가_붙는다()
         updated_at=_NOW - timedelta(days=15),
     )
 
-    candidates = qualify_candidates([task], {}, _NOW)
+    candidates = qualify_candidates([task], _NOW)
 
     assert candidates[0].candidateReasons == ["stale"]
 
@@ -164,7 +165,7 @@ def test_활성_상태로_오래_멈춘_태스크는_stale_사유가_붙는다()
 def test_사유가_하나도_없으면_후보에서_빠진다() -> None:
     task = _task("t1", "고유한 제목", status="completed", last_event_at=_OLD, updated_at=_OLD)
 
-    candidates = qualify_candidates([task], {}, _NOW)
+    candidates = qualify_candidates([task], _NOW)
 
     assert candidates == []
 
@@ -193,7 +194,7 @@ def test_TypeScript_구현체와_공유하는_후보_판정이_계약의_케이�
         for parent_id in case["activeChildParentIds"]:
             active_child_counts[parent_id] = active_child_counts.get(parent_id, 0) + 1
 
-        candidates = qualify_candidates(tasks, active_child_counts, now)
+        candidates = without_active_children(qualify_candidates(tasks, now), active_child_counts)
 
         assert sorted(c.id for c in candidates) == sorted(case["expectedIds"]), case["name"]
         for task_id, reasons in case.get("expectedReasons", {}).items():

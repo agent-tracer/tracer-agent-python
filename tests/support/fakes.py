@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json as _json
-from datetime import UTC, datetime
 from typing import Any
 
 from langchain.tools import ToolRuntime
@@ -196,42 +195,35 @@ class FakeToolLoopChat:
         return found
 
 
-class FakeLedgerConnection:
-    """소유 확인과 페이지와 총계를 캔 데이터로 돌려주는 원장 뷰 조회 대역이다."""
-
-    def __init__(self, ledger: FakeLedger) -> None:
-        self._ledger = ledger
-
-    async def fetchval(self, statement: str, *_args: Any) -> Any:
-        if "count(*)" in statement:
-            return self._ledger.total
-        return 1 if self._ledger.owned else None
-
-    async def fetchrow(self, _statement: str, *_args: Any) -> Any:
-        return self._ledger.task if self._ledger.owned else None
-
-    async def fetch(self, statement: str, *args: Any) -> list[Any]:
-        if "agent_rule_view" in statement:
-            return list(self._ledger.rules)
-        self._ledger.queries.append({"desc": "ORDER BY seq DESC" in statement, "args": list(args)})
-        return list(self._ledger.rows)
+TRACER_API_URL = "http://tracer-api.test"
 
 
-class FakeLedgerAcquire:
-    """asyncpg 풀의 연결 획득 비동기 컨텍스트 대역."""
+class FakeLedgerPool:
+    """문장을 돌리지 않는 실행 경로에 빌려 주는 원장 연결 풀 대역이다."""
 
-    def __init__(self, ledger: FakeLedger) -> None:
-        self._ledger = ledger
+    async def pool(self) -> FakeLedgerPool:
+        return self
 
-    async def __aenter__(self) -> FakeLedgerConnection:
-        return FakeLedgerConnection(self._ledger)
-
-    async def __aexit__(self, *_exc: Any) -> None:
+    async def close(self) -> None:
         return None
 
 
-class FakeLedger:
-    """조회 인자를 기록하고 캔 행을 돌려주는 원장 연결 풀 공급자 대역이다."""
+_DEFAULT_TASK: dict[str, Any] = {
+    "id": "t1",
+    "userId": "user-1",
+    "title": "x",
+    "slug": "x",
+    "status": "completed",
+    "taskKind": "monitoring",
+    "origin": "cli",
+    "archived": False,
+    "createdAt": "2026-07-14T00:00:00Z",
+    "updatedAt": "2026-07-14T00:00:00Z",
+}
+
+
+class FakeTracerApi:
+    """부른 창구를 기록하고 경로마다 캔 응답을 돌려주는 추적 API 대역이다."""
 
     def __init__(
         self,
@@ -241,43 +233,68 @@ class FakeLedger:
         total: int | None = None,
         rules: list[dict[str, Any]] | None = None,
         task: dict[str, Any] | None = None,
+        turns: list[dict[str, Any]] | None = None,
+        children: list[dict[str, Any]] | None = None,
+        tasks: list[dict[str, Any]] | None = None,
+        hits: dict[str, list[dict[str, Any]]] | None = None,
+        recipes: list[dict[str, Any]] | None = None,
     ) -> None:
         self.rows = rows or []
         self.owned = owned
         self.total = len(self.rows) if total is None else total
         self.rules = rules or []
-        self.task = task or {
-            "id": "t1",
-            "title": "x",
-            "status": "completed",
-            "task_kind": "monitoring",
-            "workspace_path": None,
-            "created_at": datetime(2026, 7, 14, tzinfo=UTC),
-            "updated_at": datetime(2026, 7, 14, tzinfo=UTC),
-        }
-        self.queries: list[dict[str, Any]] = []
-
-    async def pool(self) -> FakeLedger:
-        return self
-
-    def acquire(self) -> FakeLedgerAcquire:
-        return FakeLedgerAcquire(self)
-
-    async def close(self) -> None:
-        return None
-
-
-class FakeSearch:
-    """색인별 캔 히트를 돌려주고 질의 본문을 기록하는 검색 색인 대역이다."""
-
-    def __init__(self, hits: dict[str, list[dict[str, Any]]] | None = None) -> None:
+        self.task = {**_DEFAULT_TASK, **(task or {})}
+        self.turns = turns or []
+        self.children = children or []
+        self.tasks = tasks or []
         self.hits = hits or {}
-        self.bodies: list[dict[str, Any]] = []
+        self.recipes = recipes or []
+        self.calls: list[dict[str, Any]] = []
+        self.posts: list[dict[str, Any]] = []
 
-    async def search(self, index: str, body: dict[str, Any]) -> dict[str, Any]:
-        self.bodies.append({"index": index, "body": body})
-        found = self.hits.get(index, [])
-        return {"hits": {"total": {"value": len(found)}, "hits": found}}
+    async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """부른 경로와 인자를 기억하고 그 경로의 캔 응답을 낸다."""
+        self.calls.append({"path": path, "params": dict(params or {})})
+        if path.startswith("/api/v1/tasks/") and not self.owned:
+            return None
+        if path.endswith("/timeline"):
+            return self._timeline_page(params or {})
+        if path.endswith("/turns"):
+            return {"items": list(self.turns)}
+        if path.endswith("/children"):
+            return {"items": list(self.children)}
+        if path == "/api/v1/tasks":
+            return {"items": list(self.tasks), "total": len(self.tasks), "nextCursor": None}
+        if path == "/api/v1/tasks/search":
+            return {"items": list(self.hits.get("tasks", []))}
+        if path == "/api/v1/events/search":
+            return {"items": list(self.hits.get("events", []))}
+        if path == "/api/v1/recipes/search":
+            return {"items": list(self.hits.get("recipes", []))}
+        if path == "/api/v1/recipes":
+            return {"items": list(self.recipes)}
+        if path == "/api/v1/rules":
+            return {"items": list(self.rules)}
+        return {"task": dict(self.task)}
 
-    async def close(self) -> None:
-        return None
+    def _timeline_page(self, params: dict[str, Any]) -> dict[str, Any]:
+        """창구가 그러듯 커서 뒤부터 limit만큼 잘라 주고 남은 것이 있으면 다음 커서를 낸다."""
+        limit = int(params.get("limit") or len(self.rows) or 1)
+        rows = list(self.rows)
+        if params.get("order") == "desc":
+            rows.reverse()
+        cursor = params.get("cursor")
+        if cursor is not None:
+            seen = [index for index, row in enumerate(rows) if str(row["seq"]) == str(cursor)]
+            rows = rows[seen[0] + 1 :] if seen else []
+        page = rows[:limit]
+        remaining = len(rows) > limit
+        next_cursor = str(page[-1]["seq"]) if remaining and page else None
+        return {"items": page, "nextCursor": next_cursor, "total": self.total}
+
+    async def post(self, path: str, body: dict[str, Any]) -> Any:
+        """보낸 본문을 기억하고 요청에 실린 항목 수만큼 원장 행을 낸다."""
+        self.posts.append({"path": path, "body": body})
+        if path == "/api/v1/recipes":
+            return {"recipes": [{"id": f"recipe-{index}"} for index in range(len(body["recipes"]))]}
+        return {"suggestions": [{"id": f"cleanup-{index}"} for index in range(len(body["suggestions"]))]}

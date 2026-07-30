@@ -1,17 +1,17 @@
-"""태스크 이벤트 페이지를 사용자 범위 원장 뷰로 읽고 열어본 이벤트를 근거로 올린다."""
+"""태스크 이벤트 페이지를 사용자 범위 추적 창구로 읽고 열어본 이벤트를 근거로 올린다."""
 
 from __future__ import annotations
 
 import json
 from typing import Literal
 
-from asyncpg import CannotConnectNowError, PostgresConnectionError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 from tracer_agent.shared.agents.task_cleanup.models import EventPage
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from ..reader import CleanupLedgerReader
 
 GET_TASK_EVENTS = "get_task_events"
@@ -64,13 +64,8 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION
     args_model = GetTaskEventsArgs
-    # 원장(asyncpg)만 읽으므로 연결 계열 오류만 일시적이며 검증·도메인 오류는 재시도하지 않는다.
-    transient_errors = (
-        PostgresConnectionError,
-        CannotConnectNowError,
-        ConnectionError,
-        TimeoutError,
-    )
+    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     def __init__(self, reader: CleanupLedgerReader, event_ids: dict[str, set[str]]) -> None:
         self._reader = reader

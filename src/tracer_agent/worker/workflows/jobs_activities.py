@@ -8,12 +8,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from opensearchpy import AsyncOpenSearch
 from temporalio import activity
 from temporalio.exceptions import is_cancelled_exception
 
 from ...shared.agents.recipe_scan.models import RecipeScanRequest
-from ...shared.agents.runtime.ledger import LedgerPoolProvider, SqlSource
+from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.shared.models import AgentResponse, PromptFragmentSnapshotDTO
 from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO, ResolvedPromptFragmentDTO
 from ...shared.agents.task_cleanup.models import TaskCleanupRequest
@@ -34,6 +33,7 @@ from ..agents.runtime.execution.completion import run_and_deliver
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.pricing import ModelRates
+from ..agents.runtime.tracer_client import TracerApiClient
 from ..agents.task_cleanup.agent import run_task_cleanup
 from ..agents.task_cleanup.prompts import PROMPT_VERSION as CLEANUP_PROMPT_VERSION
 from ..agents.task_cleanup.reader import load_cleanup_batch
@@ -47,19 +47,17 @@ JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
 
 
 class AgentJobActivities:
-    """워커가 열어 둔 원장과 검색 연결로 잡 셋을 그래프째 돌리는 액티비티 하나를 낸다."""
+    """워커가 열어 둔 추적 창구와 자기 원장으로 잡 셋을 그래프째 돌리는 액티비티 하나를 낸다."""
 
     def __init__(
         self,
-        ledger: LedgerPoolProvider,
-        search: AsyncOpenSearch,
+        tracer_api_url: str,
         http_client: httpx.AsyncClient,
         execution_sql: SqlSource,
         prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
         envelopes: JobEnvelopeSource | None = None,
     ) -> None:
-        self._ledger = ledger
-        self._search = search
+        self._tracer_api_url = tracer_api_url
         self._http = http_client
         self._execution_sql = execution_sql
         self._prompt_fragments = prompt_fragments
@@ -96,19 +94,24 @@ class AgentJobActivities:
                 execution_id, "canceled", {}, {}, "canceled before execution started", datetime.now(UTC)
             )
 
+    def _tracer(self, user_id: str) -> TracerApiClient:
+        """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
+        return TracerApiClient(self._http, self._tracer_api_url, user_id)
+
     async def _dispatch(self, kind: AgentJobKind, payload: dict[str, Any]) -> None:
         """요청 종류에 맞는 그래프를 골라 돌린다."""
+        tracer = self._tracer(str(payload["userId"]))
         if kind == "title-suggestion":
             if "context" not in payload:
                 # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 컨텍스트를 이 시점에 스스로 조립한다.
-                context = await load_title_context(self._ledger, payload["userId"], payload["taskId"])
+                context = await load_title_context(tracer, payload["taskId"])
                 payload = {**payload, "context": context.model_dump(mode="json")}
             title_req = TitleSuggestionRequest.model_validate(payload)
 
             async def title_body(
                 trace: ExecutionTrace, req: TitleSuggestionRequest = title_req
             ) -> dict[str, object]:
-                return await run_title_suggestion(req, self._ledger, trace, self._prompt_fragments)
+                return await run_title_suggestion(req, tracer, trace, self._prompt_fragments)
 
             await self._run_and_deliver(kind, title_req, title_body, TITLE_PROMPT_VERSION)
             return
@@ -116,7 +119,7 @@ class AgentJobActivities:
             if "batch" not in payload:
                 # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 후보 배치를 이 시점에 스스로 조립한다.
                 now = datetime.now(UTC)
-                batch = await load_cleanup_batch(self._ledger, payload["userId"], now)
+                batch = await load_cleanup_batch(tracer, now)
                 payload = {
                     **payload,
                     "batch": batch.model_dump(mode="json"),
@@ -127,7 +130,7 @@ class AgentJobActivities:
             async def cleanup_body(
                 trace: ExecutionTrace, req: TaskCleanupRequest = cleanup_req
             ) -> dict[str, object]:
-                return await run_task_cleanup(req, self._ledger, trace, self._prompt_fragments)
+                return await run_task_cleanup(req, tracer, trace, self._prompt_fragments)
 
             await self._run_and_deliver(kind, cleanup_req, cleanup_body, CLEANUP_PROMPT_VERSION)
             return
@@ -136,7 +139,7 @@ class AgentJobActivities:
         async def recipe_body(
             trace: ExecutionTrace, req: RecipeScanRequest = recipe_req
         ) -> dict[str, object]:
-            return await run_recipe_scan(req, self._ledger, self._search, trace, self._prompt_fragments)
+            return await run_recipe_scan(req, tracer, trace, self._prompt_fragments)
 
         await self._run_and_deliver(kind, recipe_req, recipe_body, RECIPE_PROMPT_VERSION)
 

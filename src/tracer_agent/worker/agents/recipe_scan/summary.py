@@ -44,9 +44,9 @@ def build_task_summary(task: dict[str, Any], rows: list[dict[str, Any]], total: 
         "id": task["id"],
         "title": task["title"],
         "status": task["status"],
-        "taskKind": task["task_kind"],
-        "createdAt": str(task["created_at"].isoformat()).replace("+00:00", "Z"),
-        "updatedAt": str(task["updated_at"].isoformat()).replace("+00:00", "Z"),
+        "taskKind": task["taskKind"],
+        "createdAt": task["createdAt"],
+        "updatedAt": task["updatedAt"],
         "eventCount": len(rows),
         "totalEventCount": total,
         "truncated": total > len(rows),
@@ -54,8 +54,8 @@ def build_task_summary(task: dict[str, Any], rows: list[dict[str, Any]], total: 
         "topFiles": _top(files, "path", "touches"),
         "topCommands": _top(commands, "command", "count"),
     }
-    if task["workspace_path"] is not None:
-        summary["workspacePath"] = task["workspace_path"]
+    if task.get("workspacePath") is not None:
+        summary["workspacePath"] = task["workspacePath"]
     if first_user_message is not None:
         summary["firstUserMessage"] = first_user_message
     return summary

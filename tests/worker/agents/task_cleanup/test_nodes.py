@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeToolLoopChat, mk_rates
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi, mk_rates
 from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
     InspectDispatch,
@@ -53,7 +53,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     req = _request(_candidate("task-1", has_events=True))
     node = InspectNode(
         req,
-        CleanupLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
+        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
         ExecutionTrace(),
         BoomChat([]),
         None,

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from langchain_core.messages import HumanMessage
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, mk_ai
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeTracerApi, mk_ai
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
@@ -152,7 +152,7 @@ def _request() -> TaskCleanupRequest:
     )
 
 
-async def _run(_chat: GreedyChat, ledger: FakeLedger) -> Any:
+async def _run(_chat: GreedyChat, ledger: FakeTracerApi) -> Any:
     req = _request()
     return await execute(
         "task-cleanup",
@@ -164,7 +164,7 @@ async def _run(_chat: GreedyChat, ledger: FakeLedger) -> Any:
 
 async def test_예산을_다_써도_모은_근거로_결론을_낸다(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
-    ledger = FakeLedger()
+    ledger = FakeTracerApi()
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
 
     res = await _run(chat, ledger)
@@ -177,7 +177,7 @@ async def test_턴_사용량을_매_턴_알려준다(monkeypatch: pytest.MonkeyP
     chat = GreedyChat()
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
 
-    await _run(chat, FakeLedger())
+    await _run(chat, FakeTracerApi())
 
     # 실제 종료 게이트는 달러지만 모델의 self-pacing 신호는 턴 단위로 매 턴 갱신된다.
     assert "used 0 of" in chat.notices[0] and "tool-calling turns" in chat.notices[0]
@@ -188,7 +188,7 @@ async def test_비용_상한에_닿기_전에_결론을_받아낸다(monkeypatch
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
 
-    res = await _run(chat, FakeLedger())
+    res = await _run(chat, FakeTracerApi())
 
     assert res.error is None
     assert res.data["suggestions"] == _DRAFT["suggestions"]
@@ -202,7 +202,7 @@ async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남�
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
 
-    await _run(chat, FakeLedger())
+    await _run(chat, FakeTracerApi())
 
     assert "get_task_events" in chat.tools_per_call[0]
     assert chat.tools_per_call[-1] == ["InspectReport"]
@@ -211,11 +211,11 @@ async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남�
 async def test_착지했는지를_응답에_실어_보낸다(monkeypatch: pytest.MonkeyPatch) -> None:
     expensive = GreedyChat(usage=_EXPENSIVE_USAGE)
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: expensive)
-    landed = await _run(expensive, FakeLedger())
+    landed = await _run(expensive, FakeTracerApi())
 
     cheap = GreedyChat()
     monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: cheap)
-    unlanded = await _run(cheap, FakeLedger())
+    unlanded = await _run(cheap, FakeTracerApi())
 
     # 턴을 다 써 끝난 실행과 예산이 다해 착지한 실행을 서버가 구분해 답할 수 있어야 한다.
     assert landed.landed is True

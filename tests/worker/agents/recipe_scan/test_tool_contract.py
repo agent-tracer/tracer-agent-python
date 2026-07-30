@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.support.contract import agent_spec
-from tests.support.fakes import FakeLedger, FakeSearch
+from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_PROBE_TURNS,
     MAX_RECIPE_CANDIDATES,
@@ -54,13 +54,13 @@ def _row(event_id: str) -> dict[str, Any]:
     return {
         "id": event_id,
         "seq": 1,
-        "turn_id": "turn-1",
+        "turnId": "turn-1",
         "kind": "agent_tracer.user.message",
         "title": "마이그레이션을 추가해줘",
         "body": "본문",
-        "tool_name": "Bash",
-        "file_paths": ["src/app.ts"],
-        "occurred_at": datetime(2026, 7, 14, tzinfo=UTC),
+        "toolName": "Bash",
+        "filePaths": ["src/app.ts"],
+        "occurredAt": datetime(2026, 7, 14, tzinfo=UTC).isoformat(),
     }
 
 
@@ -74,8 +74,8 @@ def _tools() -> Any:
 
 def _langchain_tools() -> list[Any]:
     registry = build_recipe_registry(
-        RecipeLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeSearch(), "user-1"),  # type: ignore[arg-type]
+        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
         ProvenanceCatalog(),
         agent_name="recipe-scan",
     )
@@ -185,7 +185,7 @@ def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_�
     response = _tools()["search_events"]["responseEvent"]
     catalog = ProvenanceCatalog()
     hit = dict.fromkeys(response["required"], "") | {"id": "event-9", "taskId": "other-task"}
-    tool = SearchEventsTool(RecipeSearchReader(FakeSearch(), "user-1"), catalog)  # type: ignore[arg-type]
+    tool = SearchEventsTool(RecipeSearchReader(FakeTracerApi()), catalog)  # type: ignore[arg-type]
 
     tool.record(SearchEventsArgs(q="migration"), json.dumps({"events": [hit]}))
 
@@ -195,7 +195,7 @@ def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_�
 
 async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     responses = _contract()["responses"]["get_task_events"]
-    reader = RecipeLedgerReader(FakeLedger([_row("event-1"), _row("event-2")]), "user-1")  # type: ignore[arg-type]
+    reader = RecipeLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))  # type: ignore[arg-type]
 
     page = await reader.task_events("task-1", 1, None, "asc")
 

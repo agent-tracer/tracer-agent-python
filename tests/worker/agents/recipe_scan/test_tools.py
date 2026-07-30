@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
-from tests.support.fakes import FakeLedger, FakeSearch, FakeToolLoopChat
+from tests.support.fakes import FakeToolLoopChat, FakeTracerApi
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_EXCERPT_CHARS,
     MAX_EXCERPTS_PER_PROBE,
@@ -41,23 +40,23 @@ from tracer_agent.worker.agents.runtime.tooling import ToolRegistry
 def _registry(
     catalog: ProvenanceCatalog | None = None,
     *,
-    ledger: FakeLedger | None = None,
-    search: FakeSearch | None = None,
+    tracer: FakeTracerApi | None = None,
 ) -> ToolRegistry:
+    api = tracer or FakeTracerApi()
     return build_recipe_registry(
-        RecipeLedgerReader(ledger or FakeLedger(), "user-1"),  # type: ignore[arg-type]
-        RecipeSearchReader(search or FakeSearch(), "user-1"),  # type: ignore[arg-type]
+        RecipeLedgerReader(api),  # type: ignore[arg-type]
+        RecipeSearchReader(api),  # type: ignore[arg-type]
         catalog or ProvenanceCatalog(),
         agent_name="recipe-scan",
     )
 
 
 def _reader() -> RecipeLedgerReader:
-    return RecipeLedgerReader(FakeLedger(), "user-1")  # type: ignore[arg-type]
+    return RecipeLedgerReader(FakeTracerApi())  # type: ignore[arg-type]
 
 
 def _search() -> RecipeSearchReader:
-    return RecipeSearchReader(FakeSearch(), "user-1")  # type: ignore[arg-type]
+    return RecipeSearchReader(FakeTracerApi())  # type: ignore[arg-type]
 
 
 def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> None:
@@ -119,16 +118,15 @@ def test_모델이_없는_도구를_부르면_거부한다() -> None:
 
 
 async def test_유효하지_않은_도구_인자는_실제_조회를_하지_않는다() -> None:
-    ledger = FakeLedger()
-    search = FakeSearch()
+    tracer = FakeTracerApi()
 
     with pytest.raises(ValidationError):
-        await _registry(ledger=ledger, search=search).invoke(
+        await _registry(tracer=tracer).invoke(
             "search_events",
             {"q": "failure", "taskId": "task-1", "kind": "drifted.kind"},
         )
 
-    assert ledger.queries == [] and search.bodies == []
+    assert tracer.calls == []
 
 
 def test_빈_이벤트_커서는_콜백_전에_거부한다() -> None:
@@ -149,27 +147,28 @@ def test_revision이_있는_recipe만_수정_근거로_인정한다() -> None:
 
 
 async def test_모델이_생략한_인자는_도구_기본값으로_채워_조회한다() -> None:
-    ledger = FakeLedger(
+    tracer = FakeTracerApi(
         [
             {
                 "id": "event-1",
-                "seq": 1,
-                "turn_id": None,
+                "seq": "1",
                 "kind": "execute_tool",
                 "title": "x",
-                "body": None,
-                "tool_name": None,
-                "file_paths": [],
+                "filePaths": [],
                 "metadata": {},
-                "occurred_at": datetime(2026, 7, 14, tzinfo=UTC),
+                "occurredAt": "2026-07-14T00:00:00Z",
             }
         ]
     )
 
-    content = await _registry(ledger=ledger).invoke("get_task_events", {"taskId": "task-1"})
+    content = await _registry(tracer=tracer).invoke("get_task_events", {"taskId": "task-1"})
 
-    # 기본 limit 100에 truncated 판별용 한 행을 더해 101을 읽는다.
-    assert ledger.queries == [{"desc": False, "args": ["task-1", "user-1", None, 101]}]
+    assert tracer.calls == [
+        {
+            "path": "/api/v1/tasks/task-1/timeline",
+            "params": {"limit": 100, "cursor": None, "order": "asc"},
+        }
+    ]
     assert "event-1" in content
 
 
@@ -228,9 +227,9 @@ async def test_요약이_돌려준_태스크는_근거_원장에_오르지_않�
 
 async def test_유사_태스크가_돌려준_태스크는_근거_원장에_오르지_않는다() -> None:
     catalog = ProvenanceCatalog()
-    search = FakeSearch({"tasks": [{"_id": "task-2", "_source": {"title": "x"}}]})
+    tracer = FakeTracerApi(hits={"tasks": [{"id": "task-2", "title": "x", "status": "completed"}]})
 
-    await _registry(catalog, search=search).invoke("find_similar_tasks", {"anchorTaskId": "task-1"})
+    await _registry(catalog, tracer=tracer).invoke("find_similar_tasks", {"anchorTaskId": "task-1"})
 
     assert catalog.eventIdsByTask == {}
 

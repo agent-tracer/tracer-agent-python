@@ -58,7 +58,7 @@ def build_recipe_registry(
     *,
     agent_name: str,
 ) -> ToolRegistry:
-    """요청별 원장·색인 조회와 공유 근거 장부를 쥔 도구 레지스트리를 만들되 이름으로 부분집합을 고른다."""
+    """요청별 추적 조회와 공유 근거 장부를 쥔 도구 레지스트리를 만들되 이름으로 부분집합을 고른다."""
     built: tuple[AgentTool[Any], ...] = (
         GetTaskSummaryTool(reader),
         GetTaskEventsTool(reader, catalog),

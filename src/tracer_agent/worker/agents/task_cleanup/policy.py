@@ -38,9 +38,7 @@ class CleanupTaskSnapshot(TypedDict):
     updatedAt: datetime
 
 
-def qualify_candidates(
-    tasks: list[CleanupTaskSnapshot], active_child_counts: dict[str, int], now: datetime
-) -> list[CleanupCandidate]:
+def qualify_candidates(tasks: list[CleanupTaskSnapshot], now: datetime) -> list[CleanupCandidate]:
     """서버가 결정론적으로 정리 후보를 계산하며 SDK 축의 buildCleanupCandidates와 같은 규칙을 쓴다."""
     title_counts: dict[str, int] = {}
     for task in tasks:
@@ -49,17 +47,22 @@ def qualify_candidates(
 
     candidates: list[CleanupCandidate] = []
     for task in tasks:
-        candidate = _qualify_one(task, active_child_counts.get(task["id"], 0), title_counts, now)
+        candidate = _qualify_one(task, title_counts, now)
         if candidate is not None:
             candidates.append(candidate)
     return candidates
 
 
+def without_active_children(
+    candidates: list[CleanupCandidate], active_child_counts: dict[str, int]
+) -> list[CleanupCandidate]:
+    """자식이 아직 도는 태스크는 정리 대상이 아니므로 후보에서 뺀다."""
+    return [candidate for candidate in candidates if active_child_counts.get(candidate.id, 0) == 0]
+
+
 def _qualify_one(
-    task: CleanupTaskSnapshot, active_child_count: int, title_counts: dict[str, int], now: datetime
+    task: CleanupTaskSnapshot, title_counts: dict[str, int], now: datetime
 ) -> CleanupCandidate | None:
-    if active_child_count > 0:
-        return None
     last_activity = task["lastEventAt"] or task["updatedAt"]
     if now - last_activity < CLEANUP_RECENT_ACTIVITY:
         return None
@@ -75,7 +78,7 @@ def _qualify_one(
         status=task["status"],
         lastEventAt=_iso(task["lastEventAt"]) if task["lastEventAt"] is not None else None,
         hasEvents=has_events,
-        activeChildCount=active_child_count,
+        activeChildCount=0,
         candidateReasons=reasons,
     )
 

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 import httpx
-from opensearchpy import AsyncOpenSearch
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -33,9 +32,7 @@ from ..shared.workflows.jobs_spec import (
     JOBS_QUEUE_KEY,
 )
 from .agents.chat.checkpoint import ChatCheckpointProvider
-from .agents.runtime.search import create_search_client
 from .prompt_registry.bootstrap import resolve_fragments_or_fallback
-from .prompt_registry.check import assert_prompt_registry_synced_at
 from .workflows.chat_activities import ChatExecutionActivities
 from .workflows.chat_workflows import ChatExecutionWorkflow, ChatThreadWorkflow
 from .workflows.envelope import ChatEnvelopeClient
@@ -79,8 +76,6 @@ class ChatWorkerResources:
 class JobWorkerResources:
     """잡 셋 액티비티가 쓸 바깥 연결이며 프로세스가 끝날 때 함께 닫는다."""
 
-    ledger: LedgerPoolProvider
-    search: AsyncOpenSearch
     http_client: httpx.AsyncClient
     execution: LedgerPoolProvider
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None
@@ -88,8 +83,6 @@ class JobWorkerResources:
     async def close(self) -> None:
         """열린 연결을 모두 닫는다."""
         await self.http_client.aclose()
-        await self.ledger.close()
-        await self.search.close()
         await self.execution.close()
 
 
@@ -98,8 +91,6 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
     """chat 액티비티가 쓸 바깥 연결을 열고 끝나면 닫는다."""
     http_client = httpx.AsyncClient(timeout=CHAT_HTTP_TIMEOUT_S)
     try:
-        # 코드 pin이 DB production 채널과 같은지만 읽어서 검사하며, 실행은 이 값을 쓰지 않는다.
-        await assert_prompt_registry_synced_at(settings.tracer_dsn())
         prompt_fragments = await resolve_fragments_or_fallback(
             http_client, settings.agent_api_url, settings.monitor_profile
         )
@@ -124,8 +115,6 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
     """잡 셋 액티비티가 쓸 바깥 연결을 열고 끝나면 닫는다."""
     http_client = httpx.AsyncClient(timeout=JOB_HTTP_TIMEOUT_S)
     try:
-        # 코드 pin이 DB production 채널과 같은지만 읽어서 검사하며, 실행은 이 값을 쓰지 않는다.
-        await assert_prompt_registry_synced_at(settings.tracer_dsn())
         prompt_fragments = await resolve_fragments_or_fallback(
             http_client, settings.agent_api_url, settings.monitor_profile
         )
@@ -133,8 +122,6 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         await http_client.aclose()
         raise
     opened = JobWorkerResources(
-        ledger=LedgerPoolProvider(settings.tracer_dsn()),
-        search=create_search_client(settings.opensearch_node),
         http_client=http_client,
         execution=LedgerPoolProvider(settings.tracer_dsn()),
         prompt_fragments=prompt_fragments,
@@ -167,8 +154,7 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
 def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobActivities:
     """잡 셋의 액티비티를 열린 연결에 물려 낸다."""
     return AgentJobActivities(
-        opened.ledger,
-        opened.search,
+        settings.tracer_api_url,
         opened.http_client,
         PooledSql(opened.execution),
         opened.prompt_fragments,

@@ -7,9 +7,8 @@ from typing import Any
 from tests.support.fakes import (
     WIRE_LIMITS,
     WIRE_MODEL_RATES,
-    FakeLedger,
-    FakeSearch,
     FakeToolLoopChat,
+    FakeTracerApi,
     mk_rates,
 )
 from tracer_agent.shared.agents.recipe_scan.models import (
@@ -51,8 +50,8 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
     req = _request()
     node = ProbeNode(
         req,
-        RecipeLedgerReader(FakeLedger(), "user-1"),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeSearch(), "user-1"),  # type: ignore[arg-type]
+        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
         ExecutionTrace(),
         BoomChat([]),
         None,
