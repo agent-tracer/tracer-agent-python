@@ -81,6 +81,7 @@ from ..shared.agents.settings.secret import SettingCipher
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
+from ..shared.workflows.jobs_anchor import RuleAnchorClient
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_intake import JOB_CANCEL_PATH, JOBS_PATH, cancel_job, enqueue_job
@@ -139,10 +140,15 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.job_envelopes = JobEnvelopeClient(
         application.state.job_envelope_http, settings.agent_api_url
     )
+    application.state.rule_anchor_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
+    application.state.rule_anchors = RuleAnchorClient(
+        application.state.rule_anchor_http, settings.tracer_api_url
+    )
     try:
         yield
     finally:
         shutdown_observability()
+        await application.state.rule_anchor_http.aclose()
         await application.state.job_envelope_http.aclose()
         await application.state.chat_tool_http.aclose()
         await application.state.execution_watch.close()

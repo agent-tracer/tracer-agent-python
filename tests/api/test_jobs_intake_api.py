@@ -14,6 +14,7 @@ from tests.support.contract import conformance_case
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
 PATH = "/api/agent/jobs"
@@ -71,6 +72,26 @@ class FakeEnvelopes:
         )
 
 
+class FakeRuleAnchors:
+    """미리 심어 둔 근거만 그 사용자에게 내주는 근거 창구 대역이다."""
+
+    def __init__(self) -> None:
+        self.anchors: dict[tuple[str, str], RuleAnchor] = {}
+
+    def add(self, user_id: str, anchor: RuleAnchor) -> None:
+        self.anchors[(user_id, anchor.id)] = anchor
+
+    async def find(self, user_id: str, event_id: str) -> RuleAnchor | None:
+        return self.anchors.get((user_id, event_id))
+
+
+@pytest.fixture
+def anchors() -> FakeRuleAnchors:
+    source = FakeRuleAnchors()
+    source.add("local", RuleAnchor(id="ev-1", task_id="task-1", user_message=True))
+    return source
+
+
 @pytest.fixture
 def dispatch() -> FakeJobDispatch:
     return FakeJobDispatch()
@@ -90,11 +111,15 @@ def store() -> Iterator[SqliteLedgerSql]:
 
 @pytest.fixture
 def client(
-    dispatch: FakeJobDispatch, envelopes: FakeEnvelopes, store: SqliteLedgerSql
+    dispatch: FakeJobDispatch,
+    envelopes: FakeEnvelopes,
+    anchors: FakeRuleAnchors,
+    store: SqliteLedgerSql,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
         test_client.app.state.job_dispatch = dispatch
         test_client.app.state.job_envelopes = envelopes
+        test_client.app.state.rule_anchors = anchors
         test_client.app.state.execution_sql = SingleSql(store)
         yield test_client
 
@@ -269,3 +294,97 @@ def test_봉투를_못_받으면_502_오류_봉투를_낸다(client: TestClient,
 
     assert res.status_code == 502
     assert res.json()["error"]["code"] == "job.envelope-unavailable"
+
+
+_RULE_INPUT = {"taskId": "task-1", "anchorEventId": "ev-1", "intent": "테스트를 먼저 쓴다"}
+
+
+def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸다(
+    client: TestClient, dispatch: FakeJobDispatch, envelopes: FakeEnvelopes, store: SqliteLedgerSql
+) -> None:
+    res = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT})
+
+    assert res.status_code == 202
+    job = res.json()["data"]["job"]
+    assert list(job) == JOB_FIELDS
+    assert job["kind"] == "rule.generation"
+    assert job["executor"] == "local"
+    assert job["status"] == "pending"
+    row = store.rows("ai_jobs")[0]
+    assert row["executor"] == "local"
+    assert row["task_id"] == "task-1"
+    # 로컬 실행기가 가져가는 잡이라 워크플로도 실행 봉투도 접수가 부르지 않는다.
+    assert dispatch.started == []
+    assert envelopes.issued_for == []
+
+
+def test_rule_generation_잡은_대기_목록으로_실행기에_보인다(client: TestClient) -> None:
+    client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT})
+
+    res = client.get(PATH, params={"kind": "rule.generation", "status": "pending"})
+
+    assert res.status_code == 200
+    assert [item["kind"] for item in res.json()["data"]["items"]] == ["rule.generation"]
+
+
+def test_없는_근거로_온_rule_generation은_400이다(client: TestClient, store: SqliteLedgerSql) -> None:
+    res = client.post(
+        PATH,
+        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-9"}},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
+    assert store.rows("ai_jobs") == []
+
+
+def test_다른_태스크의_근거는_거절한다(client: TestClient, anchors: FakeRuleAnchors) -> None:
+    anchors.add("local", RuleAnchor(id="ev-2", task_id="task-2", user_message=True))
+
+    res = client.post(
+        PATH,
+        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-2"}},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
+
+
+def test_사용자_발화가_아닌_근거는_거절한다(client: TestClient, anchors: FakeRuleAnchors) -> None:
+    anchors.add("local", RuleAnchor(id="ev-3", task_id="task-1", user_message=False))
+
+    res = client.post(
+        PATH,
+        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-3"}},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
+
+
+def test_남의_근거는_없는_것으로_본다(client: TestClient) -> None:
+    res = client.post(
+        PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}, headers={"x-monitor-user": "u2"}
+    )
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
+
+
+def test_근거를_싣지_않은_rule_generation은_스키마에서_막힌다(client: TestClient) -> None:
+    res = client.post(PATH, json={"kind": "rule.generation", "input": {"taskId": "task-1"}})
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "validation_error"
+
+
+def test_로컬_잡의_취소는_워크플로_취소를_부르지_않는다(
+    client: TestClient, dispatch: FakeJobDispatch
+) -> None:
+    accepted = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}).json()
+
+    res = client.post(f"{PATH}/{accepted['data']['job']['id']}/cancel")
+
+    assert res.status_code == 200
+    assert res.json()["data"]["job"]["status"] == "canceled"
+    assert dispatch.cancelled == []

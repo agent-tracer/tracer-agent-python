@@ -14,10 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
 from ..agents.runtime.ledger import SqlSource
+from .jobs_anchor import RuleAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
-from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR
+from .jobs_input import INPUT_MODEL_BY_KIND, RuleGenerationJobInput, build_payload, task_id_of
+from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR, runs_locally
 from .jobs_ledger import JobLedger
-from .jobs_spec import AgentJobKind
 from .jobs_view import job_dto
 
 JOBS_PATH = "/api/agent/jobs"
@@ -26,7 +27,11 @@ ACCEPTED_STATUS = 202
 MONITOR_USER_HEADER = "x-monitor-user"
 DEFAULT_USER_ID = "local"
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
-UNSUPPORTED_KIND = (400, "job.kind-not-supported", "This backend does not accept this job kind directly yet")
+INVALID_RULE_ANCHOR = (
+    400,
+    "job.invalid-rule-anchor",
+    "Rule generation requires an owned user-message anchor",
+)
 NOT_FOUND = (404, "not_found", "Job execution not found")
 IDEMPOTENCY_CONFLICT = (
     409,
@@ -35,104 +40,13 @@ IDEMPOTENCY_CONFLICT = (
 )
 ENVELOPE_UNAVAILABLE = (502, "job.envelope-unavailable", "Could not obtain model and credential envelope")
 
-# 세 잡 모두 이 창구가 직접 받으며, 문맥과 후보 배치는 워커가 실행 액티비티에서 스스로 조립한다.
-_DIRECTLY_SUPPORTED_KINDS: frozenset[AgentJobKind] = frozenset(
-    {"recipe-scan", "title-suggestion", "task-cleanup"}
-)
-
-_DEFAULT_MAX_SUGGESTIONS = 20
-_MAX_SUGGESTIONS_CAP = 50
-
-
-class RecipeScanJobInput(BaseModel):
-    """recipe-scan 접수가 받는 도메인 입력이며 태스크 소유권은 워커의 도구가 다시 검증한다."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    taskId: str = Field(min_length=1, max_length=64)
-    userPrompt: str | None = Field(default=None, min_length=1, max_length=4000)
-    language: str | None = Field(default=None, min_length=1, max_length=16)
-    trigger: Literal["dashboard", "session"] | None = None
-
-
-class TitleSuggestionJobInput(BaseModel):
-    """title-suggestion 접수가 받는 도메인 입력이며 대화 컨텍스트는 워커가 직접 조립한다."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    taskId: str = Field(min_length=1, max_length=64)
-
-
-class TaskCleanupFilters(BaseModel):
-    """task-cleanup 접수가 받는 선택적 조정치다."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    maxSuggestions: int | None = Field(default=None, ge=1, le=_MAX_SUGGESTIONS_CAP)
-
-
-class TaskCleanupJobInput(BaseModel):
-    """task-cleanup 접수가 받는 도메인 입력이며 후보 배치는 워커가 직접 조립한다."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    filters: TaskCleanupFilters = Field(default_factory=TaskCleanupFilters)
-
-
-# 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
-_INPUT_MODEL_BY_KIND: dict[AgentJobKind, type[BaseModel]] = {
-    "recipe-scan": RecipeScanJobInput,
-    "title-suggestion": TitleSuggestionJobInput,
-    "task-cleanup": TaskCleanupJobInput,
-}
-
-
-def _task_id(job_input: BaseModel) -> str | None:
-    """태스크에 매인 잡 종류만 원장의 task_id 칸에 실을 값을 갖는다."""
-    if isinstance(job_input, RecipeScanJobInput | TitleSuggestionJobInput):
-        return job_input.taskId
-    return None
-
-
-def _build_payload(
-    job_input: BaseModel,
-    user_id: str,
-    execution_id: str,
-    idempotency_key: str | None,
-) -> dict[str, Any]:
-    """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치와 한도는 워커 액티비티가 스스로 채운다."""
-    base = {
-        "userId": user_id,
-        "executionId": execution_id,
-        "idempotencyKey": idempotency_key,
-    }
-    if isinstance(job_input, RecipeScanJobInput):
-        return {
-            **base,
-            "taskId": job_input.taskId,
-            "language": job_input.language or "auto",
-            "userPrompt": job_input.userPrompt,
-        }
-    if isinstance(job_input, TitleSuggestionJobInput):
-        return {
-            **base,
-            "taskId": job_input.taskId,
-            "language": "auto",
-        }
-    assert isinstance(job_input, TaskCleanupJobInput)
-    return {
-        **base,
-        "language": "auto",
-        "maxSuggestions": job_input.filters.maxSuggestions or _DEFAULT_MAX_SUGGESTIONS,
-    }
-
 
 class JobEnqueueBody(BaseModel):
     """계약이 정한 잡 접수 본문이며 브라우저는 백엔드마다 본문을 가르지 않는다."""
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["title.suggestion", "recipe.scan", "task.cleanup"]
+    kind: Literal["title.suggestion", "recipe.scan", "task.cleanup", "rule.generation"]
     input: dict[str, Any] = Field(default_factory=dict)
     idempotencyKey: str | None = Field(default=None, min_length=1, max_length=200)
 
@@ -147,25 +61,27 @@ async def enqueue_job(request: Request) -> JSONResponse:
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
-    kind = AGENT_KIND_BY_WIRE[enqueue.kind]
-    if kind not in _DIRECTLY_SUPPORTED_KINDS:
-        return error_envelope(*UNSUPPORTED_KIND)
     try:
-        job_input = _INPUT_MODEL_BY_KIND[kind].model_validate(enqueue.input)
+        job_input = INPUT_MODEL_BY_KIND[enqueue.kind].model_validate(enqueue.input)
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
     user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
+    if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(
+        request.app.state.rule_anchors, user_id, job_input
+    ):
+        return error_envelope(*INVALID_RULE_ANCHOR)
     idempotency_key = _idempotency_key(enqueue.idempotencyKey)
     input_hash = None if idempotency_key is None else _input_hash(enqueue.input)
     now = datetime.now(UTC)
 
-    envelopes = request.app.state.job_envelopes
-    try:
-        # 접수는 이 사용자의 자격과 카탈로그가 실제로 발급되는지를 봉투로 확인한다.
-        await envelopes.issue(enqueue.kind, user_id)
-    except ApplicationError as unavailable:
-        return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
+    if not runs_locally(enqueue.kind):
+        envelopes = request.app.state.job_envelopes
+        try:
+            # 접수는 이 사용자의 자격과 카탈로그가 실제로 발급되는지를 봉투로 확인한다.
+            await envelopes.issue(enqueue.kind, user_id)
+        except ApplicationError as unavailable:
+            return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     execution_id = str(uuid.uuid4())
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
@@ -174,8 +90,8 @@ async def enqueue_job(request: Request) -> JSONResponse:
             execution_id,
             user_id,
             enqueue.kind,
-            JOB_EXECUTOR,
-            _task_id(job_input),
+            JOB_EXECUTOR[enqueue.kind],
+            task_id_of(job_input),
             idempotency_key,
             input_hash,
             enqueue.input,
@@ -193,10 +109,10 @@ async def enqueue_job(request: Request) -> JSONResponse:
         return error_envelope(*IDEMPOTENCY_CONFLICT)
 
     job_id = str(row["id"])
-    if created or row["status"] == "pending":
+    if not runs_locally(enqueue.kind) and (created or row["status"] == "pending"):
         dispatch: TemporalJobDispatch = request.app.state.job_dispatch
-        payload = _build_payload(job_input, user_id, job_id, idempotency_key)
-        await dispatch.start(kind, job_id, payload)
+        payload = build_payload(job_input, user_id, job_id, idempotency_key)
+        await dispatch.start(AGENT_KIND_BY_WIRE[enqueue.kind], job_id, payload)
 
     return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
@@ -213,8 +129,11 @@ async def cancel_job(execution_id: str, request: Request) -> JSONResponse:
         if await ledger.cancel(execution_id, datetime.now(UTC)):
             row = await ledger.find(execution_id) or row
 
-    dispatch: TemporalJobDispatch = request.app.state.job_dispatch
-    await dispatch.cancel(AGENT_KIND_BY_WIRE[str(row["kind"])], execution_id)
+    kind = str(row["kind"])
+    # 전이를 먼저 하면 취소에 실패했을 때 취소됐다고 기록한 채 유료 실행이 이어진다.
+    if not runs_locally(kind):
+        dispatch: TemporalJobDispatch = request.app.state.job_dispatch
+        await dispatch.cancel(AGENT_KIND_BY_WIRE[kind], execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
@@ -222,6 +141,12 @@ def resolve_user_id(header: str | None) -> str:
     """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
     trimmed = (header or "").strip()
     return trimmed if trimmed else DEFAULT_USER_ID
+
+
+async def _owns_anchor(anchors: RuleAnchorSource, user_id: str, job_input: RuleGenerationJobInput) -> bool:
+    """규칙 생성의 근거는 이 사용자의 그 태스크에 속한 사용자 발화여야 한다."""
+    anchor = await anchors.find(user_id, job_input.anchorEventId)
+    return anchor is not None and anchor.task_id == job_input.taskId and anchor.user_message
 
 
 def _idempotency_key(value: str | None) -> str | None:
