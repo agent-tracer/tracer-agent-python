@@ -28,3 +28,9 @@ class Test장기기억:
         facts = client.get(MEMORIES, headers={"x-monitor-user": "u2"}).json()["data"]["facts"]
 
         assert facts == []
+
+    def test_공백뿐인_사실은_적지_않는다(self, client: TestClient) -> None:
+        res = client.put(f"{MEMORIES}/lang", json={"content": "   "})
+
+        assert res.status_code == 400
+        assert res.json()["error"]["code"] == "validation_error"

@@ -39,7 +39,7 @@ class RememberFactBody(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    content: str = Field(min_length=1, max_length=4000)
+    content: TrimmedStr = Field(min_length=1, max_length=4000)
 
 
 class DraftCheckpointBody(BaseModel):

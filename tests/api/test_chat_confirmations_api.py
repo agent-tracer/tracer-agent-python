@@ -94,3 +94,13 @@ class Test확인_대기:
         res = client.post(f"{THREADS}/t1/confirmations/no-such", json={"decision": "approve"})
 
         assert res.status_code == 404
+
+    def test_인자가_어긋난_제안은_승인_전에_거절한다(
+        self, client: TestClient, store: SqliteLedgerSql
+    ) -> None:
+        seed_thread(store)
+
+        res = client.post(f"{THREADS}/t1/confirmations", json={"toolName": "archive_task", "args": {}})
+
+        assert res.status_code == 400
+        assert store.rows("chat_pending_tools") == []

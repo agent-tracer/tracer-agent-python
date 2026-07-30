@@ -19,7 +19,7 @@ from .envelope import CREATED_STATUS, invalid_request, ok, read_payload, rejecti
 from .ledger import APPROVED, REJECTED, ChatSurfaceLedger
 from .models import DecideToolBody, ProposeToolBody
 from .threads import CHAT_THREAD_PATH
-from .tool_calls import CONFIRMABLE_TOOLS, ChatToolArgsInvalid
+from .tool_calls import CONFIRMABLE_TOOLS, ChatToolArgsInvalid, plan_chat_tool_call
 from .tool_client import ChatToolExecutor, ChatToolFailed
 
 CHAT_CONFIRMATIONS_PATH = f"{CHAT_THREAD_PATH}/confirmations"
@@ -44,10 +44,15 @@ async def propose_chat_tool(thread_id: str, request: Request) -> JSONResponse:
         return body
     if body.toolName not in CONFIRMABLE_TOOLS:
         return invalid_request()
+    args = dict(body.args)
+    try:
+        # 승인 뒤에야 인자가 어긋난 것을 알면 사용자가 부를 수 없는 행을 승인하게 된다.
+        plan_chat_tool_call(body.toolName, args)
+    except ChatToolArgsInvalid:
+        return invalid_request()
 
     user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     now = datetime.now(UTC)
-    args = dict(body.args)
     try:
         async with _source(request).connect() as sql:
             ledger = ChatSurfaceLedger(sql)
