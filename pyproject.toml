@@ -58,6 +58,8 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 110
 src = ["src", "tests"]
+# 계약 저장소는 자기 규칙으로 관리되므로 이 서비스의 린트 대상이 아니다.
+extend-exclude = ["contract"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "A", "SLF", "ARG", "SIM", "C4", "PIE", "PERF", "RET", "RUF"]

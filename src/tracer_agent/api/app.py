@@ -15,6 +15,12 @@ from ..shared.agents.chat.intake.router import (
     cancel_chat_turn,
     enqueue_chat_turn,
 )
+from ..shared.agents.envelope.router import (
+    CHAT_ENVELOPE_PATH,
+    JOB_ENVELOPE_PATH,
+    issue_chat_execution_envelope,
+    issue_job_execution_envelope,
+)
 from ..shared.agents.prompt_registry.router import (
     CREATED_STATUS,
     PROMPT_FRAGMENTS_REGISTER_PATH,
@@ -41,6 +47,7 @@ from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutio
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_intake import JOB_CANCEL_PATH, JOBS_PATH, cancel_job, enqueue_job
+from .credentials import SettingModelCredentials
 from .evaluation import run_evaluation
 
 # 접수가 잡 종류의 카탈로그 값을 물을 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
@@ -59,6 +66,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         None if encryption_key is None else encryption_key.get_secret_value(),
         settings.monitor_profile,
     )
+    application.state.model_credentials = SettingModelCredentials(
+        application.state.execution_sql, application.state.setting_cipher
+    )
+    application.state.read_api_base_url = settings.tracer_api_url
+    application.state.agent_api_base_url = settings.agent_api_url
     application.state.execution_updates = UpdatePublisher(
         settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
     )
@@ -67,7 +79,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
     application.state.job_envelope_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
     application.state.job_envelopes = JobEnvelopeClient(
-        application.state.job_envelope_http, settings.tracer_api_url
+        application.state.job_envelope_http, settings.agent_api_url
     )
     try:
         yield
@@ -99,6 +111,8 @@ def create_app() -> FastAPI:
     # 배포 단위 사이에서만 오가는 창구라 게이트웨이가 바깥에 열지 않는다.
     application.post(PROMPT_FRAGMENTS_REGISTER_PATH)(register_and_resolve_prompt_fragments)
     application.post(PROMPT_REGISTER_PATH, status_code=CREATED_STATUS)(register_prompt)
+    application.post(CHAT_ENVELOPE_PATH)(issue_chat_execution_envelope)
+    application.post(JOB_ENVELOPE_PATH)(issue_job_execution_envelope)
     return application
 
 

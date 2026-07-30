@@ -14,6 +14,7 @@ from temporalio.exceptions import ApplicationError
 
 from ..agents.runtime.ledger import SqlSource
 from .jobs_dispatch import TemporalJobDispatch
+from .jobs_kinds import AGENT_KIND_BY_WIRE
 from .jobs_ledger import GraphJobLedger
 from .jobs_spec import AgentJobKind
 
@@ -26,13 +27,6 @@ INVALID_REQUEST = (400, "validation_error", "Invalid request")
 UNSUPPORTED_KIND = (400, "job.kind-not-supported", "This backend does not accept this job kind directly yet")
 NOT_FOUND = (404, "not_found", "Job execution not found")
 ENVELOPE_UNAVAILABLE = (502, "job.envelope-unavailable", "Could not obtain model and credential envelope")
-
-# tracer-api가 쓰는 잡 종류 wire 값을 이 서비스의 케밥 표기로 옮긴다.
-_KIND_BY_WIRE: dict[str, AgentJobKind] = {
-    "title.suggestion": "title-suggestion",
-    "recipe.scan": "recipe-scan",
-    "task.cleanup": "task-cleanup",
-}
 
 # 세 잡 모두 이 창구가 직접 받으며, 문맥과 후보 배치는 워커가 실행 액티비티에서 스스로 조립한다.
 _DIRECTLY_SUPPORTED_KINDS: frozenset[AgentJobKind] = frozenset(
@@ -152,7 +146,7 @@ async def enqueue_job(request: Request) -> JSONResponse:
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
-    kind = _KIND_BY_WIRE[enqueue.kind]
+    kind = AGENT_KIND_BY_WIRE[enqueue.kind]
     if kind not in _DIRECTLY_SUPPORTED_KINDS:
         return error_envelope(*UNSUPPORTED_KIND)
     try:
@@ -166,7 +160,7 @@ async def enqueue_job(request: Request) -> JSONResponse:
 
     envelopes = request.app.state.job_envelopes
     try:
-        envelope = await envelopes.issue(kind, user_id)
+        envelope = await envelopes.issue(enqueue.kind, user_id)
     except ApplicationError as unavailable:
         return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     source: SqlSource = request.app.state.execution_sql

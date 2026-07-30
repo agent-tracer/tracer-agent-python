@@ -205,7 +205,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
 
     await activities.run(AgentJobRequest("title-suggestion", payload))
 
-    assert envelopes.issued_for == ["title-suggestion:user-1"]
+    assert envelopes.issued_for == ["title.suggestion:user-1"]
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
     execution_sql.close()
 

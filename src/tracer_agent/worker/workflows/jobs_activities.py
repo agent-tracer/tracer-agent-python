@@ -19,6 +19,7 @@ from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityD
 from ...shared.agents.task_cleanup.models import TaskCleanupRequest
 from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource
+from ...shared.workflows.jobs_kinds import wire_kind
 from ...shared.workflows.jobs_ledger import GraphJobLedger
 from ...shared.workflows.jobs_spec import (
     JOB_HEARTBEAT_INTERVAL_S,
@@ -149,7 +150,7 @@ class AgentJobActivities:
         user_id = request.payload.get("userId")
         if not isinstance(user_id, str) or not user_id:
             raise ValueError("agent job request has no user id to pull an envelope for")
-        envelope = await self._envelopes.issue(request.kind, user_id)
+        envelope = await self._envelopes.issue(wire_kind(request.kind), user_id)
         merged: dict[str, Any] = {
             **request.payload,
             "apiKey": envelope.api_key,

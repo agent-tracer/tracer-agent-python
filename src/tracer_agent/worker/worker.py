@@ -143,7 +143,7 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
         PooledSql(opened.ledger),
         opened.http_client,
         opened.checkpoints,
-        ChatEnvelopeClient(opened.http_client, settings.tracer_api_url),
+        ChatEnvelopeClient(opened.http_client, settings.agent_api_url),
         opened.wakeup,
         opened.prompt_fragments,
     )
@@ -164,7 +164,7 @@ def build_job_worker(client: Client, opened: JobWorkerResources, settings: Setti
         opened.http_client,
         PooledSql(opened.execution),
         opened.prompt_fragments,
-        JobEnvelopeClient(opened.http_client, settings.tracer_api_url),
+        JobEnvelopeClient(opened.http_client, settings.agent_api_url),
     )
     return Worker(
         client,
