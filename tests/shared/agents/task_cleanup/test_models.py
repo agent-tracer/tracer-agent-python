@@ -35,6 +35,7 @@ def test_도메인_봉투와_한도를_보존한다() -> None:
             "apiKey": "k",
             "modelRates": WIRE_MODEL_RATES,
             "limits": WIRE_LIMITS,
+            "deadlineMs": 600_000,
             "scannedAt": "2026-07-13T00:00:00.000Z",
             "userId": "user-1",
             "batch": {"candidates": []},
@@ -46,4 +47,4 @@ def test_도메인_봉투와_한도를_보존한다() -> None:
 
     assert req.scannedAt == "2026-07-13T00:00:00.000Z"
     assert req.maxSuggestions == 20
-    assert req.deadlineMs == 300_000
+    assert req.deadlineMs == 600_000

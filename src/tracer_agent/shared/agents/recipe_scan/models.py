@@ -19,7 +19,6 @@ class RecipeScanRequest(AgentExecutionRequest):
 
     model_config = ConfigDict(extra="forbid")
 
-    deadlineMs: int = 720_000
     taskId: TrimmedStr = Field(min_length=1)
     # 조회 범위를 정하는 값이라 도메인 입력이며 멱등 해시에 함께 든다.
     userId: TrimmedStr = Field(min_length=1)

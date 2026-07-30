@@ -23,6 +23,7 @@ class JobExecutionEnvelope:
     api_key: str
     model_rates: dict[str, Any]
     limits: dict[str, Any]
+    deadline_ms: int
 
 
 class JobEnvelopeSource(Protocol):
@@ -80,14 +81,21 @@ def _envelope(data: dict[str, Any]) -> JobExecutionEnvelope:
     api_key = data.get("apiKey")
     model_rates = data.get("modelRates")
     limits = data.get("limits")
+    deadline_ms = data.get("deadlineMs")
     if (
         not isinstance(model, str)
         or not isinstance(api_key, str)
         or not isinstance(model_rates, dict)
         or not isinstance(limits, dict)
+        or not isinstance(deadline_ms, int)
         or not (fallback_model is None or isinstance(fallback_model, str))
     ):
         raise ApplicationError("job envelope is malformed", type=ENVELOPE_UNAVAILABLE, non_retryable=True)
     return JobExecutionEnvelope(
-        model=model, fallback_model=fallback_model, api_key=api_key, model_rates=model_rates, limits=limits
+        model=model,
+        fallback_model=fallback_model,
+        api_key=api_key,
+        model_rates=model_rates,
+        limits=limits,
+        deadline_ms=deadline_ms,
     )

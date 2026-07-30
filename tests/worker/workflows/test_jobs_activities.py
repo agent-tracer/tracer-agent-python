@@ -25,7 +25,7 @@ from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod
-from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities
+from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities, merge_envelope
 
 _COMPLETION_CALLBACK = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
 NOW = datetime(2026, 7, 28, tzinfo=UTC)
@@ -81,6 +81,7 @@ class FakeEnvelopeSource:
             api_key="sk-pulled",
             model_rates=WIRE_MODEL_RATES,
             limits=WIRE_LIMITS,
+            deadline_ms=300_000,
         )
 
 
@@ -220,6 +221,40 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
     assert envelopes.issued_for == ["title.suggestion:user-1"]
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
     execution_sql.close()
+
+
+def test_봉투가_데드라인과_자격과_한도를_실행_입력에_싣는다() -> None:
+    envelope = JobExecutionEnvelope(
+        model="claude-haiku-4-5",
+        fallback_model=None,
+        api_key="sk-pulled",
+        model_rates=WIRE_MODEL_RATES,
+        limits=WIRE_LIMITS,
+        deadline_ms=300_000,
+    )
+
+    merged = merge_envelope({"taskId": "task-1", "userId": "user-1"}, envelope)
+
+    assert merged["deadlineMs"] == 300_000
+    assert merged["apiKey"] == "sk-pulled"
+    assert merged["limits"] == WIRE_LIMITS
+    assert merged["model"] == "claude-haiku-4-5"
+
+
+def test_실행_입력이_고른_모델은_봉투의_기본값보다_우선한다() -> None:
+    envelope = JobExecutionEnvelope(
+        model="claude-haiku-4-5",
+        fallback_model=None,
+        api_key="sk-pulled",
+        model_rates=WIRE_MODEL_RATES,
+        limits=WIRE_LIMITS,
+        deadline_ms=300_000,
+    )
+
+    merged = merge_envelope({"model": "claude-sonnet-4-6"}, envelope)
+
+    assert merged["model"] == "claude-sonnet-4-6"
+    assert merged["deadlineMs"] == 300_000
 
 
 async def test_페이로드에_자격도_실행_식별자도_없으면_거부한다(http: CapturingCompletionClient) -> None:

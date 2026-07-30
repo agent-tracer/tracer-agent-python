@@ -37,6 +37,7 @@ def _request(**overrides: Any) -> TitleSuggestionRequest:
         "apiKey": "sk-test",
         "modelRates": WIRE_MODEL_RATES,
         "limits": WIRE_LIMITS,
+        "deadlineMs": 300_000,
         "jobId": "job-1",
         "taskId": "task-1",
         "language": "ko",
@@ -61,7 +62,7 @@ def test_도메인_봉투를_보존한다() -> None:
 
     assert req.taskId == "task-1"
     assert req.context.turns[0].askedText == "인증 미들웨어의 토큰 누수를 고쳐줘"
-    assert req.deadlineMs == 180_000
+    assert req.deadlineMs == 300_000
 
 
 def test_멱등_입력_해시는_콜백과_자격증명에_영향받지_않는다() -> None:

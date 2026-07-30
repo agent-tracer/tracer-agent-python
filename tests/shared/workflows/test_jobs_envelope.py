@@ -18,6 +18,7 @@ DATA: dict[str, Any] = {
     "apiKey": "sk-test",
     "modelRates": {"claude-haiku-4-5": {"input": 1, "output": 5, "cacheWrite": 1, "cacheRead": 1}},
     "limits": {"budgetUsd": 1.2, "maxTurns": 14, "maxOutputTokens": 4000},
+    "deadlineMs": 720_000,
 }
 
 
@@ -39,6 +40,7 @@ async def test_받은_값을_실행_봉투로_가른다() -> None:
     assert envelope.model == "claude-sonnet-4-6"
     assert envelope.api_key == "sk-test"
     assert envelope.limits["maxTurns"] == 14
+    assert envelope.deadline_ms == 720_000
     assert envelope.model_rates["claude-haiku-4-5"]["input"] == 1
 
 
@@ -61,6 +63,17 @@ async def test_서버가_흔들리면_다시_태운다() -> None:
         await client(fail).issue("recipe-scan", "user-1")
 
     assert raised.value.non_retryable is False
+
+
+async def test_데드라인_없는_봉투는_다시_태우지_않는다() -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        without_deadline = {key: value for key, value in DATA.items() if key != "deadlineMs"}
+        return httpx.Response(200, json={"ok": True, "data": without_deadline})
+
+    with pytest.raises(ApplicationError) as raised:
+        await client(respond).issue("recipe-scan", "user-1")
+
+    assert raised.value.non_retryable is True
 
 
 async def test_봉투가_망가지면_다시_태우지_않는다() -> None:

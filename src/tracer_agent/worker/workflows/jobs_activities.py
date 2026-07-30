@@ -18,7 +18,7 @@ from ...shared.agents.shared.models import AgentResponse, PromptFragmentSnapshot
 from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO, ResolvedPromptFragmentDTO
 from ...shared.agents.task_cleanup.models import TaskCleanupRequest
 from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
-from ...shared.workflows.jobs_envelope import JobEnvelopeSource
+from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
 from ...shared.workflows.jobs_kinds import wire_kind
 from ...shared.workflows.jobs_ledger import JobLedger
 from ...shared.workflows.jobs_spec import (
@@ -174,16 +174,7 @@ class AgentJobActivities:
         if not isinstance(user_id, str) or not user_id:
             raise ValueError("agent job request has no user id to pull an envelope for")
         envelope = await self._envelopes.issue(wire_kind(request.kind), user_id)
-        merged: dict[str, Any] = {
-            **request.payload,
-            "apiKey": envelope.api_key,
-            "modelRates": envelope.model_rates,
-            "limits": envelope.limits,
-        }
-        if not _has_model(request.payload):
-            merged["model"] = envelope.model
-            merged["fallbackModel"] = envelope.fallback_model
-        return merged
+        return merge_envelope(request.payload, envelope)
 
     async def _run_and_deliver(
         self,
@@ -266,6 +257,21 @@ def _task_id(req: JobRequest) -> str | None:
 def _attempt(attempt_id: str | None) -> int:
     """궤적의 시도 회차이며 요청이 회차를 싣지 않으면 첫 시도로 본다."""
     return int(attempt_id) if attempt_id is not None and attempt_id.isdigit() else 1
+
+
+def merge_envelope(payload: dict[str, Any], envelope: JobExecutionEnvelope) -> dict[str, Any]:
+    """자격과 단가와 한도와 데드라인을 봉투에서 받아 이번 시도의 실행 입력에 싣는다."""
+    merged: dict[str, Any] = {
+        **payload,
+        "apiKey": envelope.api_key,
+        "modelRates": envelope.model_rates,
+        "limits": envelope.limits,
+        "deadlineMs": envelope.deadline_ms,
+    }
+    if not _has_model(payload):
+        merged["model"] = envelope.model
+        merged["fallbackModel"] = envelope.fallback_model
+    return merged
 
 
 def _has_credentials(payload: dict[str, Any]) -> bool:

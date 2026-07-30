@@ -40,9 +40,6 @@ _DIRECTLY_SUPPORTED_KINDS: frozenset[AgentJobKind] = frozenset(
     {"recipe-scan", "title-suggestion", "task-cleanup"}
 )
 
-_RECIPE_SCAN_DEADLINE_MS = 720_000
-_TITLE_SUGGESTION_DEADLINE_MS = 180_000
-_TASK_CLEANUP_DEADLINE_MS = 300_000
 _DEFAULT_MAX_SUGGESTIONS = 20
 _MAX_SUGGESTIONS_CAP = 50
 
@@ -103,7 +100,7 @@ def _build_payload(
     execution_id: str,
     idempotency_key: str | None,
 ) -> dict[str, Any]:
-    """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치는 워커 액티비티가 스스로 채운다."""
+    """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치와 한도는 워커 액티비티가 스스로 채운다."""
     base = {
         "userId": user_id,
         "executionId": execution_id,
@@ -115,20 +112,17 @@ def _build_payload(
             "taskId": job_input.taskId,
             "language": job_input.language or "auto",
             "userPrompt": job_input.userPrompt,
-            "deadlineMs": _RECIPE_SCAN_DEADLINE_MS,
         }
     if isinstance(job_input, TitleSuggestionJobInput):
         return {
             **base,
             "taskId": job_input.taskId,
             "language": "auto",
-            "deadlineMs": _TITLE_SUGGESTION_DEADLINE_MS,
         }
     assert isinstance(job_input, TaskCleanupJobInput)
     return {
         **base,
         "language": "auto",
-        "deadlineMs": _TASK_CLEANUP_DEADLINE_MS,
         "maxSuggestions": job_input.filters.maxSuggestions or _DEFAULT_MAX_SUGGESTIONS,
     }
 

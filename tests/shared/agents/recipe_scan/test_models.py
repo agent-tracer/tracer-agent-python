@@ -55,6 +55,7 @@ def test_도메인_봉투를_보존한다() -> None:
             "apiKey": "k",
             "modelRates": WIRE_MODEL_RATES,
             "limits": WIRE_LIMITS,
+            "deadlineMs": 720_000,
             "taskId": " t1 ",
             "language": "ko",
             "userPrompt": " 작업에서 레시피를 찾아줘 ",

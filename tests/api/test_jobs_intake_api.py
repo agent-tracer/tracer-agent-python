@@ -67,6 +67,7 @@ class FakeEnvelopes:
             api_key="sk-test",
             model_rates={},
             limits={"budgetUsd": 2.0, "maxTurns": 16, "maxOutputTokens": 16_000},
+            deadline_ms=720_000,
         )
 
 
@@ -122,6 +123,8 @@ def test_recipe_scan_접수는_202와_원장_행을_낸다(
     assert payload["taskId"] == "task-1"
     assert payload["userId"] == "local"
     assert "apiKey" not in payload
+    # 데드라인은 실행 봉투가 소유하므로 접수가 값을 싣지 않는다.
+    assert "deadlineMs" not in payload
     row = store.rows("ai_jobs")[0]
     assert row["status"] == "pending"
     assert row["kind"] == "recipe.scan"
