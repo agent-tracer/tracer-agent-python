@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.shared.models import (
 )
 from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedPromptTemplateHashDTO
 
-from ..errors import INVALID_REQUEST_ERROR, DeadlineExceeded, classify_exception
+from ..errors import CANCELLED, INVALID_REQUEST_ERROR, DeadlineExceeded, classify_exception
 from ..telemetry.attributes import apply_usage_attributes
 from ..telemetry.metrics import record_client_metrics
 from ..telemetry.spans import invoke_agent_span, mark_span_error
@@ -107,7 +107,7 @@ async def _execute(
         except asyncio.CancelledError:
             if execution_id is None:
                 raise
-            error = AgentErrorDTO(subtype="cancelled", summary="agent execution cancelled")
+            error = AgentErrorDTO(subtype=CANCELLED, summary="agent execution cancelled")
         except BaseException as err:
             # classify_exception은 요약 문자열만 남기므로 원인 추적은 스팬의 exception 레코드에 맡긴다.
             from ..errors import _redact_exception

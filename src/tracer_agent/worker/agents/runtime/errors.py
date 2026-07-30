@@ -36,6 +36,7 @@ CONNECTION_ERROR: Final = "connection_error"
 API_ERROR: Final = "api_error"
 INVALID_REQUEST_ERROR: Final = "invalid_request_error"
 AGENT_EXECUTION_ERROR: Final = "agent_execution_error"
+CANCELLED: Final = "cancelled"
 
 # 계약의 error.subtypes.json이 이 어휘의 재시도 판정을 소유하고 계약 테스트가 둘을 대조한다.
 EMITTED_SUBTYPES: Final = frozenset(
@@ -48,6 +49,7 @@ EMITTED_SUBTYPES: Final = frozenset(
         API_ERROR,
         INVALID_REQUEST_ERROR,
         AGENT_EXECUTION_ERROR,
+        CANCELLED,
     }
 )
 
