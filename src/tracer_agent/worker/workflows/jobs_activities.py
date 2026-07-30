@@ -32,6 +32,7 @@ from ..agents.recipe_scan.prompts import PROMPT_VERSION as RECIPE_PROMPT_VERSION
 from ..agents.runtime.execution.completion import run_and_deliver
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
+from ..agents.runtime.outputs import deliver_job_outputs
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient
 from ..agents.task_cleanup.agent import run_task_cleanup
@@ -228,6 +229,8 @@ class AgentJobActivities:
             )
             async with self._execution_sql.connect() as sql:
                 await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
+            if status == "completed":
+                await deliver_job_outputs(self._tracer(req.userId), kind, req.executionId, response.data)
 
         await run_and_deliver(self._http, req.completionCallback, run_once, settle)
 
