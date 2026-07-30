@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from asyncpg import CannotConnectNowError, PostgresConnectionError
 from langchain.tools import tool
-from opensearchpy.exceptions import ConnectionError as OpenSearchConnectionError
 
 from tests.support.fakes import FakeToolLoopChat, FakeTracerApi, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeDraft
@@ -57,16 +55,12 @@ def _context() -> StandardAgentContext:
 
 
 def test_재시도_대상은_연결_계열_일시_오류만이다() -> None:
-    # 창구에 닿지 못한 것만 일시적이며, 검증·도메인 오류는 이 목록에 없다.
-    assert TracerApiUnavailable in RECIPE_TRANSIENT
-    assert ConnectionError in RECIPE_TRANSIENT and TimeoutError in RECIPE_TRANSIENT
-    assert ValueError not in RECIPE_TRANSIENT
+    # 목록을 통째로 못 박아 원장과 색인의 오류가 다시 끼어들면 검사가 깨지게 한다.
+    assert set(RECIPE_TRANSIENT) == {TracerApiUnavailable, ConnectionError, TimeoutError}
     # 두 에이전트가 같은 창구를 부르므로 재시도 대상이 같다.
-    assert TracerApiUnavailable in CLEANUP_TRANSIENT
-    # 원장과 색인에 직접 붙지 않으므로 그 오류는 재시도 대상이 아니다.
-    assert PostgresConnectionError not in RECIPE_TRANSIENT
-    assert CannotConnectNowError not in RECIPE_TRANSIENT
-    assert OpenSearchConnectionError not in RECIPE_TRANSIENT
+    assert set(CLEANUP_TRANSIENT) == set(RECIPE_TRANSIENT)
+    # 검증·도메인 오류는 이 목록에 없다.
+    assert ValueError not in RECIPE_TRANSIENT
 
 
 async def test_일시_오류는_도구_계층에서_재시도해_실행이_이어진다() -> None:
