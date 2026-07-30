@@ -131,8 +131,8 @@ class UsageDTO(BaseModel):
     cacheCreationTokens: int
 
 
-AgentStepRole = Literal["system", "user", "assistant", "tool", "graph"]
-GraphEventKind = Literal[
+AgentStepRole = Literal["system", "user", "assistant", "tool", "orchestration"]
+OrchestrationEventKind = Literal[
     "node.started",
     "node.completed",
     "node.failed",
@@ -163,7 +163,7 @@ class AgentStepDTO(BaseModel):
     cacheCreationTokens: int | None = None
     stopReason: str | None = None
     nodeName: str | None = None
-    eventKind: GraphEventKind | None = None
+    eventKind: OrchestrationEventKind | None = None
     durationMs: int | None = None
 
 

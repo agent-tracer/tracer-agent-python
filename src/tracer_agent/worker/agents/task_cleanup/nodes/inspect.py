@@ -107,7 +107,7 @@ class TriageNode(GraphNode):
         )
         plan = result.response
         chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments) or "없음"
-        self._usage.record_graph_event(
+        self._usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",
             node_name=self.name,

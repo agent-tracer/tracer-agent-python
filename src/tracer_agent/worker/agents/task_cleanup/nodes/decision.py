@@ -141,7 +141,7 @@ class InvestigateNode(_DecisionAgent):
             update["redispatch_ceiling"] = ceiling
             update["redispatch_count"] = state["redispatch_count"] + 1
             chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments)
-            self._usage.record_graph_event(
+            self._usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
             )
         return update
@@ -182,7 +182,7 @@ class ValidateDecisionsNode(GraphNode):
     async def run(self, state: TaskCleanupState) -> ValidateDecisionsUpdate:
         valid, errors = validate_suggestions(state["suggestions"], state)
         if errors:
-            self._usage.record_graph_event(
+            self._usage.record_orchestration_event(
                 "validation.failed",
                 "; ".join(errors),
                 node_name=self.name,

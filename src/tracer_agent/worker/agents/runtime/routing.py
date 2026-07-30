@@ -30,7 +30,7 @@ def build_validation_router(
         else:
             route = _with_result(has_result, state, EMPTY)
             reason = exhausted_reason
-        trace.record_graph_event(
+        trace.record_orchestration_event(
             "route.selected",
             f"{validation_node} -> {route}: {reason}",
             node_name=validation_node,

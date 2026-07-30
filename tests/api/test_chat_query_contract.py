@@ -30,7 +30,7 @@ from tracer_agent.shared.agents.chat.models import (
     TERMINAL_CHAT_EXECUTION_STATUSES,
 )
 from tracer_agent.shared.agents.chat.surface.stream import HEARTBEAT_S, SNAPSHOT_EVENT
-from tracer_agent.shared.agents.shared.models import AgentStepRole, GraphEventKind
+from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
 
 THREADS = "/api/agent/chat/threads"
 MEMORIES = "/api/agent/chat/memories"
@@ -94,7 +94,7 @@ class Test열거:
         assert list(_literals(AgentStepRole)) == CASE["enums"]["stepRole"]
 
     def test_궤적_사건_종류가_케이스와_같다(self) -> None:
-        assert list(_literals(GraphEventKind)) == CASE["enums"]["stepEventKind"]
+        assert list(_literals(OrchestrationEventKind)) == CASE["enums"]["stepEventKind"]
 
     def test_실행_상태가_케이스와_같다(self) -> None:
         assert list(CHAT_EXECUTION_STATUSES) == CASE["enums"]["executionStatus"]

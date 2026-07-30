@@ -11,9 +11,9 @@ from langchain_core.messages import AIMessage, BaseMessage
 from tracer_agent.shared.agents.shared.models import (
     AgentRunObservationDTO,
     AgentStepDTO,
-    GraphEventKind,
     ModelCallObservationDTO,
     ObservationUsageDTO,
+    OrchestrationEventKind,
     PromptFragmentSnapshotDTO,
     ToolCallObservationDTO,
     UsageDTO,
@@ -85,23 +85,23 @@ class ExecutionTrace:
             return
         self.steps.append(step)
 
-    def record_graph_event(
+    def record_orchestration_event(
         self,
-        event_kind: GraphEventKind,
+        event_kind: OrchestrationEventKind,
         content: str,
         *,
         node_name: str | None = None,
         duration_ms: int | None = None,
     ) -> None:
-        """그래프의 노드·분기·검증 이벤트를 실행 단계로 기록한다."""
+        """실행을 엮는 층의 노드·분기·검증 이벤트를 실행 단계로 기록한다."""
         normalized = content.strip()
         if not normalized:
-            raise ValueError("graph event content must not be empty")
+            raise ValueError("orchestration event content must not be empty")
         capped, truncated = cap_step_content(normalized)
         self.steps.append(
             AgentStepDTO(
                 seq=len(self.steps),
-                role="graph",
+                role="orchestration",
                 content=capped,
                 truncated=truncated,
                 nodeName=node_name,

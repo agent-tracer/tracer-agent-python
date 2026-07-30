@@ -61,21 +61,21 @@ def _dispatch(node_name: str) -> Callable[..., Awaitable[dict[str, Any]]]:
     async def run(state: Any, runtime: Runtime[ValidationGraphContext]) -> dict[str, Any]:
         context = runtime.context
         trace = context.trace
-        trace.record_graph_event(
+        trace.record_orchestration_event(
             "node.started", f"{context.agent_name} entered {node_name}", node_name=node_name
         )
         started = time.monotonic()
         try:
             result = await context.nodes[node_name](state)
         except BaseException:
-            trace.record_graph_event(
+            trace.record_orchestration_event(
                 "node.failed",
                 f"{context.agent_name} failed in {node_name}",
                 node_name=node_name,
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
             raise
-        trace.record_graph_event(
+        trace.record_orchestration_event(
             "node.completed",
             f"{context.agent_name} completed {node_name}",
             node_name=node_name,

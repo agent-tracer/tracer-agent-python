@@ -34,7 +34,11 @@ async def seed_job(store: SqliteLedgerSql, user_id: str = "local") -> None:
         "j1",
         user_id,
         2,
-        [AgentStepDTO(seq=0, role="graph", content="retried", nodeName="survey", eventKind="node.started")],
+        [
+            AgentStepDTO(
+                seq=0, role="orchestration", content="retried", nodeName="survey", eventKind="node.started"
+            )
+        ],
         NOW,
     )
     await ledger.record_steps(

@@ -62,7 +62,7 @@ class SurveyNode(GraphNode):
             budget.charge(raw)
         plan = parsed if isinstance(parsed, DispatchPlan) else DispatchPlan.model_validate(parsed)
         chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes) or "no specialists"
-        self._usage.record_graph_event(
+        self._usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",
             node_name=self.name,

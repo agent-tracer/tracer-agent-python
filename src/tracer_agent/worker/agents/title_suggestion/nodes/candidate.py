@@ -133,7 +133,7 @@ class ValidateCandidateNode(GraphNode):
     async def run(self, state: TitleSuggestionState) -> ValidateCandidateUpdate:
         errors = validate_title_candidate(state["candidate"], state["context"].title)
         if errors:
-            self._usage.record_graph_event(
+            self._usage.record_orchestration_event(
                 "validation.failed",
                 "; ".join(errors),
                 node_name=self.name,

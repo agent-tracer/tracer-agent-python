@@ -16,12 +16,12 @@ def narrate(label: str, res: AgentResponse) -> None:
 
 def _print_timeline(res: AgentResponse) -> None:
     print("-- timeline --")
-    steps = [step for step in res.steps if step.role in {"graph", "assistant", "tool"}]
+    steps = [step for step in res.steps if step.role in {"orchestration", "assistant", "tool"}]
     if not steps:
         print("  (기록된 스텝이 없다)")
         return
     for step in steps:
-        if step.role == "graph":
+        if step.role == "orchestration":
             duration = f" {step.durationMs}ms" if step.durationMs is not None else ""
             print(f"  [{step.seq}] {step.nodeName} {step.eventKind}{duration}: {step.content}")
         elif step.role == "assistant":

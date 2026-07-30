@@ -6,7 +6,7 @@ from typing import get_args
 
 from tests.support.contract import agent_spec, shared_contract
 from tracer_agent.shared.agents.recipe_scan.models import RecipeCandidate
-from tracer_agent.shared.agents.shared.models import AgentStepRole, GraphEventKind
+from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext
 
 
@@ -31,4 +31,4 @@ def test_언어_중립_fixture와_실행_어휘가_같다() -> None:
     vocabulary = shared_contract("execution.vocabulary.json")
 
     assert list(get_args(AgentStepRole)) == vocabulary["stepRoles"]
-    assert list(get_args(GraphEventKind)) == vocabulary["graphEventKinds"]
+    assert list(get_args(OrchestrationEventKind)) == vocabulary["orchestrationEventKinds"]
