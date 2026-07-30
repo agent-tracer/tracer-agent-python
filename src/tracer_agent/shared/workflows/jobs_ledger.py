@@ -61,6 +61,17 @@ SELECT * FROM ai_job_steps
  ORDER BY attempt ASC, seq ASC
 """
 
+_SELECT_PENDING = """
+SELECT * FROM ai_jobs
+ WHERE kind = $1 AND status = 'pending'
+ ORDER BY created_at ASC
+"""
+
+_HISTORY_SELECT = "SELECT * FROM ai_jobs"
+_HISTORY_COUNT = "SELECT count(*) AS total FROM ai_jobs"
+
+_SELECT_LATEST_TAIL = " ORDER BY created_at DESC LIMIT 1"
+
 
 def carries_content(step: AgentStepDTO) -> bool:
     """텍스트도 도구 호출도 없는 스텝은 궤적에 아무 의미도 싣지 못한다."""
@@ -156,3 +167,42 @@ class JobLedger:
     async def steps(self, job_id: str, user_id: str) -> list[SqlRow]:
         """그 잡이 남긴 궤적을 시도와 순번의 오름차순으로 읽는다."""
         return await self._sql.fetch(_SELECT_STEPS, job_id, user_id)
+
+    async def pending(self, kind: str) -> list[SqlRow]:
+        """이 종류의 대기 잡을 접수 시각의 오름차순으로 읽는다."""
+        return await self._sql.fetch(_SELECT_PENDING, kind)
+
+    async def history(
+        self, user_id: str, kind: str | None, status: str | None, limit: int, offset: int
+    ) -> tuple[list[SqlRow], int]:
+        """이 사용자의 잡 이력 한 페이지와 같은 조건의 전체 개수를 함께 읽는다."""
+        where, args = _history_filter(user_id, kind, status)
+        page = await self._sql.fetch(
+            f"{_HISTORY_SELECT}{where} ORDER BY created_at DESC LIMIT ${len(args) + 1}"
+            f" OFFSET ${len(args) + 2}",
+            *args,
+            limit,
+            offset,
+        )
+        counted = await self._sql.fetch(f"{_HISTORY_COUNT}{where}", *args)
+        return page, int(counted[0]["total"]) if counted else 0
+
+    async def latest(self, user_id: str, kind: str, task_id: str | None) -> SqlRow | None:
+        """사용자와 종류와 태스크 조합의 가장 최근 잡 한 행을 읽는다."""
+        where = " WHERE user_id = $1 AND kind = $2"
+        args: list[Any] = [user_id, kind]
+        if task_id is not None:
+            where += " AND task_id = $3"
+            args.append(task_id)
+        rows = await self._sql.fetch(f"{_HISTORY_SELECT}{where}{_SELECT_LATEST_TAIL}", *args)
+        return rows[0] if rows else None
+
+
+def _history_filter(user_id: str, kind: str | None, status: str | None) -> tuple[str, list[Any]]:
+    clauses = ["user_id = $1"]
+    args: list[Any] = [user_id]
+    for value, column in ((kind, "kind"), (status, "status")):
+        if value is not None:
+            args.append(value)
+            clauses.append(f"{column} = ${len(args)}")
+    return f" WHERE {' AND '.join(clauses)}", args
