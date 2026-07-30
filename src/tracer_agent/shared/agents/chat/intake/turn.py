@@ -12,9 +12,9 @@ from .ledger import QUEUED, ChatIntakeLedger
 from .models import PostMessagePayload
 
 THREAD_NOT_FOUND = (404, "not_found", "Thread not found")
-BACKEND_CONFLICT = (
+ACTIVE_TURN_CONFLICT = (
     409,
-    "chat.execution-backend-conflict",
+    "chat.execution-active-conflict",
     "Chat thread already has an active turn",
 )
 IDEMPOTENCY_CONFLICT = (
@@ -81,7 +81,7 @@ class ChatTurnIntake:
             return await self._existing(existing, input_hash)
 
         if await self._ledger.has_active_turn(thread_id):
-            raise ChatIntakeRejected(*BACKEND_CONFLICT)
+            raise ChatIntakeRejected(*ACTIVE_TURN_CONFLICT)
 
         message = await self._ledger.insert_user_message(generate_ulid(now), thread_id, payload.content, now)
         execution = await self._ledger.insert_queued_execution(

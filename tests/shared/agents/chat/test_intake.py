@@ -197,5 +197,5 @@ async def test_진행_중인_턴이_있으면_접수하지_않는다(
     with pytest.raises(ChatIntakeRejected) as rejected:
         await intake.enqueue("u1", "t1", payload(clientRequestId="r2"), NOW)
 
-    assert (rejected.value.status, rejected.value.code) == (409, "chat.execution-backend-conflict")
+    assert (rejected.value.status, rejected.value.code) == (409, "chat.execution-active-conflict")
     assert len(store.rows("chat_executions")) == 1
