@@ -35,11 +35,11 @@ class Settings(BaseSettings):
     tracer_agent_host: str = "0.0.0.0"
     tracer_agent_port: int = 8800
 
-    tracer_db_host: str = "tracer-db"
-    tracer_db_port: int = 5432
-    tracer_db_name: str = "tracer"
-    tracer_db_user: str = "root"
-    tracer_db_password: str = "root"
+    agent_db_host: str = "agent-db"
+    agent_db_port: int = 5432
+    agent_db_name: str = "agent"
+    agent_db_user: str = "root"
+    agent_db_password: str = "root"
 
     kafka_brokers: str = "redpanda:29092"
     temporal_address: str = "temporal:7233"
@@ -87,14 +87,14 @@ class Settings(BaseSettings):
         """설정한 Temporal에 붙는 연결 하나를 연다."""
         return await Client.connect(self.temporal_address, namespace=self.temporal_namespace)
 
-    def tracer_dsn(self) -> str:
-        """앱 계정으로 원장에 붙는 접속 문자열을 만든다."""
-        credentials = f"{self.tracer_db_user}:{self.tracer_db_password}"
-        return f"postgresql://{credentials}@{self.tracer_db_host}:{self.tracer_db_port}/{self.tracer_db_name}"
+    def agent_dsn(self) -> str:
+        """앱 계정으로 실행 원장에 붙는 접속 문자열을 만든다."""
+        credentials = f"{self.agent_db_user}:{self.agent_db_password}"
+        return f"postgresql://{credentials}@{self.agent_db_host}:{self.agent_db_port}/{self.agent_db_name}"
 
     def checkpoint_dsn(self) -> str:
         """checkpoint 표만 놓인 스키마로 search_path를 고정한 접속 문자열을 만든다."""
-        return f"{self.tracer_dsn()}?options=-csearch_path%3D{CHECKPOINT_SCHEMA}"
+        return f"{self.agent_dsn()}?options=-csearch_path%3D{CHECKPOINT_SCHEMA}"
 
 
 @lru_cache

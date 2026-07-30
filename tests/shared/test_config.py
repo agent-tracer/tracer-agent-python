@@ -5,19 +5,19 @@ from tracer_agent.shared.config import Settings
 
 def _settings() -> Settings:
     return Settings(
-        tracer_db_host="db",
-        tracer_db_port=5432,
-        tracer_db_name="tracer",
-        tracer_db_user="app",
-        tracer_db_password="app-secret",
+        agent_db_host="db",
+        agent_db_port=5432,
+        agent_db_name="agent",
+        agent_db_user="app",
+        agent_db_password="app-secret",
     )
 
 
 def test_원장에_앱_계정으로_연결한다() -> None:
-    assert _settings().tracer_dsn() == "postgresql://app:app-secret@db:5432/tracer"
+    assert _settings().agent_dsn() == "postgresql://app:app-secret@db:5432/agent"
 
 
 def test_checkpoint가_구현체_전용_스키마를_본다() -> None:
     assert _settings().checkpoint_dsn() == (
-        "postgresql://app:app-secret@db:5432/tracer?options=-csearch_path%3Dagent_langgraph"
+        "postgresql://app:app-secret@db:5432/agent?options=-csearch_path%3Dagent_langgraph"
     )

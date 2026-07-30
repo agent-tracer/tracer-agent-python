@@ -98,7 +98,7 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
         await http_client.aclose()
         raise
     opened = ChatWorkerResources(
-        ledger=LedgerPoolProvider(settings.tracer_dsn()),
+        ledger=LedgerPoolProvider(settings.agent_dsn()),
         http_client=http_client,
         checkpoints=ChatCheckpointProvider(settings.checkpoint_dsn()),
         wakeup=UpdatePublisher(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC),
@@ -123,7 +123,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         raise
     opened = JobWorkerResources(
         http_client=http_client,
-        execution=LedgerPoolProvider(settings.tracer_dsn()),
+        execution=LedgerPoolProvider(settings.agent_dsn()),
         prompt_fragments=prompt_fragments,
     )
     try:
