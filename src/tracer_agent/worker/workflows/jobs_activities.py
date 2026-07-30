@@ -232,7 +232,7 @@ class AgentJobActivities:
                 status=status,
                 attempt=_attempt(req.attemptId),
                 result=response.data or {},
-                usage=job_usage(response, cost_usd),
+                usage=job_usage(response, cost_usd, _attempt(req.attemptId)),
                 error=error,
                 steps=response.steps,
                 observation=(
