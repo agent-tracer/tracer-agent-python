@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from ..shared.agents.chat.intake.router import (
     ACCEPTED_STATUS,
@@ -64,7 +65,7 @@ from ..shared.agents.prompt_registry.router import (
     register_and_resolve_prompt_fragments,
     register_prompt,
 )
-from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
+from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql, SqlSource
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
 from ..shared.agents.settings.router import (
@@ -99,6 +100,10 @@ from .evaluation import run_evaluation
 
 # 접수가 잡 종류의 카탈로그 값을 물을 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
 ENVELOPE_HTTP_TIMEOUT_S = 20.0
+
+# 원장까지 왕복하는 질의라야 연결이 살아 있다는 것을 알린다.
+READINESS_PROBE = "SELECT 1"
+UNREADY_STATUS = 503
 
 
 @asynccontextmanager
@@ -148,10 +153,22 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+async def readiness(request: Request) -> JSONResponse:
+    """의존에 닿아 요청을 처리할 수 있는지 신원 없이 알리며 봉투를 씌우지 않는다."""
+    source: SqlSource = request.app.state.execution_sql
+    try:
+        async with source.connect() as sql:
+            await sql.fetch(READINESS_PROBE)
+    except Exception:
+        return JSONResponse(status_code=UNREADY_STATUS, content={"status": "unready"})
+    return JSONResponse(status_code=200, content={"status": "ok"})
+
+
 def create_app() -> FastAPI:
     """독립 수명을 가진 에이전트 HTTP 앱을 만든다."""
     application = FastAPI(title="tracer-agent", lifespan=lifespan)
     application.get("/health")(health)
+    application.get("/health/ready")(readiness)
     application.post("/v1/evaluation-runs")(run_evaluation)
     # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
     application.get(CHAT_THREADS_PATH)(list_chat_threads)
