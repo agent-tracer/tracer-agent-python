@@ -12,9 +12,31 @@ from ..shared.agents.chat.intake.router import (
     ACCEPTED_STATUS,
     CHAT_CANCEL_PATH,
     CHAT_MESSAGES_PATH,
+    CHAT_THREADS_PATH,
     cancel_chat_turn,
     enqueue_chat_turn,
 )
+from ..shared.agents.chat.surface.envelope import CREATED_STATUS as CHAT_CREATED_STATUS
+from ..shared.agents.chat.surface.executions import (
+    CHAT_EXECUTION_REPLAY_PATH,
+    CHAT_EXECUTION_STEPS_PATH,
+    CHAT_EXECUTIONS_PATH,
+    get_chat_replay,
+    list_chat_execution_steps,
+    list_chat_executions,
+)
+from ..shared.agents.chat.surface.stream import CHAT_EXECUTION_EVENTS_PATH, watch_chat_execution
+from ..shared.agents.chat.surface.threads import (
+    CHAT_THREAD_MESSAGES_PATH,
+    CHAT_THREAD_PATH,
+    create_chat_thread,
+    delete_chat_thread,
+    get_chat_thread,
+    list_chat_messages,
+    list_chat_threads,
+    rename_chat_thread,
+)
+from ..shared.agents.chat.surface.updates import UpdateSubscriber
 from ..shared.agents.envelope.router import (
     CHAT_ENVELOPE_PATH,
     JOB_ENVELOPE_PATH,
@@ -75,6 +97,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.execution_updates = UpdatePublisher(
         settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
     )
+    application.state.execution_watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
@@ -87,6 +110,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     finally:
         shutdown_observability()
         await application.state.job_envelope_http.aclose()
+        await application.state.execution_watch.close()
         await application.state.execution_updates.close()
         await application.state.executions.close()
 
@@ -101,7 +125,17 @@ def create_app() -> FastAPI:
     application.get("/health")(health)
     application.post("/v1/evaluation-runs")(run_evaluation)
     # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
+    application.get(CHAT_THREADS_PATH)(list_chat_threads)
+    application.post(CHAT_THREADS_PATH, status_code=CHAT_CREATED_STATUS)(create_chat_thread)
+    application.get(CHAT_THREAD_PATH)(get_chat_thread)
+    application.patch(CHAT_THREAD_PATH)(rename_chat_thread)
+    application.delete(CHAT_THREAD_PATH)(delete_chat_thread)
+    application.get(CHAT_THREAD_MESSAGES_PATH)(list_chat_messages)
     application.post(CHAT_MESSAGES_PATH, status_code=ACCEPTED_STATUS)(enqueue_chat_turn)
+    application.get(CHAT_EXECUTIONS_PATH)(list_chat_executions)
+    application.get(CHAT_EXECUTION_EVENTS_PATH, response_model=None)(watch_chat_execution)
+    application.get(CHAT_EXECUTION_STEPS_PATH)(list_chat_execution_steps)
+    application.get(CHAT_EXECUTION_REPLAY_PATH)(get_chat_replay)
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)

@@ -1,4 +1,4 @@
-"""테스트용 페이크: chat 도구가 부르는 tracer-api 확인 창구와 기억 API를 네트워크 없이 대신한다."""
+"""테스트용 페이크: chat 도구가 부르는 확인 창구와 기억 API를 네트워크 없이 대신한다."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ MEMORIES_PATH = "/api/v1/chat/memories"
 
 
 def chat_confirmation_response(request: httpx.Request) -> httpx.Response:
-    """chat 확인 창구가 쓰기 도구 하나를 대기 행으로 세워 돌려주는 응답을 대신한다."""
+    """확인 창구가 쓰기 도구 하나를 대기 행으로 세워 돌려주는 응답을 대신한다."""
     body = _json.loads(request.content)
     tool = str(body["toolName"])
     return httpx.Response(
@@ -30,7 +30,7 @@ def chat_confirmation_response(request: httpx.Request) -> httpx.Response:
 
 
 class FakeChatMemoryApi:
-    """chat 기억 API가 즉시 적재하고 되읽어 주는 tracer-api 창구를 대신한다."""
+    """chat 기억 API가 즉시 적재하고 되읽어 주는 창구를 대신한다."""
 
     def __init__(self) -> None:
         self.facts: dict[str, str] = {}

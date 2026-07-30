@@ -1,4 +1,4 @@
-"""접수가 세우는 행의 식별자를 tracer-api와 같은 ULID 규칙으로 만든다."""
+"""접수가 세우는 행의 식별자를 두 구현체가 같은 ULID 규칙으로 만든다."""
 
 from __future__ import annotations
 

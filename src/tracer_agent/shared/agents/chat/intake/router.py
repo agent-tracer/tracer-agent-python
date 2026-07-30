@@ -1,4 +1,4 @@
-"""브라우저의 접수 요청을 tracer-api와 같은 경로와 봉투와 오류 형식으로 받는다."""
+"""브라우저의 접수 요청을 계약이 정한 경로와 봉투와 오류 형식으로 받는다."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ INVALID_REQUEST = (400, "validation_error", "Invalid request")
 
 
 async def enqueue_chat_turn(thread_id: str, request: Request) -> JSONResponse:
-    """대화 턴 하나를 접수하고 결과나 사유를 tracer-api와 같은 봉투로 낸다."""
+    """대화 턴 하나를 접수하고 결과나 사유를 계약이 정한 봉투로 낸다."""
     body = await _read_body(request)
     if body is None:
         return error_envelope(*INVALID_REQUEST)
@@ -61,7 +61,7 @@ async def enqueue_chat_turn(thread_id: str, request: Request) -> JSONResponse:
 
 
 async def cancel_chat_turn(thread_id: str, execution_id: str, request: Request) -> JSONResponse:
-    """도는 턴 하나를 끊고 결과나 사유를 tracer-api와 같은 봉투로 낸다."""
+    """도는 턴 하나를 끊고 결과나 사유를 계약이 정한 봉투로 낸다."""
     source: SqlSource = request.app.state.execution_sql
     dispatch: ExecutionDispatch = request.app.state.execution_dispatch
     updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
@@ -80,13 +80,13 @@ async def cancel_chat_turn(thread_id: str, execution_id: str, request: Request) 
 
 
 def resolve_user_id(header: str | None) -> str:
-    """자기신고 사용자 헤더가 비면 tracer-api와 같은 기본 사용자로 읽는다."""
+    """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
     trimmed = (header or "").strip()
     return trimmed if trimmed else DEFAULT_USER_ID
 
 
 def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
-    """실패 사유를 tracer-api의 전역 필터와 같은 오류 봉투로 적는다."""
+    """실패 사유를 계약이 정한 오류 봉투로 적는다."""
     error: dict[str, Any] = {"code": code, "message": message}
     if details is not None:
         error["details"] = details

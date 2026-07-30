@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, get_args
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,6 +10,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..shared.models import AgentExecutionEnvelope, Language, TrimmedStr
 
 ChatMessageRole = Literal["user", "assistant", "tool"]
+CHAT_MESSAGE_ROLES: tuple[str, ...] = get_args(ChatMessageRole)
+
+ChatExecutionStatus = Literal["queued", "running", "completed", "failed", "canceled"]
+CHAT_EXECUTION_STATUSES: tuple[str, ...] = get_args(ChatExecutionStatus)
+
+# 더 전진하지 않는 실행의 상태이며 이 자리에 닿으면 열린 연결도 통지도 끝난다.
+TERMINAL_CHAT_EXECUTION_STATUSES: tuple[str, ...] = ("completed", "failed", "canceled")
+
+# 모델이 왜 말을 멈췄는지이며 실행 수명을 나타내는 status와 다른 축이다.
+ChatStopReason = Literal[
+    "completed", "deadline", "stalled", "budget_landed", "turn_limit", "canceled", "failed"
+]
+CHAT_STOP_REASONS: tuple[str, ...] = get_args(ChatStopReason)
+
+ChatConfirmationStatus = Literal["pending", "approved", "rejected"]
+CHAT_CONFIRMATION_STATUSES: tuple[str, ...] = get_args(ChatConfirmationStatus)
 
 # 실행 원장이 이 서비스가 도는 턴을 부르는 이름이며 edge의 백엔드 쿼리 값과 같다.
 GRAPH_BACKEND = "python"
@@ -66,8 +82,10 @@ class ChatTurnFields(BaseModel):
     summary: str | None = None
     messages: list[ChatHistoryMessage] = Field(default_factory=list)
     facts: list[ChatFact] = Field(default_factory=list)
-    # 읽기 도구가 tracer-api 읽기 API를 사용자 범위로 되읽는 진입점이다.
+    # 읽기 도구가 추적 API를 사용자 범위로 되읽는 진입점이다.
     readApiBaseUrl: str = ""
+    # 되읽기와 확인 창구와 장기기억이 매인 에이전트 자기 배포 단위의 진입점이다.
+    agentApiBaseUrl: str = ""
     # 이 실행과 이 사용자에 매인 자격이며, 서버가 자기신고 헤더 대신 이것을 믿는다.
     scopeToken: str = ""
     # 모델에게 보일 도구 설명이며 두 백엔드가 같은 문장을 쓰도록 계약에서 워커가 실어 보낸다.

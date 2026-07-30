@@ -25,7 +25,7 @@ IDEMPOTENCY_CONFLICT = (
 
 
 class ChatIntakeRejected(Exception):
-    """접수를 받아들일 수 없어 tracer-api와 같은 상태와 코드로 돌려보낸다."""
+    """접수를 받아들일 수 없어 계약이 정한 상태와 코드로 돌려보낸다."""
 
     def __init__(self, status: int, code: str, message: str) -> None:
         super().__init__(message)

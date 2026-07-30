@@ -1,4 +1,4 @@
-"""브라우저가 tracer-api와 같은 본문으로 치는 접수 요청과 그 응답 와이어 계약이다."""
+"""브라우저가 치는 접수 요청과 그 응답의 와이어 계약이다."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ ModelName = Annotated[TrimmedStr, Field(min_length=1)]
 
 
 class PostMessagePayload(BaseModel):
-    """브라우저가 보내는 접수 본문이며 tracer-api의 스키마와 같은 제약을 건다."""
+    """브라우저가 보내는 접수 본문이며 계약이 정한 제약을 건다."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -26,7 +26,7 @@ class PostMessagePayload(BaseModel):
     language: Language | None = None
 
     def input_hash(self) -> str:
-        """같은 요청 식별자가 같은 입력인지 가릴 해시를 tracer-api와 같은 바이트로 만든다."""
+        """같은 요청 식별자가 같은 입력인지 가릴 해시를 두 구현체가 같은 바이트로 만든다."""
         payload = {
             "content": self.content,
             "model": self.model,
@@ -37,7 +37,7 @@ class PostMessagePayload(BaseModel):
 
 
 def message_dto(row: SqlRow) -> dict[str, Any]:
-    """저장된 사용자 메시지 행을 tracer-api와 같은 와이어 표현으로 바꾼다."""
+    """저장된 사용자 메시지 행을 계약이 정한 와이어 표현으로 바꾼다."""
     return {
         "id": row["id"],
         "threadId": row["thread_id"],
@@ -50,7 +50,7 @@ def message_dto(row: SqlRow) -> dict[str, Any]:
 
 
 def execution_dto(row: SqlRow) -> dict[str, Any]:
-    """저장된 실행 행을 tracer-api와 같은 와이어 표현으로 바꾼다."""
+    """저장된 실행 행을 계약이 정한 와이어 표현으로 바꾼다."""
     return {
         "id": row["id"],
         "threadId": row["thread_id"],

@@ -15,9 +15,9 @@ from tracer_agent.shared.agents.runtime.ledger import SqlRow, UniqueViolation
 # 사전식 비교가 곧 시간 비교가 되도록 원장의 모든 시각을 UTC 한 형식으로만 적는다.
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 
-TIMESTAMP_COLUMNS = frozenset({"created_at", "updated_at", "started_at", "completed_at"})
+TIMESTAMP_COLUMNS = frozenset({"created_at", "updated_at", "started_at", "completed_at", "resolved_at"})
 JSON_COLUMNS = frozenset(
-    {"usage", "tool_calls", "validation", "model_calls", "input", "result", "placeholders"}
+    {"usage", "tool_calls", "validation", "model_calls", "input", "result", "placeholders", "args"}
 )
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
@@ -110,6 +110,28 @@ CREATE TABLE chat_execution_steps (
 
 CREATE UNIQUE INDEX chat_execution_steps_execution_attempt_seq
     ON chat_execution_steps (execution_id, attempt, seq);
+
+CREATE TABLE chat_pending_tools (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    message_id TEXT,
+    tool_name TEXT NOT NULL,
+    args TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
+CREATE TABLE chat_user_memories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX chat_user_memories_unique ON chat_user_memories (user_id, key);
 
 CREATE TABLE ai_jobs (
     id TEXT PRIMARY KEY,
