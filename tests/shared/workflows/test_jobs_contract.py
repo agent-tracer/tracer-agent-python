@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import get_args
+
+import pytest
+from pydantic import ValidationError
 
 from tests.support.contract import conformance_case, wire_contract
 from tracer_agent.shared.agents.envelope.catalog import CATALOG, CHAT_KIND
@@ -69,42 +73,21 @@ class Test멱등_입력의_정규형:
         for kind, declared in _INTAKE["inputs"].items():
             assert sorted(IDEMPOTENCY_KEYS[kind]) == sorted([*declared["required"], *declared["optional"]])
 
-    def test_고르지_않은_칸을_null로_채우고_종류가_정한_순서로_적는다(self) -> None:
-        job_input = INPUT_MODEL_BY_KIND["recipe.scan"].model_validate(
-            {"taskId": "t1", "language": "ko", "trigger": "dashboard"}
-        )
+    def test_계약이_적은_케이스마다_같은_정규형과_해시를_낸다(self) -> None:
+        idempotency = _INTAKE["idempotency"]
 
-        assert canonical_input("recipe.scan", job_input) == (
-            '{"taskId":"t1","userPrompt":null,"language":"ko","trigger":"dashboard"}'
-        )
+        assert idempotency["digest"] == "sha256"
+        for spec in idempotency["cases"]:
+            kind = spec["kind"]
+            job_input = INPUT_MODEL_BY_KIND[kind].model_validate(spec["input"])
 
-    def test_중첩된_칸도_계약이_적은_경로로_읽는다(self) -> None:
-        empty = INPUT_MODEL_BY_KIND["task.cleanup"].model_validate({})
-        filled = INPUT_MODEL_BY_KIND["task.cleanup"].model_validate({"filters": {"maxSuggestions": 5}})
+            assert canonical_input(kind, job_input) == spec["canonical"]
+            assert input_hash(kind, job_input) == spec["hash"]
+            assert input_hash(kind, job_input) == hashlib.sha256(spec["canonical"].encode()).hexdigest()
 
-        assert canonical_input("task.cleanup", empty) == '{"filters.maxSuggestions":null}'
-        assert canonical_input("task.cleanup", filled) == '{"filters.maxSuggestions":5}'
+    def test_계약이_종류마다_적은_칸을_그_순서대로_본다(self) -> None:
+        assert {kind: list(keys) for kind, keys in IDEMPOTENCY_KEYS.items()} == _INTAKE["idempotency"]["keys"]
 
-    def test_비ASCII를_이스케이프하지_않는다(self) -> None:
-        job_input = INPUT_MODEL_BY_KIND["rule.generation"].model_validate(
-            {"taskId": "t1", "anchorEventId": "ev-1", "intent": "테스트를 먼저 쓴다"}
-        )
-
-        assert canonical_input("rule.generation", job_input) == (
-            '{"taskId":"t1","anchorEventId":"ev-1","focus":null,"maxRules":null,'
-            '"intent":"테스트를 먼저 쓴다"}'
-        )
-
-    def test_다듬기_전후의_입력이_같은_해시를_얻는다(self) -> None:
-        model = INPUT_MODEL_BY_KIND["title.suggestion"]
-        padded = model.model_validate({"taskId": " t1 "})
-        bare = model.model_validate({"taskId": "t1"})
-
-        assert input_hash("title.suggestion", padded) == input_hash("title.suggestion", bare)
-
-    def test_같은_정규형은_같은_sha256을_낸다(self) -> None:
-        job_input = INPUT_MODEL_BY_KIND["title.suggestion"].model_validate({"taskId": "t1"})
-
-        assert input_hash("title.suggestion", job_input) == (
-            "1a7bcd7030a7d77b7a78efe30a3e4efd23d6600cbbbe726639e2d25a1253a01b"
-        )
+    def test_종류가_모르는_칸을_실은_입력을_접수가_받지_않는다(self) -> None:
+        with pytest.raises(ValidationError):
+            INPUT_MODEL_BY_KIND["title.suggestion"].model_validate({"taskId": "t1", "trigger": "dashboard"})
