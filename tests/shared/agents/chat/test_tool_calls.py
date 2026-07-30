@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.contract import agent_spec
+from tracer_agent.shared.agents.chat.surface.confirmations import PROPOSAL_NOTE
 from tracer_agent.shared.agents.chat.surface.tool_calls import (
     CONFIRMABLE_TOOLS,
     ChatToolArgsInvalid,
     plan_chat_tool_call,
 )
 from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BINDINGS
+
+
+def test_확인_대기_안내가_계약과_같다() -> None:
+    assert agent_spec("chat")["tools"]["proposalNote"] == PROPOSAL_NOTE
+
+
+def test_계약이_mutation으로_적은_도구만_계획을_갖는다() -> None:
+    contract = agent_spec("chat")["tools"]["tools"]
+    mutations = {name for name, spec in contract.items() if spec["mutation"]}
+
+    assert mutations == CONFIRMABLE_TOOLS
 
 
 def test_확인_게이트가_걸린_도구만_계획을_갖는다() -> None:
