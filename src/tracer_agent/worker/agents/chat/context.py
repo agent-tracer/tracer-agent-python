@@ -1,4 +1,4 @@
-"""tracer-api 재생 API에서 대화 문맥을 되읽고 저장된 이력을 모델 메시지로 되살린다."""
+"""에이전트 창구의 재생 API에서 대화 문맥을 되읽고 저장된 이력을 모델 메시지로 되살린다."""
 
 from __future__ import annotations
 

@@ -16,6 +16,7 @@ from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 
 _READ_API = "http://tracer-api.test"
+_AGENT_API = "http://agent-api.test"
 
 
 def _request(**overrides: Any) -> ChatRequest:
@@ -43,7 +44,7 @@ async def _run(
 ) -> AgentResponse:
     chat = FakeToolLoopChat(turns)
     monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
-    req = _request(readApiBaseUrl=_READ_API, **overrides)
+    req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, **overrides)
     transport = httpx.MockTransport((memory or FakeChatMemoryApi()).handle)
     async with httpx.AsyncClient(transport=transport) as client:
         return await execute(
@@ -121,7 +122,7 @@ async def _run_replay(
     chat = FakeToolLoopChat(turns)
     monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
     # 봉투에 이력이 없어야 그래프가 서버 재생 API를 문맥의 출처로 삼는다.
-    req = _request(readApiBaseUrl=_READ_API, messages=[], **overrides)
+    req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[], **overrides)
     transport = httpx.MockTransport(_replay_handler(replay, memory or FakeChatMemoryApi()))
     async with httpx.AsyncClient(transport=transport) as client:
         response = await execute(
@@ -192,3 +193,39 @@ async def test_이력을_못_읽으면_빈_이력으로_모델을_부르지_않�
     assert chat.requests == []
     assert result.data is None
     assert result.error is not None
+
+
+async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의_읽기는_추적_주소로_간다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = FakeToolLoopChat(
+        [
+            [{"name": "get_task", "args": {"taskId": "task-1"}}],
+            [{"name": "archive_task", "args": {"taskId": "task-1"}}],
+            [{"name": "recall_facts", "args": {}}],
+            "정리했습니다.",
+        ]
+    )
+    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    seen: list[tuple[str, str]] = []
+    memory = FakeChatMemoryApi()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url.host), request.url.path))
+        if request.url.path.endswith("/replay"):
+            return httpx.Response(
+                200, json={"ok": True, "data": {"messages": [], "summary": None, "facts": []}}
+            )
+        if request.url.path.startswith("/api/v1/tasks"):
+            return httpx.Response(200, json={"ok": True, "data": {"task": {"id": "task-1"}}})
+        return memory.handle(request)
+
+    req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[])
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        await execute("chat", req.model, req.deadlineMs, lambda usage: chat_mod.run_chat(req, client, usage))
+
+    hosts = dict(reversed([(path, host) for host, path in seen]))
+    assert hosts["/api/v1/chat/threads/thread-1/executions/execution-1/replay"] == "agent-api.test"
+    assert hosts["/api/v1/chat/threads/thread-1/confirmations"] == "agent-api.test"
+    assert hosts["/api/v1/chat/memories"] == "agent-api.test"
+    assert hosts["/api/v1/tasks/task-1"] == "tracer-api.test"

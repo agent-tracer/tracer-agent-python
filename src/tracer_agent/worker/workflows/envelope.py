@@ -53,7 +53,7 @@ class ChatEnvelopeClient:
                 # 같은 실행으로 다시 물어도 같은 답이 오는 거절이라 다시 태우지 않는다.
                 non_retryable=response.status_code < 500,
             )
-        return _envelope(_data(response), attempt)
+        return _envelope(_data(response), attempt, self._base_url)
 
 
 def _data(response: httpx.Response) -> dict[str, Any]:
@@ -69,12 +69,14 @@ def _data(response: httpx.Response) -> dict[str, Any]:
     return data
 
 
-def _envelope(data: dict[str, Any], attempt: int) -> ChatExecutionEnvelope:
+def _envelope(data: dict[str, Any], attempt: int, agent_api_base_url: str) -> ChatExecutionEnvelope:
     draft = data.get("draft")
     if not isinstance(draft, dict):
         raise ApplicationError(
             "chat envelope has no draft grant", type=ENVELOPE_UNAVAILABLE, non_retryable=True
         )
     fields = {key: value for key, value in data.items() if key != "draft"}
+    # 되읽기와 확인 창구는 에이전트의 것이므로 실행기가 자기 배포 단위의 주소로 그것을 부른다.
+    fields["agentApiBaseUrl"] = agent_api_base_url
     fields["draftCallback"] = {"url": draft["url"], "token": draft["token"], "attempt": attempt}
     return ChatExecutionEnvelope(fields=fields, draft_token_hash=str(draft["tokenHash"]))

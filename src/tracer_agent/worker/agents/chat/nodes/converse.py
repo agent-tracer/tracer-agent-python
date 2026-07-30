@@ -178,11 +178,11 @@ class ConverseNode(GraphNode):
         return await seed_checkpoint(agent, checkpointer, config, replayed)
 
     async def _context(self, state: ChatState) -> tuple[list[ChatHistoryMessage], str | None, list[ChatFact]]:
-        if not self._req.readApiBaseUrl or self._req.messages:
+        if not self._req.agentApiBaseUrl or self._req.messages:
             return self._req.messages, state["summary"], state["facts"]
         return await ChatContextReader(
             self._http_client,
-            self._req.readApiBaseUrl,
+            self._req.agentApiBaseUrl,
             self._req.userId,
             self._req.threadId,
             self._req.executionId,
@@ -205,23 +205,23 @@ class ConverseNode(GraphNode):
         )
 
     def _write_client(self) -> ChatWriteClient | None:
-        if not self._req.readApiBaseUrl:
+        if not self._req.agentApiBaseUrl:
             return None
         return ChatWriteClient(
             self._http_client,
-            self._req.readApiBaseUrl,
+            self._req.agentApiBaseUrl,
             self._req.userId,
             self._req.threadId,
             self._req.scopeToken or None,
         )
 
     def _memory_store(self) -> ChatMemoryStore | None:
-        if not self._req.readApiBaseUrl:
+        if not self._req.agentApiBaseUrl:
             return None
         return ChatMemoryStore(
             ChatMemoryClient(
                 self._http_client,
-                self._req.readApiBaseUrl,
+                self._req.agentApiBaseUrl,
                 self._req.userId,
                 self._req.scopeToken or None,
             )
