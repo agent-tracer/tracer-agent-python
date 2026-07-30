@@ -12,11 +12,11 @@ from pydantic import ValidationError
 
 from ..runtime.ledger import SqlSource
 from .fragments import PromptFragmentRegistration
-from .models import RegisterAndResolveFragmentsPayload, RegisterPromptPayload
+from .models import RegisterAndResolveFragmentsPayload, RegisterPromptPayload, is_backend_name
 from .prompts import PromptRegistration
 
 PROMPT_FRAGMENTS_REGISTER_PATH = "/internal/prompts/fragments/register-and-resolve"
-PROMPT_REGISTER_PATH = "/internal/prompts/python/register"
+PROMPT_REGISTER_PATH = "/internal/prompts/{backend}/register"
 CREATED_STATUS = 201
 MONITOR_USER_HEADER = "x-monitor-user"
 DEFAULT_USER_ID = "local"
@@ -40,7 +40,10 @@ async def register_and_resolve_prompt_fragments(request: Request) -> JSONRespons
 
 
 async def register_prompt(request: Request) -> JSONResponse:
-    """올라온 프롬프트 정의와 판을 원장에 세우고 그 결과를 성공 봉투로 낸다."""
+    """스스로를 이름 지은 에이전트 서비스의 프롬프트 정의와 판을 원장에 세운다."""
+    backend = str(request.path_params["backend"])
+    if not is_backend_name(backend):
+        return _error_envelope(*INVALID_REQUEST)
     body = await _read_body(request)
     if body is None:
         return _error_envelope(*INVALID_REQUEST)
@@ -52,7 +55,7 @@ async def register_prompt(request: Request) -> JSONResponse:
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
         registered = await PromptRegistration(sql).register(
-            _resolve_user_id(request.headers.get(MONITOR_USER_HEADER)), payload, datetime.now(UTC)
+            _resolve_user_id(request.headers.get(MONITOR_USER_HEADER)), backend, payload, datetime.now(UTC)
         )
     return JSONResponse(status_code=CREATED_STATUS, content={"ok": True, "data": registered})
 

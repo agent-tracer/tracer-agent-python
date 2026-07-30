@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# 조각을 올린 에이전트 서비스를 가르는 이름의 문법이며 그 후보는 배포의 상류 선언이 정한다.
+BACKEND_NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
+BACKEND_NAME_MAX_LENGTH = 64
+_BACKEND_NAME = re.compile(BACKEND_NAME_PATTERN)
 
 PRODUCTION_CHANNEL = "production"
 STAGING_CHANNEL = "staging"
@@ -19,6 +24,11 @@ VERSION_ORIGINS: frozenset[str] = frozenset({CODE_DEFAULT_ORIGIN, DATABASE_AUTHO
 
 # 배포 프로파일마다 실행에 쓰는 조각 채널이며 값은 계약의 조각 레지스트리 선언이 소유한다.
 PROFILE_CHANNELS: Mapping[str, str] = MappingProxyType({"local": STAGING_CHANNEL, "prd": PRODUCTION_CHANNEL})
+
+
+def is_backend_name(value: str) -> bool:
+    """등록 창구가 받는 백엔드 이름의 문법을 지켰는지 낸다."""
+    return len(value) <= BACKEND_NAME_MAX_LENGTH and _BACKEND_NAME.match(value) is not None
 
 
 def channel_for_profile(profile: str) -> str:
@@ -41,7 +51,7 @@ class FragmentManifestEntry(BaseModel):
     """워커가 파일에 담아 올린 조각 정의 하나와 그 코드 기본값이다."""
 
     model_config = ConfigDict(extra="forbid")
-    backend: Literal["python", "claude-sdk"]
+    backend: str = Field(min_length=1, max_length=BACKEND_NAME_MAX_LENGTH, pattern=BACKEND_NAME_PATTERN)
     agentName: str = Field(min_length=1)
     language: str = Field(min_length=1)
     codeName: str = Field(min_length=1)

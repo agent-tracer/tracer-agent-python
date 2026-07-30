@@ -10,8 +10,6 @@ from ..shared.fragment_integrity import fragment_content_hash
 from .ids import generate_ulid
 from .models import CODE_DEFAULT_ORIGIN, PRODUCTION_CHANNEL, RegisterPromptPayload
 
-PYTHON_BACKEND = "python"
-
 _FIND_DEFINITION = (
     "SELECT id, user_id, agent_name, backend, language, name FROM prompt_definitions "
     "WHERE user_id = $1 AND agent_name = $2 AND backend = $3 AND language = $4 AND name = $5"
@@ -53,10 +51,12 @@ class PromptRegistration:
     def __init__(self, sql: LedgerSql) -> None:
         self._sql = sql
 
-    async def register(self, user_id: str, payload: RegisterPromptPayload, now: datetime) -> dict[str, Any]:
+    async def register(
+        self, user_id: str, backend: str, payload: RegisterPromptPayload, now: datetime
+    ) -> dict[str, Any]:
         """등록한 정의와 판과 채널을 그대로 낸다."""
         async with self._sql.transaction():
-            definition = await self._definition(user_id, payload, now)
+            definition = await self._definition(user_id, backend, payload, now)
             version = await self._version(user_id, str(definition["id"]), payload, now)
             channel = await self._channel(str(definition["id"]), str(version["id"]), now)
         return {
@@ -81,9 +81,11 @@ class PromptRegistration:
             },
         }
 
-    async def _definition(self, user_id: str, payload: RegisterPromptPayload, now: datetime) -> SqlRow:
+    async def _definition(
+        self, user_id: str, backend: str, payload: RegisterPromptPayload, now: datetime
+    ) -> SqlRow:
         found = await self._sql.fetch(
-            _FIND_DEFINITION, user_id, payload.agentName, PYTHON_BACKEND, payload.language, payload.name
+            _FIND_DEFINITION, user_id, payload.agentName, backend, payload.language, payload.name
         )
         if found:
             return found[0]
@@ -92,7 +94,7 @@ class PromptRegistration:
             generate_ulid(now),
             user_id,
             payload.agentName,
-            PYTHON_BACKEND,
+            backend,
             payload.language,
             payload.name,
             now,

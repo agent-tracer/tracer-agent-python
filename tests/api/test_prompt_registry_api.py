@@ -190,6 +190,22 @@ def test_두_축이_같은_자리를_올려도_정의와_자리가_축마다_남
     assert [row["backend"] for row in store.rows("prompt_fragment_bindings")] == ["python", "claude-sdk"]
 
 
+def test_처음_보는_백엔드_이름의_조각도_등록한다(client: TestClient, store: SqliteLedgerSql) -> None:
+    newcomer = {**ENTRY, "backend": "rust-agent", "defaultContent": "셋째 축의 판"}
+
+    res = client.post(FRAGMENTS_PATH, json={**BODY, "manifest": [newcomer]})
+
+    assert res.status_code == 200
+    assert store.rows("prompt_fragment_definitions")[0]["backend"] == "rust-agent"
+
+
+def test_문법을_어긴_백엔드_이름의_조각을_거절한다(client: TestClient) -> None:
+    res = client.post(FRAGMENTS_PATH, json={**BODY, "manifest": [{**ENTRY, "backend": "Claude_SDK"}]})
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "validation_error"
+
+
 def test_선언되지_않은_프로파일이면_조각을_해석하지_않는다(client: TestClient) -> None:
     with pytest.raises(ValueError, match="unknown-profile"):
         client.post(FRAGMENTS_PATH, json={**BODY, "profile": "unknown"})
@@ -225,6 +241,20 @@ def test_프롬프트_등록이_자기신고_사용자로_정의를_나눈다(cl
     client.post(REGISTER_PATH, json=PROMPT_BODY, headers={"x-monitor-user": "u2"})
 
     assert [row["user_id"] for row in store.rows("prompt_definitions")] == ["local", "u2"]
+
+
+def test_프롬프트_등록이_경로가_이름_지은_백엔드로_정의를_세운다(client: TestClient) -> None:
+    res = client.post("/internal/prompts/rust-agent/register", json=PROMPT_BODY)
+
+    assert res.status_code == 201
+    assert res.json()["data"]["definition"]["backend"] == "rust-agent"
+
+
+def test_문법을_어긴_백엔드_이름의_프롬프트_등록을_거절한다(client: TestClient) -> None:
+    res = client.post("/internal/prompts/Claude_SDK/register", json=PROMPT_BODY)
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "validation_error"
 
 
 def test_프롬프트_등록의_본문이_스키마를_어기면_400_오류_봉투를_낸다(client: TestClient) -> None:
