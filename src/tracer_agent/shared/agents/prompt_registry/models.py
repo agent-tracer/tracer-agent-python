@@ -11,7 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field
 PRODUCTION_CHANNEL = "production"
 STAGING_CHANNEL = "staging"
 CODE_DEFAULT_ORIGIN = "code-default"
+DATABASE_AUTHORED_ORIGIN = "database-authored"
 DATABASE_OVERRIDE_SOURCE = "database-override"
+
+# prompt_fragment_versions.origin 이 담는 값 전부이며 후보는 계약의 조각 레지스트리가 소유한다.
+VERSION_ORIGINS: frozenset[str] = frozenset({CODE_DEFAULT_ORIGIN, DATABASE_AUTHORED_ORIGIN})
 
 # 배포 프로파일마다 실행에 쓰는 조각 채널이며 값은 계약의 조각 레지스트리 선언이 소유한다.
 PROFILE_CHANNELS: Mapping[str, str] = MappingProxyType({"local": STAGING_CHANNEL, "prd": PRODUCTION_CHANNEL})

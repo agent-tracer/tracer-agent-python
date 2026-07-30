@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from tests.support.contract import shared_contract
-from tracer_agent.shared.agents.prompt_registry.models import PROFILE_CHANNELS, channel_for_profile
+from tracer_agent.shared.agents.prompt_registry.models import (
+    PROFILE_CHANNELS,
+    VERSION_ORIGINS,
+    channel_for_profile,
+)
 from tracer_agent.worker.agents.shared.fragment_registry import fragment_code_name
 
 _REGISTRY = shared_contract("prompt.fragment.registry.json")
@@ -23,6 +27,12 @@ def test_배포_프로파일이_계약이_적은_채널을_낸다(profile: str, 
 def test_계약이_선언하지_않은_프로파일을_거절한다() -> None:
     with pytest.raises(ValueError, match="unknown-profile"):
         channel_for_profile("unknown")
+
+
+def test_조각_판의_출처가_계약이_선언한_값과_같다() -> None:
+    declared = set(_REGISTRY["versionOrigins"]) - {"meaning"}
+
+    assert declared == VERSION_ORIGINS
 
 
 def test_판이_어긋날_때_부팅을_끊기로_한_결정을_계약이_갖는다() -> None:

@@ -106,7 +106,7 @@ def _seed_edited_fragment(store: SqliteLedgerSql, content: str) -> None:
                 "placeholders": ["taskId"],
                 "tool_contract_version": "1",
                 "output_schema_version": "1",
-                "origin": "curated",
+                "origin": "database-authored",
                 "created_by": "local",
                 "created_at": now,
             }
