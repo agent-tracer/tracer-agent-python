@@ -19,12 +19,16 @@ from .models import (
 # 파일 기본값으로 심은 판의 작성자 자리이며 사람이 쓴 판과 구분된다.
 CODE_DEFAULT_AUTHOR = "agent-boot"
 
-_FIND_DEFINITION = "SELECT id FROM prompt_fragment_definitions WHERE backend = $1 AND definition_key = $2"
+# 조회 키를 유일 제약과 같은 칸으로 맞춰야 이긴 행을 놓치지 않는다.
+_FIND_DEFINITION = (
+    "SELECT id FROM prompt_fragment_definitions "
+    "WHERE backend = $1 AND agent_name = $2 AND fragment_name = $3 AND language = $4"
+)
 
 _INSERT_DEFINITION = (
     "INSERT INTO prompt_fragment_definitions "
     "(id, definition_key, agent_name, backend, language, fragment_name, code_name, created_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING RETURNING id"
 )
 
 _VERSION_COLUMNS = (
@@ -40,25 +44,19 @@ _INSERT_VERSION = (
     "INSERT INTO prompt_fragment_versions "
     "(id, definition_id, semantic_version, content, content_hash, placeholders, "
     "tool_contract_version, output_schema_version, origin, created_by, created_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING "
     f"RETURNING {_VERSION_COLUMNS}"
-)
-
-_FIND_BINDING = (
-    "SELECT id FROM prompt_fragment_bindings WHERE backend = $1 AND template_key = $2 AND fragment_slot = $3"
 )
 
 _INSERT_BINDING = (
     "INSERT INTO prompt_fragment_bindings "
     "(id, backend, template_key, fragment_slot, definition_id, code_default_version, created_at, updated_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $7)"
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $7) ON CONFLICT DO NOTHING"
 )
-
-_FIND_CHANNEL = "SELECT id FROM prompt_fragment_channels WHERE definition_id = $1 AND channel = $2"
 
 _INSERT_CHANNEL = (
     "INSERT INTO prompt_fragment_channels (id, definition_id, channel, version_id, updated_at) "
-    "VALUES ($1, $2, $3, $4, $5)"
+    "VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING"
 )
 
 _FIND_CHANNEL_VERSION = (
@@ -94,7 +92,9 @@ class PromptFragmentRegistration:
         return resolved
 
     async def _definition_id(self, entry: FragmentManifestEntry, now: datetime) -> str:
-        found = await self._sql.fetch(_FIND_DEFINITION, entry.backend, entry.definitionKey)
+        found = await self._sql.fetch(
+            _FIND_DEFINITION, entry.backend, entry.agentName, entry.fragmentName, entry.language
+        )
         if found:
             return str(found[0]["id"])
         created = await self._sql.fetch(
@@ -108,7 +108,15 @@ class PromptFragmentRegistration:
             entry.codeName,
             now,
         )
-        return str(created[0]["id"])
+        if created:
+            return str(created[0]["id"])
+        # 같은 조각을 동시에 올린 다른 워커가 먼저 심었으므로 그 행을 그대로 쓴다.
+        settled = await self._sql.fetch(
+            _FIND_DEFINITION, entry.backend, entry.agentName, entry.fragmentName, entry.language
+        )
+        if not settled:
+            raise LookupError(f"prompt fragment definition is unresolvable: {entry.definitionKey}")
+        return str(settled[0]["id"])
 
     async def _default_version(
         self, entry: FragmentManifestEntry, definition_id: str, now: datetime
@@ -130,15 +138,15 @@ class PromptFragmentRegistration:
             CODE_DEFAULT_AUTHOR,
             now,
         )
-        return created[0]
+        if created:
+            return created[0]
+        settled = await self._sql.fetch(_FIND_VERSION, definition_id, entry.defaultVersion)
+        if not settled:
+            raise LookupError(f"prompt fragment version is unresolvable: {entry.definitionKey}")
+        return settled[0]
 
     async def _bind(self, entry: FragmentManifestEntry, definition_id: str, now: datetime) -> None:
         for binding in entry.bindings:
-            found = await self._sql.fetch(
-                _FIND_BINDING, entry.backend, binding.templateKey, binding.fragmentSlot
-            )
-            if found:
-                continue
             await self._sql.fetch(
                 _INSERT_BINDING,
                 generate_ulid(now),
@@ -151,8 +159,6 @@ class PromptFragmentRegistration:
             )
 
     async def _seed_channel(self, definition_id: str, channel: str, version_id: str, now: datetime) -> None:
-        if await self._sql.fetch(_FIND_CHANNEL, definition_id, channel):
-            return
         await self._sql.fetch(_INSERT_CHANNEL, generate_ulid(now), definition_id, channel, version_id, now)
 
     async def _channel_version(self, definition_id: str, channel: str) -> SqlRow | None:

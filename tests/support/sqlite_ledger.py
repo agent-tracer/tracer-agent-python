@@ -195,6 +195,9 @@ CREATE TABLE prompt_fragment_definitions (
     created_at TEXT NOT NULL
 );
 
+CREATE UNIQUE INDEX prompt_fragment_definitions_scope
+    ON prompt_fragment_definitions (backend, agent_name, fragment_name, language);
+
 CREATE UNIQUE INDEX prompt_fragment_definitions_backend_key
     ON prompt_fragment_definitions (backend, definition_key);
 
