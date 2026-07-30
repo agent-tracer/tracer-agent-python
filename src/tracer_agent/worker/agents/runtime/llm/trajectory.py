@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import cast
 
@@ -13,6 +12,8 @@ from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepRole
 
 _CACHE_CREATION_SUBKEYS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 MAX_STEP_CONTENT_BYTES = 32_000
+# 궤적 화면이 이 값을 평문으로 그대로 보여주므로 블록 배열에서 이 종류만 이어 붙인다.
+_TEXT_BLOCK_TYPE = "text"
 _ROLE_BY_MESSAGE_TYPE: dict[str, AgentStepRole] = {
     "system": "system",
     "human": "user",
@@ -71,7 +72,7 @@ def message_identity(message: BaseMessage) -> tuple[str | None, str | None]:
 
 def message_step(message: BaseMessage, seq: int) -> AgentStepDTO:
     """모델 대화 메시지를 외부 응답의 실행 단계로 바꾼다."""
-    content, truncated = cap_step_content(_serialize_step_content(message.content))
+    content, truncated = cap_step_content(step_content_text(message.content))
     usage = extract_token_usage(message)
     tool_calls: list[AgentStepToolCall] = []
     if isinstance(message, AIMessage):
@@ -90,6 +91,27 @@ def message_step(message: BaseMessage, seq: int) -> AgentStepDTO:
         cacheCreationTokens=usage.cache_creation_tokens if usage else None,
         stopReason=(message.response_metadata.get("stop_reason") if isinstance(message, AIMessage) else None),
     )
+
+
+def step_content_text(content: object) -> str:
+    """모델이 낸 텍스트 자체를 실행 단계의 본문으로 만들며 도구 호출 블록은 싣지 않는다."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    texts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != _TEXT_BLOCK_TYPE:
+            continue
+        text = block.get("text")
+        if isinstance(text, str):
+            texts.append(text)
+    return "".join(texts)
+
+
+def step_carries_content(step: AgentStepDTO) -> bool:
+    """본문도 도구 호출도 없는 단계는 궤적에 자리를 차지하지 않는다."""
+    return bool(step.content.strip()) or bool(step.toolCalls)
 
 
 def cap_step_content(value: str) -> tuple[str, bool]:
@@ -120,9 +142,3 @@ def _to_step_tool_call(call: ToolCall) -> AgentStepToolCall:
         name=call["name"],
         args=dict(call.get("args") or {}),
     )
-
-
-def _serialize_step_content(content: object) -> str:
-    if isinstance(content, str):
-        return content
-    return json.dumps(content, ensure_ascii=False, default=str)

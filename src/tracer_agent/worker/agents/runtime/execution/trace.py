@@ -21,7 +21,13 @@ from tracer_agent.shared.agents.shared.models import (
 )
 from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedPromptTemplateHashDTO
 
-from ..llm.trajectory import cap_step_content, extract_token_usage, message_identity, message_step
+from ..llm.trajectory import (
+    cap_step_content,
+    extract_token_usage,
+    message_identity,
+    message_step,
+    step_carries_content,
+)
 
 ObservationStatus = Literal["succeeded", "failed", "cancelled"]
 
@@ -72,9 +78,12 @@ class ExecutionTrace:
         )
 
     def record_message(self, message: BaseMessage) -> None:
-        """모델 대화 메시지를 반환 가능한 실행 단계로 기록한다."""
+        """모델 대화 메시지를 반환 가능한 실행 단계로 기록하며 본문도 도구 호출도 없으면 버린다."""
         self._remember_identity(message)
-        self.steps.append(message_step(message, len(self.steps)))
+        step = message_step(message, len(self.steps))
+        if not step_carries_content(step):
+            return
+        self.steps.append(step)
 
     def record_graph_event(
         self,

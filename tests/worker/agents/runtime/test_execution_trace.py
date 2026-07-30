@@ -18,12 +18,13 @@ def _ai_with_usage(
     cache_creation: int = 0,
     cache_creation_subkeys: dict[str, int] | None = None,
     response_metadata: dict[str, object] | None = None,
+    content: str = "assistant turn",
 ) -> AIMessage:
     details: dict[str, int] = {"cache_read": cache_read, "cache_creation": cache_creation}
     if cache_creation_subkeys:
         details.update(cache_creation_subkeys)
     return AIMessage(
-        content="",
+        content=content,
         usage_metadata={
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
@@ -168,12 +169,12 @@ class TestRecordStep:
         assert step.truncated is False
         assert step.content == "short"
 
-    def test_문자열이_아닌_content는_json으로_직렬화된다(self) -> None:
+    def test_블록_배열_content는_텍스트만_이어_붙인다(self) -> None:
         acc = ExecutionTrace()
         acc.record_message(SystemMessage(content=[{"type": "text", "text": "hi"}]))
 
         step = acc.steps[0]
-        assert step.content == '[{"type": "text", "text": "hi"}]'
+        assert step.content == "hi"
         assert step.role == "system"
 
     def test_실제_응답_모델과_요청_식별자를_기록한다(self) -> None:
