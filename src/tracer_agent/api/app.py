@@ -97,6 +97,7 @@ from ..shared.workflows.jobs_query import (
 )
 from .credentials import SettingModelCredentials
 from .evaluation import run_evaluation
+from .surface import SURFACE_PATH, get_served_surface
 
 # 접수가 잡 종류의 카탈로그 값을 물을 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
 ENVELOPE_HTTP_TIMEOUT_S = 20.0
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
     application = FastAPI(title="tracer-agent", lifespan=lifespan)
     application.get("/health")(health)
     application.get("/health/ready")(readiness)
+    application.get(SURFACE_PATH)(get_served_surface)
     application.post("/v1/evaluation-runs")(run_evaluation)
     # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
     application.get(CHAT_THREADS_PATH)(list_chat_threads)
