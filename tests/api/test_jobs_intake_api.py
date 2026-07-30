@@ -16,7 +16,7 @@ from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
-PATH = "/api/v1/jobs"
+PATH = "/api/agent/jobs"
 JOB_FIELDS = conformance_case("job.intake")["response"]["jobFields"]
 
 

@@ -22,7 +22,7 @@ class Test누적_답변:
         seed_execution(store, "e1", draft_token_hash=DRAFT_TOKEN_HASH, attempt=1, status="running")
 
         res = client.post(
-            "/api/v1/chat/executions/e1/drafts",
+            "/api/agent/chat/executions/e1/drafts",
             json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 3, "text": "쌓이는 답변"},
         )
 
@@ -40,7 +40,7 @@ class Test누적_답변:
         )
 
         res = client.post(
-            "/api/v1/chat/executions/e1/drafts",
+            "/api/agent/chat/executions/e1/drafts",
             json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 4, "text": "뒤처진 답변"},
         )
 
@@ -52,7 +52,7 @@ class Test누적_답변:
         seed_execution(store, "e1", draft_token_hash=DRAFT_TOKEN_HASH, status="canceled")
 
         res = client.post(
-            "/api/v1/chat/executions/e1/drafts",
+            "/api/agent/chat/executions/e1/drafts",
             json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 1, "text": "늦은 답변"},
         )
 
@@ -63,7 +63,7 @@ class Test누적_답변:
         seed_execution(store, "e1", draft_token_hash="other")
 
         res = client.post(
-            "/api/v1/chat/executions/e1/drafts",
+            "/api/agent/chat/executions/e1/drafts",
             json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변"},
         )
 
@@ -72,7 +72,7 @@ class Test누적_답변:
 
     def test_없는_실행의_통지는_404다(self, client: TestClient) -> None:
         res = client.post(
-            "/api/v1/chat/executions/no-such/drafts",
+            "/api/agent/chat/executions/no-such/drafts",
             json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변"},
         )
 

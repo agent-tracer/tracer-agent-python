@@ -7,7 +7,7 @@ from urllib.parse import unquote
 
 import httpx
 
-MEMORIES_PATH = "/api/v1/chat/memories"
+MEMORIES_PATH = "/api/agent/chat/memories"
 
 
 def chat_confirmation_response(request: httpx.Request) -> httpx.Response:

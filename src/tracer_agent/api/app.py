@@ -129,7 +129,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.execution_watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
     application.state.chat_tool_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
     application.state.chat_tool_executor = HttpChatToolExecutor(
-        application.state.chat_tool_http, settings.tracer_api_url
+        application.state.chat_tool_http, settings.tracer_api_url, settings.agent_api_url
     )
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-MEMORIES = "/api/v1/chat/memories"
+MEMORIES = "/api/agent/chat/memories"
 
 
 class Test장기기억:

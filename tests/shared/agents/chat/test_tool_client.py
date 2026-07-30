@@ -14,11 +14,12 @@ from tracer_agent.shared.agents.chat.surface.tool_client import (
 )
 
 BASE_URL = "http://tracer-api.test"
+AGENT_BASE_URL = "http://agent-api.test"
 
 
 def _executor(handler: Any) -> tuple[HttpChatToolExecutor, httpx.AsyncClient]:
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    return HttpChatToolExecutor(client, BASE_URL), client
+    return HttpChatToolExecutor(client, BASE_URL, AGENT_BASE_URL), client
 
 
 async def test_경로에_실린_인자는_본문에_다시_싣지_않는다() -> None:
@@ -81,3 +82,17 @@ async def test_결과_문장은_봉투를_벗긴_본문을_인용한다() -> Non
         sentence = await executor.execute("local", "reevaluate_rule", {"ruleId": "rule-1"})
 
     assert sentence == "Reevaluated rule rule-1 over 2 event(s)."
+
+
+async def test_잡_접수는_에이전트_서비스_자신을_부른다() -> None:
+    seen: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.url.scheme}://{request.url.host}")
+        return httpx.Response(200, json={"ok": True, "data": {"job": {"id": "j1", "status": "queued"}}})
+
+    executor, client = _executor(handle)
+    async with client:
+        await executor.execute("local", "enqueue_job", {"kind": "title.suggestion", "input": "{}"})
+
+    assert seen == [AGENT_BASE_URL]

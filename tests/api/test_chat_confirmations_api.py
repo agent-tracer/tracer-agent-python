@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from tests.support.chat_surface import RecordingExecutor, seed_thread
 from tests.support.sqlite_ledger import SqliteLedgerSql
 
-THREADS = "/api/v1/chat/threads"
+THREADS = "/api/agent/chat/threads"
 
 
 class Test확인_대기:

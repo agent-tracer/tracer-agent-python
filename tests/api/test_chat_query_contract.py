@@ -32,8 +32,8 @@ from tracer_agent.shared.agents.chat.models import (
 from tracer_agent.shared.agents.chat.surface.stream import HEARTBEAT_S, SNAPSHOT_EVENT
 from tracer_agent.shared.agents.shared.models import AgentStepRole, GraphEventKind
 
-THREADS = "/api/v1/chat/threads"
-MEMORIES = "/api/v1/chat/memories"
+THREADS = "/api/agent/chat/threads"
+MEMORIES = "/api/agent/chat/memories"
 
 CASE = conformance_case("chat.query")
 SHAPES = CASE["shapes"]
@@ -143,47 +143,47 @@ class Test창구의_칸:
             assert list(value) == _shape_fields(notation)
 
     def test_스레드_목록이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("GET", "/api/v1/chat/threads")
+        self.window = ("GET", "/api/agent/chat/threads")
         self._assert_shape(self._data(client.get(THREADS)), WINDOWS[self.window]["data"])
 
     def test_스레드_개설이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("POST", "/api/v1/chat/threads")
+        self.window = ("POST", "/api/agent/chat/threads")
         data = self._data(client.post(THREADS, json={"title": "새 대화"}))
         self._assert_shape(data, WINDOWS[self.window]["data"])
 
     def test_스레드_상세가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("GET", "/api/v1/chat/threads/{threadId}")
+        self.window = ("GET", "/api/agent/chat/threads/{threadId}")
         self._assert_shape(self._data(client.get(f"{THREADS}/t1")), WINDOWS[self.window]["data"])
 
     def test_스레드_개명이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("PATCH", "/api/v1/chat/threads/{threadId}")
+        self.window = ("PATCH", "/api/agent/chat/threads/{threadId}")
         data = self._data(client.patch(f"{THREADS}/t1", json={"title": "고침"}))
         self._assert_shape(data, WINDOWS[self.window]["data"])
 
     def test_스레드_삭제가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("DELETE", "/api/v1/chat/threads/{threadId}")
+        self.window = ("DELETE", "/api/agent/chat/threads/{threadId}")
         self._assert_shape(self._data(client.delete(f"{THREADS}/t1")), WINDOWS[self.window]["data"])
 
     def test_메시지_목록이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("GET", "/api/v1/chat/threads/{threadId}/messages")
+        self.window = ("GET", "/api/agent/chat/threads/{threadId}/messages")
         data = self._data(client.get(f"{THREADS}/t1/messages"))
         self._assert_shape(data, WINDOWS[self.window]["data"])
 
     def test_실행_이력이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("GET", "/api/v1/chat/threads/{threadId}/executions")
+        self.window = ("GET", "/api/agent/chat/threads/{threadId}/executions")
         data = self._data(client.get(f"{THREADS}/t1/executions"))
         self._assert_shape(data, WINDOWS[self.window]["data"])
         assert len(data["items"][0]) == len(_shape_fields("execution")) == 17
 
     def test_되읽기가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("GET", "/api/v1/chat/threads/{threadId}/executions/{executionId}/replay")
+        self.window = ("GET", "/api/agent/chat/threads/{threadId}/executions/{executionId}/replay")
         data = self._data(client.get(f"{THREADS}/t1/executions/e1/replay"))
         self._assert_shape(data, WINDOWS[self.window]["data"])
         for fact in data["facts"]:
             assert list(fact) == _shape_fields("userFact")
 
     def test_확인_대기_세우기가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("POST", "/api/v1/chat/threads/{threadId}/confirmations")
+        self.window = ("POST", "/api/agent/chat/threads/{threadId}/confirmations")
         data = self._data(
             client.post(
                 f"{THREADS}/t1/confirmations",
@@ -194,15 +194,15 @@ class Test창구의_칸:
         assert data["status"] in CASE["enums"]["confirmationStatus"]
 
     def test_확인_해소가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("POST", "/api/v1/chat/threads/{threadId}/confirmations/{confirmationId}")
+        self.window = ("POST", "/api/agent/chat/threads/{threadId}/confirmations/{confirmationId}")
         data = self._data(client.post(f"{THREADS}/t1/confirmations/c1", json={"decision": "reject"}))
         self._assert_shape(data, WINDOWS[self.window]["data"])
 
     def test_누적_답변_통지가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("POST", "/api/v1/chat/executions/{executionId}/drafts")
+        self.window = ("POST", "/api/agent/chat/executions/{executionId}/drafts")
         data = self._data(
             client.post(
-                "/api/v1/chat/executions/e1/drafts",
+                "/api/agent/chat/executions/e1/drafts",
                 json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 1, "text": "쌓이는 답변"},
             )
         )
@@ -211,7 +211,7 @@ class Test창구의_칸:
     def test_턴_중단이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
         self.window = (
             "POST",
-            "/api/v1/chat/threads/{threadId}/executions/{executionId}/cancel",
+            "/api/agent/chat/threads/{threadId}/executions/{executionId}/cancel",
         )
         data = self._data(client.post(f"{THREADS}/t1/executions/e1/cancel"))
         self._assert_shape(data, WINDOWS[self.window]["data"])
@@ -365,7 +365,7 @@ class Test거절:
         rejection = next(one for one in CASE["rejections"] if one["status"] == 403)
 
         res = client.post(
-            "/api/v1/chat/executions/e1/drafts",
+            "/api/agent/chat/executions/e1/drafts",
             json={"token": "다른 토큰", "attempt": 1, "draftSeq": 1, "text": "답변"},
         )
 

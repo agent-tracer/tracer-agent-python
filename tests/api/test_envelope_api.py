@@ -134,7 +134,7 @@ def test_대화_봉투는_시도마다_다른_draft_자격을_낸다(client: Tes
     first = client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]["draft"]
     second = client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]["draft"]
 
-    assert first["url"] == "http://agent-api:8800/api/v1/chat/executions/e1/drafts"
+    assert first["url"] == "http://agent-api:8800/api/agent/chat/executions/e1/drafts"
     assert first["token"] != second["token"]
     assert first["tokenHash"] != first["token"]
 

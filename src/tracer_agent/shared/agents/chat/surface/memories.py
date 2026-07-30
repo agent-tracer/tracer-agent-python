@@ -15,7 +15,7 @@ from .ledger import ChatSurfaceLedger
 from .models import RememberFactBody
 from .views import memory_dto
 
-CHAT_MEMORIES_PATH = "/api/v1/chat/memories"
+CHAT_MEMORIES_PATH = "/api/agent/chat/memories"
 CHAT_MEMORY_PATH = f"{CHAT_MEMORIES_PATH}/{{key}}"
 
 REMEMBERED = "remembered"

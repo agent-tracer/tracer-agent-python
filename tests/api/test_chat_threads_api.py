@@ -16,7 +16,7 @@ from tests.support.chat_surface import (
 from tests.support.contract import conformance_case
 from tests.support.sqlite_ledger import SqliteLedgerSql
 
-THREADS = "/api/v1/chat/threads"
+THREADS = "/api/agent/chat/threads"
 
 _SHAPES = conformance_case("chat.query")["shapes"]
 THREAD_FIELDS = _SHAPES["thread"]["fields"]

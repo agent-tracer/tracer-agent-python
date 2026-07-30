@@ -8,7 +8,7 @@ from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
 
-DRAFT_PATH = "/api/v1/chat/executions/{execution_id}/drafts"
+DRAFT_PATH = "/api/agent/chat/executions/{execution_id}/drafts"
 
 
 def chat_envelope(

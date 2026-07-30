@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from tests.support.chat_surface import NOW, seed_execution, seed_pending_tool, seed_thread
 from tests.support.sqlite_ledger import SqliteLedgerSql
 
-THREADS = "/api/v1/chat/threads"
+THREADS = "/api/agent/chat/threads"
 
 
 def _frames(body: str) -> list[dict[str, object]]:

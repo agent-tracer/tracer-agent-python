@@ -16,7 +16,7 @@ from .dispatch import ExecutionDispatch
 from .models import PostMessagePayload, execution_dto, message_dto
 from .turn import ChatIntakeRejected, ChatTurnIntake
 
-CHAT_THREADS_PATH = "/api/v1/chat/threads"
+CHAT_THREADS_PATH = "/api/agent/chat/threads"
 CHAT_MESSAGES_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/messages"
 CHAT_CANCEL_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/executions/{{execution_id}}/cancel"
 ACCEPTED_STATUS = 202

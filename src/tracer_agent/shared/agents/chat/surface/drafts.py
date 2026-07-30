@@ -16,7 +16,7 @@ from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from .envelope import ok, read_payload
 from .models import DraftCheckpointBody
 
-CHAT_DRAFTS_PATH = "/api/v1/chat/executions/{execution_id}/drafts"
+CHAT_DRAFTS_PATH = "/api/agent/chat/executions/{execution_id}/drafts"
 
 EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
 TOKEN_REJECTED = (403, "forbidden", "Chat draft callback is not authorized")

@@ -15,7 +15,7 @@ from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.chat.intake.dispatch import UnwiredExecutionDispatch
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
-PATH = "/api/v1/chat/threads/t1/messages"
+PATH = "/api/agent/chat/threads/t1/messages"
 BODY: dict[str, Any] = {"clientRequestId": "r1", "content": "안녕"}
 
 
@@ -131,7 +131,7 @@ def test_에이전트_요청의_422는_그대로_남는다(client: TestClient) -
 def test_취소는_실행을_닫고_같은_봉투를_낸다(client: TestClient, store: SqliteLedgerSql) -> None:
     accepted = client.post(PATH, json=BODY).json()["data"]["execution"]
 
-    res = client.post(f"/api/v1/chat/threads/t1/executions/{accepted['id']}/cancel")
+    res = client.post(f"/api/agent/chat/threads/t1/executions/{accepted['id']}/cancel")
 
     assert res.status_code == 200
     assert res.json()["data"]["execution"]["status"] == "canceled"
@@ -142,7 +142,7 @@ def test_남의_실행은_취소도_404다(client: TestClient) -> None:
     accepted = client.post(PATH, json=BODY).json()["data"]["execution"]
 
     res = client.post(
-        f"/api/v1/chat/threads/t1/executions/{accepted['id']}/cancel",
+        f"/api/agent/chat/threads/t1/executions/{accepted['id']}/cancel",
         headers={"x-monitor-user": "u2"},
     )
 
@@ -151,7 +151,7 @@ def test_남의_실행은_취소도_404다(client: TestClient) -> None:
 
 
 def test_없는_실행의_취소는_404다(client: TestClient) -> None:
-    res = client.post("/api/v1/chat/threads/t1/executions/없는실행/cancel")
+    res = client.post("/api/agent/chat/threads/t1/executions/없는실행/cancel")
 
     assert res.status_code == 404
     assert res.json()["error"]["code"] == "not_found"

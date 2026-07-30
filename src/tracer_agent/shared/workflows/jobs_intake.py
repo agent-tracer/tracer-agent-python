@@ -19,7 +19,7 @@ from .jobs_ledger import JobLedger
 from .jobs_spec import AgentJobKind
 from .jobs_view import job_dto
 
-JOBS_PATH = "/api/v1/jobs"
+JOBS_PATH = "/api/agent/jobs"
 JOB_CANCEL_PATH = f"{JOBS_PATH}/{{execution_id}}/cancel"
 ACCEPTED_STATUS = 202
 MONITOR_USER_HEADER = "x-monitor-user"

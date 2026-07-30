@@ -17,7 +17,7 @@ from tracer_agent.shared.workflows.jobs_query import (
     JOB_STATUSES,
 )
 
-PATH = "/api/v1/jobs"
+PATH = "/api/agent/jobs"
 _RESPONSE = conformance_case("job.intake")["response"]
 JOB_FIELDS = _RESPONSE["jobFields"]
 REQUIRED_STEP_FIELDS = _RESPONSE["steps"]["required"]
