@@ -1,4 +1,4 @@
-"""브라우저의 잡 접수와 취소 요청을 tracer-api와 같은 경로와 봉투와 오류 형식으로 받는다."""
+"""브라우저의 잡 접수와 취소 요청을 계약이 정한 경로와 봉투와 오류 형식으로 받는다."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from .jobs_dispatch import TemporalJobDispatch
 from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR
 from .jobs_ledger import JobLedger
 from .jobs_spec import AgentJobKind
+from .jobs_view import job_dto
 
 JOBS_PATH = "/api/v1/jobs"
 JOB_CANCEL_PATH = f"{JOBS_PATH}/{{execution_id}}/cancel"
@@ -84,7 +85,7 @@ _INPUT_MODEL_BY_KIND: dict[AgentJobKind, type[BaseModel]] = {
 
 
 def _task_id(job_input: BaseModel) -> str | None:
-    """태스크에 매인 잡 종류만 원장 조회의 taskId 컬럼에 실을 값을 갖는다."""
+    """태스크에 매인 잡 종류만 원장의 task_id 칸에 실을 값을 갖는다."""
     if isinstance(job_input, RecipeScanJobInput | TitleSuggestionJobInput):
         return job_input.taskId
     return None
@@ -127,7 +128,7 @@ def _build_payload(
 
 
 class JobEnqueueBody(BaseModel):
-    """tracer-api의 잡 접수 본문과 같은 모양이며 브라우저는 백엔드마다 본문을 가르지 않는다."""
+    """계약이 정한 잡 접수 본문이며 브라우저는 백엔드마다 본문을 가르지 않는다."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -137,7 +138,7 @@ class JobEnqueueBody(BaseModel):
 
 
 async def enqueue_job(request: Request) -> JSONResponse:
-    """잡 하나를 접수하고 결과나 사유를 tracer-api와 같은 봉투로 낸다."""
+    """잡 하나를 접수하고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
     body = await _read_body(request)
     if body is None:
         return error_envelope(*INVALID_REQUEST)
@@ -166,7 +167,8 @@ async def enqueue_job(request: Request) -> JSONResponse:
         return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
-        await JobLedger(sql).claim(
+        ledger = JobLedger(sql)
+        await ledger.claim(
             execution_id,
             user_id,
             enqueue.kind,
@@ -176,38 +178,42 @@ async def enqueue_job(request: Request) -> JSONResponse:
             enqueue.input,
             now,
         )
+        row = await ledger.find(execution_id)
+    if row is None:
+        return error_envelope(*NOT_FOUND)
 
     dispatch: TemporalJobDispatch = request.app.state.job_dispatch
     payload = _build_payload(job_input, user_id, execution_id, enqueue.idempotencyKey)
     await dispatch.start(kind, execution_id, payload)
 
-    return JSONResponse(
-        status_code=ACCEPTED_STATUS,
-        content={"ok": True, "data": {"runId": execution_id, "executionId": execution_id}},
-    )
+    return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
 async def cancel_job(execution_id: str, request: Request) -> JSONResponse:
-    """도는 잡 실행 하나를 끊고 결과나 사유를 tracer-api와 같은 봉투로 낸다."""
+    """도는 잡 하나를 끊고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
+    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
-        row = await JobLedger(sql).find(execution_id)
-    if row is None:
-        return error_envelope(*NOT_FOUND)
+        ledger = JobLedger(sql)
+        row = await ledger.find(execution_id)
+        if row is None or row["user_id"] != user_id:
+            return error_envelope(*NOT_FOUND)
+        if await ledger.cancel(execution_id, datetime.now(UTC)):
+            row = await ledger.find(execution_id) or row
 
     dispatch: TemporalJobDispatch = request.app.state.job_dispatch
-    cancelled = await dispatch.cancel(AGENT_KIND_BY_WIRE[str(row["kind"])], execution_id)
-    return JSONResponse(status_code=200, content={"ok": True, "data": {"cancelled": cancelled}})
+    await dispatch.cancel(AGENT_KIND_BY_WIRE[str(row["kind"])], execution_id)
+    return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
 def resolve_user_id(header: str | None) -> str:
-    """자기신고 사용자 헤더가 비면 tracer-api와 같은 기본 사용자로 읽는다."""
+    """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
     trimmed = (header or "").strip()
     return trimmed if trimmed else DEFAULT_USER_ID
 
 
 def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
-    """실패 사유를 tracer-api의 전역 필터와 같은 오류 봉투로 적는다."""
+    """실패 사유를 계약이 정한 오류 봉투로 적는다."""
     error: dict[str, Any] = {"code": code, "message": message}
     if details is not None:
         error["details"] = details

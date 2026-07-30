@@ -1,4 +1,4 @@
-"""세 잡 에이전트를 잡 큐로 접수하고 대화 턴 접수와 취소를 tracer-api와 같은 표면으로 노출한다."""
+"""잡과 대화의 접수와 조회와 취소를, 그리고 배포 단위 사이의 내부 창구를 계약이 정한 표면으로 노출한다."""
 
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutio
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_intake import JOB_CANCEL_PATH, JOBS_PATH, cancel_job, enqueue_job
+from ..shared.workflows.jobs_query import JOB_PATH, JOB_STEPS_PATH, get_job, get_job_steps
 from .credentials import SettingModelCredentials
 from .evaluation import run_evaluation
 
@@ -99,11 +100,13 @@ def create_app() -> FastAPI:
     application = FastAPI(title="tracer-agent", lifespan=lifespan)
     application.get("/health")(health)
     application.post("/v1/evaluation-runs")(run_evaluation)
-    # 브라우저가 백엔드마다 다른 경로를 치지 않도록 tracer-api와 같은 경로로 접수와 취소를 연다.
+    # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
     application.post(CHAT_MESSAGES_PATH, status_code=ACCEPTED_STATUS)(enqueue_chat_turn)
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)
+    application.get(JOB_PATH)(get_job)
+    application.get(JOB_STEPS_PATH)(get_job_steps)
     application.get(SETTINGS_PATH)(list_settings)
     application.get(SETTING_MODELS_PATH)(list_setting_models)
     application.put(SETTING_PATH)(put_setting)

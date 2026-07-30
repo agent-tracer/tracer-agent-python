@@ -10,12 +10,14 @@ import pytest
 from fastapi.testclient import TestClient
 from temporalio.exceptions import ApplicationError
 
+from tests.support.contract import conformance_case
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
 PATH = "/api/v1/jobs"
+JOB_FIELDS = conformance_case("job.intake")["response"]["jobFields"]
 
 
 class SingleSql:
@@ -96,7 +98,7 @@ def client(
         yield test_client
 
 
-def test_recipe_scan_접수는_202와_실행_식별자를_낸다(
+def test_recipe_scan_접수는_202와_원장_행을_낸다(
     client: TestClient, dispatch: FakeJobDispatch, store: SqliteLedgerSql
 ) -> None:
     res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
@@ -104,10 +106,19 @@ def test_recipe_scan_접수는_202와_실행_식별자를_낸다(
     assert res.status_code == 202
     body = res.json()
     assert body["ok"] is True
-    assert body["data"]["runId"]
+    job = body["data"]["job"]
+    assert list(job) == JOB_FIELDS
+    assert job["kind"] == "recipe.scan"
+    assert job["executor"] == "temporal"
+    assert job["status"] == "pending"
+    assert job["attempts"] == 0
+    assert job["input"] == {"taskId": "task-1"}
+    assert job["result"] == {} and job["usage"] == {}
+    assert job["startedAt"] is None and job["completedAt"] is None
+    assert job["createdAt"].endswith("Z")
     kind, key, payload = dispatch.started[0]
     assert kind == "recipe-scan"
-    assert key == body["data"]["runId"]
+    assert key == job["id"]
     assert payload["taskId"] == "task-1"
     assert payload["userId"] == "local"
     assert "apiKey" not in payload
@@ -134,7 +145,7 @@ def test_idempotencyKey가_있으면_실행_식별자로_쓰인다(client: TestC
         json={"kind": "recipe.scan", "input": {"taskId": "task-1"}, "idempotencyKey": "idem-1"},
     )
 
-    assert res.json()["data"]["runId"] == "idem-1"
+    assert res.json()["data"]["job"]["id"] == "idem-1"
     _kind, key, _payload = dispatch.started[0]
     assert key == "idem-1"
 
@@ -193,12 +204,15 @@ def test_취소는_원장의_잡_종류로_워크플로_취소를_요청한다(
     client: TestClient, dispatch: FakeJobDispatch
 ) -> None:
     accepted = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}}).json()
-    run_id = accepted["data"]["runId"]
+    run_id = accepted["data"]["job"]["id"]
 
     res = client.post(f"{PATH}/{run_id}/cancel")
 
     assert res.status_code == 200
-    assert res.json() == {"ok": True, "data": {"cancelled": True}}
+    job = res.json()["data"]["job"]
+    assert list(job) == JOB_FIELDS
+    assert job["status"] == "canceled"
+    assert job["completedAt"] is not None
     assert dispatch.cancelled == [("recipe-scan", run_id)]
 
 
