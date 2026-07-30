@@ -61,7 +61,7 @@ async def test_쓰기_도구가_실행_대신_확인_창구에_대기_행을_세
         payload = json.loads(await _tool(client, proposals).coroutine(taskId="task-1"))
 
     assert seen[0].method == "POST"
-    assert str(seen[0].url) == f"{_BASE_URL}/api/v1/chat/threads/thread-1/confirmations"
+    assert str(seen[0].url) == f"{_BASE_URL}/api/agent/chat/threads/thread-1/confirmations"
     # 사용자 범위는 도구 인자가 아니라 진입점을 만들 때 묶인 자격이 정한다.
     assert seen[0].headers["authorization"] == "Bearer scope-token"
     assert json.loads(seen[0].content) == {"toolName": "archive_task", "args": {"taskId": "task-1"}}
@@ -124,7 +124,7 @@ async def test_기억_도구가_부른_자리에서_기억_API에_즉시_적재�
         )
 
     assert seen[0].method == "PUT"
-    assert str(seen[0].url) == f"{_BASE_URL}/api/v1/chat/memories/lang"
+    assert str(seen[0].url) == f"{_BASE_URL}/api/agent/chat/memories/lang"
     # 사용자 범위는 도구 인자가 아니라 진입점을 만들 때 묶인 자격이 정한다.
     assert seen[0].headers["authorization"] == "Bearer scope-token"
     assert json.loads(seen[0].content) == {"content": "한국어를 쓴다"}

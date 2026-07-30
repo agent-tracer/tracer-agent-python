@@ -21,7 +21,7 @@ DATA: dict[str, Any] = {
     "readApiBaseUrl": BASE_URL,
     "scopeToken": "ms1.x.y",
     "toolDescriptions": {"get_timeline": "설명"},
-    "draft": {"url": f"{BASE_URL}/api/v1/chat/executions/e1/drafts", "token": "tok", "tokenHash": "h"},
+    "draft": {"url": f"{BASE_URL}/api/agent/chat/executions/e1/drafts", "token": "tok", "tokenHash": "h"},
 }
 
 

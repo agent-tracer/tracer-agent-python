@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BI
 from .reader import scoped_headers, unwrap_envelope
 
 # 승인 대기 행을 세우는 창구이며 도구가 부를 API 자체는 승인된 뒤에 서버가 부른다.
-CONFIRMATIONS_PATH = "/api/v1/chat/threads/{threadId}/confirmations"
+CONFIRMATIONS_PATH = "/api/agent/chat/threads/{threadId}/confirmations"
 
 
 @dataclass(frozen=True)

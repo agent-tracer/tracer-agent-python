@@ -5,6 +5,7 @@ from __future__ import annotations
 from .arg_descriptions import ARG_DESCRIPTIONS
 from .registry import TOOL_FAILED, ChatToolRegistry, build_chat_registry
 from .specs import (
+    AGENT_READ_TOOL_NAMES,
     ARGS_MODELS,
     MEMORY_TOOL_NAMES,
     READ_TOOL_NAMES,
@@ -16,6 +17,7 @@ from .specs import (
 )
 
 __all__ = [
+    "AGENT_READ_TOOL_NAMES",
     "ARGS_MODELS",
     "ARG_DESCRIPTIONS",
     "MEMORY_TOOL_NAMES",

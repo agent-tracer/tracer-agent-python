@@ -31,7 +31,7 @@ def _request(**overrides: Any) -> ChatRequest:
         "messages": [{"role": "user", "content": "task-1 아카이브해줘"}],
         "agentApiBaseUrl": "http://agent-api.test",
         "draftCallback": {
-            "url": "http://agent-api.test/api/v1/chat/executions/execution-1/drafts",
+            "url": "http://agent-api.test/api/agent/chat/executions/execution-1/drafts",
             "token": "grant",
             "attempt": 2,
         },

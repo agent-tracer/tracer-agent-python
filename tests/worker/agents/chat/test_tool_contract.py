@@ -6,6 +6,7 @@ from typing import Any
 
 from tests.support.contract import agent_spec
 from tracer_agent.worker.agents.chat.tools import (
+    AGENT_READ_TOOL_NAMES,
     ARG_DESCRIPTIONS,
     MEMORY_TOOL_NAMES,
     READ_TOOL_NAMES,
@@ -56,8 +57,9 @@ def test_mutation_분할이_계약과_같다() -> None:
     mutation = {name for name, spec in tools.items() if spec["mutation"]}
 
     assert set(WRITE_TOOL_NAMES) == mutation
-    assert set(READ_TOOL_NAMES) | set(MEMORY_TOOL_NAMES) == set(tools) - mutation
+    assert set(READ_TOOL_NAMES) | set(AGENT_READ_TOOL_NAMES) | set(MEMORY_TOOL_NAMES) == set(tools) - mutation
     assert set(MEMORY_TOOL_NAMES) == {"recall_facts", "remember_fact"}
+    assert set(AGENT_READ_TOOL_NAMES) == {"get_job"}
 
 
 def test_각_도구의_인자_명세가_계약과_바이트로_같다() -> None:

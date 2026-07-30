@@ -13,7 +13,7 @@ from tracer_agent.shared.agents.chat.models import ChatFact, ChatHistoryMessage,
 from .reader import USER_HEADER, unwrap_envelope
 
 # 이번 턴이 되돌려 줄 이력을 서버가 계산해 주는 자리이며, 창 자르기도 도구 호출 짝 맞추기도 서버가 한다.
-REPLAY_PATH = "/api/v1/chat/threads/{threadId}/executions/{executionId}/replay"
+REPLAY_PATH = "/api/agent/chat/threads/{threadId}/executions/{executionId}/replay"
 
 
 class ChatContextReader:

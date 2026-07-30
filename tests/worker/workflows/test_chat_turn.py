@@ -22,7 +22,7 @@ ENVELOPE: dict[str, Any] = {
     "readApiBaseUrl": READ_API,
     "scopeToken": "ms1.scope",
     "toolDescriptions": {"get_timeline": "설명"},
-    "draftCallback": {"url": f"{READ_API}/api/v1/chat/executions/e1/drafts", "token": "tok", "attempt": 1},
+    "draftCallback": {"url": f"{READ_API}/api/agent/chat/executions/e1/drafts", "token": "tok", "attempt": 1},
 }
 
 PREPARED = PreparedChatExecution("e1", "t1", "u1", "ko", "claude-opus-5")

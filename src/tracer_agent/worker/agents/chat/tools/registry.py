@@ -23,7 +23,7 @@ from ..store import (
     ChatMemoryUnavailable,
 )
 from ..writer import ChatWriteClient
-from .specs import ARGS_MODELS, MEMORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES
+from .specs import AGENT_READ_TOOL_NAMES, ARGS_MODELS, MEMORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES
 
 # 도구가 무너졌을 때 모델이 읽는 문구이며 계약이 문장을 소유한다.
 TOOL_FAILED = (
@@ -63,11 +63,13 @@ def build_chat_registry(
     *,
     agent_name: str,
     write_client: ChatWriteClient | None = None,
+    agent_read_client: ChatReadClient | None = None,
 ) -> ChatToolRegistry:
     """읽기·확인 진입점과 제안 장부를 쥔 chat 도구 레지스트리를 만든다."""
     _assert_memory_names()
     tools: list[BaseTool] = [
         *(_read_tool(name, read_client, descriptions, agent_name) for name in READ_TOOL_NAMES),
+        *(_read_tool(name, agent_read_client, descriptions, agent_name) for name in AGENT_READ_TOOL_NAMES),
         *(
             _proposal_tool(name, write_client, proposals, descriptions, agent_name)
             for name in WRITE_TOOL_NAMES

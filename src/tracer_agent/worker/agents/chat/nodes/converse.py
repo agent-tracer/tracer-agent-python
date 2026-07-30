@@ -129,6 +129,7 @@ class ConverseNode(GraphNode):
             self._req.toolDescriptions,
             agent_name=self._agent_name,
             write_client=self._write_client(),
+            agent_read_client=self._agent_read_client(),
         )
         agent = build_chat_agent(
             self._chat,
@@ -200,6 +201,17 @@ class ConverseNode(GraphNode):
         return ChatReadClient(
             self._http_client,
             self._req.readApiBaseUrl,
+            self._req.userId,
+            self._req.scopeToken or None,
+        )
+
+    def _agent_read_client(self) -> ChatReadClient | None:
+        # 잡 창구처럼 원장이 에이전트 서비스에 있는 읽기 도구는 추적이 아니라 이 기점을 부른다.
+        if not self._req.agentApiBaseUrl:
+            return None
+        return ChatReadClient(
+            self._http_client,
+            self._req.agentApiBaseUrl,
             self._req.userId,
             self._req.scopeToken or None,
         )

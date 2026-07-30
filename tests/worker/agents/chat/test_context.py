@@ -54,7 +54,7 @@ async def test_문맥을_실행_식별자_하나로_재생_API에서_읽는다()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         messages, summary, facts = await _reader(client).load()
 
-    assert seen[0].url.path == "/api/v1/chat/threads/thread-1/executions/execution-1/replay"
+    assert seen[0].url.path == "/api/agent/chat/threads/thread-1/executions/execution-1/replay"
     assert seen[0].headers["authorization"] == "Bearer scope-1"
     assert seen[0].headers["x-monitor-user"] == "user-1"
     assert [message.content for message in messages] == ["이번 질문"]

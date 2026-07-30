@@ -225,7 +225,7 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
         await execute("chat", req.model, req.deadlineMs, lambda usage: chat_mod.run_chat(req, client, usage))
 
     hosts = dict(reversed([(path, host) for host, path in seen]))
-    assert hosts["/api/v1/chat/threads/thread-1/executions/execution-1/replay"] == "agent-api.test"
-    assert hosts["/api/v1/chat/threads/thread-1/confirmations"] == "agent-api.test"
-    assert hosts["/api/v1/chat/memories"] == "agent-api.test"
+    assert hosts["/api/agent/chat/threads/thread-1/executions/execution-1/replay"] == "agent-api.test"
+    assert hosts["/api/agent/chat/threads/thread-1/confirmations"] == "agent-api.test"
+    assert hosts["/api/agent/chat/memories"] == "agent-api.test"
     assert hosts["/api/v1/tasks/task-1"] == "tracer-api.test"

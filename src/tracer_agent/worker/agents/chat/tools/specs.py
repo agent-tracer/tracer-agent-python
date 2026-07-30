@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, create_model
 
+from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from .arg_descriptions import ARG_DESCRIPTIONS
@@ -128,8 +129,23 @@ TOOL_SPECS: dict[str, ToolSpec] = {
 }
 
 MEMORY_TOOL_NAMES: tuple[str, ...] = ("recall_facts", "remember_fact")
+
+
+def _is_agent_owned(name: str) -> bool:
+    """도구가 부르는 경로가 추적이 아니라 에이전트 서비스 자신의 것인지를 가른다."""
+    return TOOL_BINDINGS[name].path.startswith("/api/agent/")
+
+
 READ_TOOL_NAMES: tuple[str, ...] = tuple(
-    name for name, spec in TOOL_SPECS.items() if not spec.mutation and name not in MEMORY_TOOL_NAMES
+    name
+    for name, spec in TOOL_SPECS.items()
+    if not spec.mutation and name not in MEMORY_TOOL_NAMES and not _is_agent_owned(name)
+)
+# 게이트 없이 되읽되 원장이 에이전트 서비스에 있어 기점이 다른 도구 이름이다.
+AGENT_READ_TOOL_NAMES: tuple[str, ...] = tuple(
+    name
+    for name, spec in TOOL_SPECS.items()
+    if not spec.mutation and name not in MEMORY_TOOL_NAMES and _is_agent_owned(name)
 )
 WRITE_TOOL_NAMES: tuple[str, ...] = tuple(name for name, spec in TOOL_SPECS.items() if spec.mutation)
 
