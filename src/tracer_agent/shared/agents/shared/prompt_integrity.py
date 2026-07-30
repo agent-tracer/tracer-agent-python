@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,11 +56,14 @@ class ResolvedFragmentsIntegrityDTO(BaseModel):
         return self
 
 
-class LegacyPromptIntegrityDTO(BaseModel):
-    """DB override 없이 full prompt 전체를 검증하는 모드다."""
+class FullPromptIntegrityDTO(BaseModel):
+    """조각으로 나뉘지 않은 프롬프트 전체를 그대로 검증하는 모드다."""
 
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["legacy-full-prompt"]
+    mode: Literal["full-prompt"]
 
 
-PromptIntegrityDTO = LegacyPromptIntegrityDTO | ResolvedFragmentsIntegrityDTO
+PromptIntegrityDTO = FullPromptIntegrityDTO | ResolvedFragmentsIntegrityDTO
+
+# 봉투의 promptIntegrity.mode 로 오가는 값이며 이름은 계약의 조각 무결성 선언이 소유한다.
+PROMPT_INTEGRITY_MODES: Final = frozenset({"full-prompt", "resolved-fragments"})

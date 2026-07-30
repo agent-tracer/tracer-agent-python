@@ -17,7 +17,7 @@ def resolve_execution_prompt_bundle(
     build: Callable[[ResolvedFragmentSnapshot | None], dict[str, str]],
     template_names: Mapping[str, str],
 ) -> tuple[dict[str, str], ResolvedFragmentsIntegrityDTO | None]:
-    """명시 override를 우선하고 legacy 실행에서 startup DB override를 조용히 쓰지 않는다."""
+    """봉투가 실은 조각을 우선하고 full-prompt 실행에서 startup DB override를 조용히 쓰지 않는다."""
     integrity = request.promptIntegrity
     if isinstance(integrity, ResolvedFragmentsIntegrityDTO):
         snapshot = integrity_snapshot(integrity)
