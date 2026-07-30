@@ -20,7 +20,7 @@ from ...shared.agents.task_cleanup.models import TaskCleanupRequest
 from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource
 from ...shared.workflows.jobs_kinds import wire_kind
-from ...shared.workflows.jobs_ledger import GraphJobLedger
+from ...shared.workflows.jobs_ledger import JobLedger
 from ...shared.workflows.jobs_spec import (
     JOB_HEARTBEAT_INTERVAL_S,
     RUN_AGENT_JOB_ACTIVITY,
@@ -40,7 +40,8 @@ from ..agents.task_cleanup.reader import load_cleanup_batch
 from ..agents.title_suggestion.agent import run_title_suggestion
 from ..agents.title_suggestion.prompts import PROMPT_VERSION as TITLE_PROMPT_VERSION
 from ..agents.title_suggestion.reader import load_title_context
-from .jobs_writer import GraphJobExecutionWriter
+from .jobs_outcome import job_usage, status_and_error
+from .jobs_writer import JobExecutionWriter, JobOutcome
 
 JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
 
@@ -85,16 +86,14 @@ class AgentJobActivities:
         if not isinstance(execution_id, str) or not execution_id:
             return
         async with self._execution_sql.connect() as sql:
-            await GraphJobLedger(sql).settle(
-                execution_id, "failed", None, str(error)[:2000], datetime.now(UTC)
-            )
+            await JobLedger(sql).settle(execution_id, "failed", {}, {}, str(error)[:2000], datetime.now(UTC))
 
     @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
     async def settle_canceled(self, execution_id: str) -> None:
         """실행 액티비티가 못 돈 취소를 원장에서 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
         async with self._execution_sql.connect() as sql:
-            await GraphJobLedger(sql).settle(
-                execution_id, "canceled", None, "canceled before execution started", datetime.now(UTC)
+            await JobLedger(sql).settle(
+                execution_id, "canceled", {}, {}, "canceled before execution started", datetime.now(UTC)
             )
 
     async def _dispatch(self, kind: AgentJobKind, payload: dict[str, Any]) -> None:
@@ -142,7 +141,7 @@ class AgentJobActivities:
         await self._run_and_deliver(kind, recipe_req, recipe_body, RECIPE_PROMPT_VERSION)
 
     async def _resolve_payload(self, request: AgentJobRequest) -> dict[str, Any]:
-        """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 tracer-api에서 자격을 당겨온다."""
+        """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 당겨온다."""
         if _has_credentials(request.payload):
             return request.payload
         if self._envelopes is None:
@@ -204,31 +203,37 @@ class AgentJobActivities:
 
         if req.executionId is not None:
             async with self._execution_sql.connect() as sql:
-                await GraphJobLedger(sql).mark_running(req.executionId, datetime.now(UTC))
+                await JobLedger(sql).mark_running(req.executionId, datetime.now(UTC))
 
         async def settle(response: AgentResponse) -> None:
             if req.executionId is None:
                 return
-            status, error = _status_and_error(response)
+            status, error = status_and_error(response)
             cost_usd = ModelRates(req.modelRates).estimate_cost_usd(
                 response.actualModel or response.modelUsed, response.usage
             )
-            observation = (
-                response.observation.model_dump(mode="json") if response.observation is not None else None
+            outcome = JobOutcome(
+                job_id=req.executionId,
+                user_id=req.userId,
+                status=status,
+                attempt=_attempt(req.attemptId),
+                result=response.data or {},
+                usage=job_usage(response, cost_usd),
+                error=error,
+                steps=response.steps,
+                observation=(
+                    None if response.observation is None else response.observation.model_dump(mode="json")
+                ),
             )
             async with self._execution_sql.connect() as sql:
-                await GraphJobExecutionWriter(sql).finalize(
-                    req.executionId,
-                    req.userId,
-                    status,
-                    cost_usd,
-                    error,
-                    observation,
-                    datetime.now(UTC),
-                    response.data,
-                )
+                await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
 
         await run_and_deliver(self._http, req.completionCallback, run_once, settle)
+
+
+def _attempt(attempt_id: str | None) -> int:
+    """궤적의 시도 회차이며 요청이 회차를 싣지 않으면 첫 시도로 본다."""
+    return int(attempt_id) if attempt_id is not None and attempt_id.isdigit() else 1
 
 
 def _has_credentials(payload: dict[str, Any]) -> bool:
@@ -250,12 +255,3 @@ async def _heartbeat() -> None:
 def _fragment_snapshot(fragment: ResolvedPromptFragmentDTO) -> PromptFragmentSnapshotDTO:
     payload = fragment.model_dump(mode="python", exclude={"content", "codeName", "backend", "language"})
     return PromptFragmentSnapshotDTO.model_validate(payload)
-
-
-def _status_and_error(response: AgentResponse) -> tuple[str, str | None]:
-    """응답의 오류 유무와 서브타입만으로 원장이 쓸 종료 상태를 가른다."""
-    if response.error is None:
-        return "completed", None
-    if response.error.subtype == "cancelled":
-        return "canceled", response.error.summary
-    return "failed", response.error.summary

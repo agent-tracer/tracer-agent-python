@@ -16,7 +16,9 @@ from tracer_agent.shared.agents.runtime.ledger import SqlRow, UniqueViolation
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 
 TIMESTAMP_COLUMNS = frozenset({"created_at", "updated_at", "started_at", "completed_at"})
-JSON_COLUMNS = frozenset({"usage", "tool_calls", "validation", "model_calls", "result", "placeholders"})
+JSON_COLUMNS = frozenset(
+    {"usage", "tool_calls", "validation", "model_calls", "input", "result", "placeholders"}
+)
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
 
@@ -109,25 +111,56 @@ CREATE TABLE chat_execution_steps (
 CREATE UNIQUE INDEX chat_execution_steps_execution_attempt_seq
     ON chat_execution_steps (execution_id, attempt, seq);
 
-CREATE TABLE graph_job_executions (
+CREATE TABLE ai_jobs (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     kind TEXT NOT NULL,
-    idempotency_key TEXT,
-    task_id TEXT,
+    executor TEXT NOT NULL,
     status TEXT NOT NULL,
-    budget_usd REAL NOT NULL,
-    cost_usd REAL,
-    result TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    task_id TEXT,
+    idempotency_key TEXT,
+    idempotency_input_hash TEXT,
+    input TEXT NOT NULL DEFAULT '{}',
+    result TEXT NOT NULL DEFAULT '{}',
+    usage TEXT NOT NULL DEFAULT '{}',
     error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     started_at TEXT,
-    completed_at TEXT
+    completed_at TEXT,
+    lease_owner TEXT,
+    lease_expires_at TEXT
 );
 
-CREATE UNIQUE INDEX graph_job_executions_idempotency
-    ON graph_job_executions (kind, idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE UNIQUE INDEX ai_jobs_idempotency_key
+    ON ai_jobs (user_id, kind, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+CREATE TABLE ai_job_steps (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 1,
+    seq INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    truncated INTEGER NOT NULL DEFAULT 0,
+    tool_calls TEXT,
+    tool_name TEXT,
+    tool_call_id TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cache_read_tokens INTEGER,
+    cache_creation_tokens INTEGER,
+    stop_reason TEXT,
+    node_name TEXT,
+    event_kind TEXT,
+    duration_ms INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX ai_job_steps_job_attempt_seq
+    ON ai_job_steps (job_id, attempt, seq);
 
 CREATE TABLE prompt_fragment_definitions (
     id TEXT PRIMARY KEY,

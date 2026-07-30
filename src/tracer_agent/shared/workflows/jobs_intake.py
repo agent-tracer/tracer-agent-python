@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -14,8 +14,8 @@ from temporalio.exceptions import ApplicationError
 
 from ..agents.runtime.ledger import SqlSource
 from .jobs_dispatch import TemporalJobDispatch
-from .jobs_kinds import AGENT_KIND_BY_WIRE
-from .jobs_ledger import GraphJobLedger
+from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR
+from .jobs_ledger import JobLedger
 from .jobs_spec import AgentJobKind
 
 JOBS_PATH = "/api/v1/jobs"
@@ -160,18 +160,20 @@ async def enqueue_job(request: Request) -> JSONResponse:
 
     envelopes = request.app.state.job_envelopes
     try:
-        envelope = await envelopes.issue(enqueue.kind, user_id)
+        # 접수는 이 사용자의 자격과 카탈로그가 실제로 발급되는지를 봉투로 확인한다.
+        await envelopes.issue(enqueue.kind, user_id)
     except ApplicationError as unavailable:
         return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
-        await GraphJobLedger(sql).claim(
+        await JobLedger(sql).claim(
             execution_id,
             user_id,
-            kind,
-            enqueue.idempotencyKey,
+            enqueue.kind,
+            JOB_EXECUTOR,
             _task_id(job_input),
-            envelope.limits["budgetUsd"],
+            enqueue.idempotencyKey,
+            enqueue.input,
             now,
         )
 
@@ -189,13 +191,12 @@ async def cancel_job(execution_id: str, request: Request) -> JSONResponse:
     """도는 잡 실행 하나를 끊고 결과나 사유를 tracer-api와 같은 봉투로 낸다."""
     source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
-        kind = await GraphJobLedger(sql).find_kind(execution_id)
-    if kind is None:
+        row = await JobLedger(sql).find(execution_id)
+    if row is None:
         return error_envelope(*NOT_FOUND)
 
     dispatch: TemporalJobDispatch = request.app.state.job_dispatch
-    # 원장에 스스로 적은 값이라 이 서비스가 아는 잡 종류로 좁혀도 안전하다.
-    cancelled = await dispatch.cancel(cast(AgentJobKind, kind), execution_id)
+    cancelled = await dispatch.cancel(AGENT_KIND_BY_WIRE[str(row["kind"])], execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"cancelled": cancelled}})
 
 

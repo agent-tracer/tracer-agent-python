@@ -1,4 +1,4 @@
-"""이번 시도가 쓸 모델과 자격과 단가와 한도를 tracer-api에서 잡 종류와 사용자로 받아 실행 봉투로 옮긴다."""
+"""이번 시도가 쓸 모델과 자격과 단가와 한도를 잡 종류와 사용자로 받아 실행 봉투로 옮긴다."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class JobEnvelopeSource(Protocol):
 
 
 class JobEnvelopeClient:
-    """잡 종류와 사용자로 실행 시도 하나가 쓸 봉투를 만들어 주는 tracer-api 창구다."""
+    """잡 종류와 사용자로 실행 시도 하나가 쓸 봉투를 만들어 주는 agent-api 창구다."""
 
     def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
         self._client = client

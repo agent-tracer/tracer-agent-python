@@ -111,9 +111,11 @@ def test_recipe_scan_접수는_202와_실행_식별자를_낸다(
     assert payload["taskId"] == "task-1"
     assert payload["userId"] == "local"
     assert "apiKey" not in payload
-    row = store.rows("graph_job_executions")[0]
-    assert row["status"] == "queued"
-    assert row["budget_usd"] == 2.0
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "pending"
+    assert row["kind"] == "recipe.scan"
+    assert row["executor"] == "temporal"
+    assert row["input"] == {"taskId": "task-1"}
     assert row["task_id"] == "task-1"
 
 
@@ -163,7 +165,7 @@ def test_task_cleanup_접수는_202와_실행_식별자를_낸다(
     assert payload["maxSuggestions"] == 20
     assert "batch" not in payload
     # 사용자 전체를 훑는 잡이라 태스크에 매이지 않는다.
-    assert store.rows("graph_job_executions")[0]["task_id"] is None
+    assert store.rows("ai_jobs")[0]["task_id"] is None
 
 
 def test_task_cleanup_접수는_maxSuggestions를_받는다(client: TestClient, dispatch: FakeJobDispatch) -> None:

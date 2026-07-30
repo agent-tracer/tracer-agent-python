@@ -14,7 +14,7 @@ from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeLedger, FakeS
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
-from tracer_agent.shared.workflows.jobs_ledger import GraphJobLedger
+from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
@@ -76,6 +76,11 @@ class FakeEnvelopeSource:
             model_rates=WIRE_MODEL_RATES,
             limits=WIRE_LIMITS,
         )
+
+
+async def claim(store: SqliteLedgerSql, job_id: str) -> None:
+    """액티비티가 전진시킬 대기 행 하나를 세운다."""
+    await JobLedger(store).claim(job_id, "user-1", "title.suggestion", "temporal", None, None, {}, NOW)
 
 
 @pytest.fixture
@@ -155,7 +160,7 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
 ) -> None:
     monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
     execution_sql = SqliteLedgerSql()
-    await GraphJobLedger(execution_sql).claim("e1", "user-1", "title-suggestion", None, None, 2.0, NOW)
+    await claim(execution_sql, "e1")
     activities = AgentJobActivities(  # type: ignore[arg-type]
         FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
     )
@@ -175,10 +180,11 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
 
     await activities.run(AgentJobRequest("title-suggestion", payload))
 
-    row = execution_sql.rows("graph_job_executions")[0]
+    row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "completed"
-    assert row["cost_usd"] is not None
+    assert row["usage"]["costUsd"] is not None
     assert row["result"] == {"suggestions": []}
+    assert execution_sql.rows("ai_job_steps")[0]["attempt"] == 1
     assert execution_sql.rows("agent_run_observations")[0]["execution_id"] == "e1"
     execution_sql.close()
 
@@ -189,7 +195,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
     monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
     envelopes = FakeEnvelopeSource()
     execution_sql = SqliteLedgerSql()
-    await GraphJobLedger(execution_sql).claim("e2", "user-1", "title-suggestion", None, None, 2.0, NOW)
+    await claim(execution_sql, "e2")
     activities = AgentJobActivities(  # type: ignore[arg-type]
         FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql), envelopes=envelopes
     )
@@ -222,21 +228,21 @@ async def test_실행_액티비티가_돌기_전에_취소되면_원장이_취�
     http: CapturingCompletionClient,
 ) -> None:
     execution_sql = SqliteLedgerSql()
-    await GraphJobLedger(execution_sql).claim("e3", "user-1", "title-suggestion", None, None, 2.0, NOW)
+    await claim(execution_sql, "e3")
     activities = AgentJobActivities(  # type: ignore[arg-type]
         FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
     )
 
     await activities.settle_canceled("e3")
 
-    row = execution_sql.rows("graph_job_executions")[0]
+    row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "canceled"
     execution_sql.close()
 
 
 async def test_그래프를_돌리기_전에_죽으면_원장이_failed로_닫힌다(http: CapturingCompletionClient) -> None:
     execution_sql = SqliteLedgerSql()
-    await GraphJobLedger(execution_sql).claim("e5", "user-1", "title-suggestion", None, None, 2.0, NOW)
+    await claim(execution_sql, "e5")
     activities = AgentJobActivities(  # type: ignore[arg-type]
         FakeLedger(owned=False), FakeSearch(), http, _StaticSql(execution_sql)
     )
@@ -255,21 +261,21 @@ async def test_그래프를_돌리기_전에_죽으면_원장이_failed로_닫�
     with pytest.raises(Exception):  # noqa: B017
         await activities.run(AgentJobRequest("title-suggestion", payload))
 
-    row = execution_sql.rows("graph_job_executions")[0]
+    row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "failed"
     execution_sql.close()
 
 
 async def test_이미_종결된_행은_취소_닫기가_건드리지_않는다(http: CapturingCompletionClient) -> None:
     execution_sql = SqliteLedgerSql()
-    await GraphJobLedger(execution_sql).claim("e4", "user-1", "title-suggestion", None, None, 2.0, NOW)
-    await GraphJobLedger(execution_sql).settle("e4", "completed", 0.01, None, NOW)
+    await claim(execution_sql, "e4")
+    await JobLedger(execution_sql).settle("e4", "completed", {}, {}, None, NOW)
     activities = AgentJobActivities(  # type: ignore[arg-type]
         FakeLedger(), FakeSearch(), http, _StaticSql(execution_sql)
     )
 
     await activities.settle_canceled("e4")
 
-    row = execution_sql.rows("graph_job_executions")[0]
+    row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "completed"
     execution_sql.close()

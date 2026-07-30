@@ -1,4 +1,4 @@
-"""이번 시도가 쓸 단가와 한도와 자격을 tracer-api에서 받아 실행 봉투로 옮긴다."""
+"""이번 시도가 쓸 단가와 한도와 자격을 받아 실행 봉투로 옮긴다."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class ChatEnvelopeSource(Protocol):
 
 
 class ChatEnvelopeClient:
-    """실행 시도 하나가 쓸 봉투를 만들어 주는 tracer-api 창구다."""
+    """실행 시도 하나가 쓸 봉투를 만들어 주는 agent-api 창구다."""
 
     def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
         self._client = client

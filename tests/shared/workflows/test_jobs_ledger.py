@@ -1,4 +1,4 @@
-"""잡 실행 행이 조건부 갱신으로만 전진하고 같은 식별자나 같은 멱등키는 새로 세우지 않는지 검증한다."""
+"""잡 실행 행이 조건부 갱신으로만 전진하고 궤적이 시도와 순번으로 갈려 남는지 검증한다."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 import pytest
 
 from tests.support.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.workflows.jobs_ledger import GraphJobLedger
+from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepToolCall
+from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 
 NOW = datetime(2026, 7, 28, 0, 0, tzinfo=UTC)
 LATER = datetime(2026, 7, 28, 0, 5, tzinfo=UTC)
@@ -21,94 +22,184 @@ def store() -> Iterator[SqliteLedgerSql]:
     ledger.close()
 
 
-async def test_새_실행은_대기_행으로_세워진다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
+async def claim(
+    ledger: JobLedger,
+    job_id: str = "j1",
+    idempotency_key: str | None = None,
+    task_id: str | None = None,
+) -> bool:
+    """대기 행 하나를 세운다."""
+    return await ledger.claim(
+        job_id,
+        "u1",
+        "title.suggestion",
+        "temporal",
+        task_id,
+        idempotency_key,
+        {"taskId": task_id} if task_id else {},
+        NOW,
+    )
 
-    assert await ledger.claim("e1", "u1", "title-suggestion", "idem-1", "task-1", 2.0, NOW) is True
 
-    row = store.rows("graph_job_executions")[0]
-    assert row["status"] == "queued"
-    assert row["budget_usd"] == 2.0
+async def test_새_잡은_대기_행으로_세워진다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+
+    assert await claim(ledger, idempotency_key="idem-1", task_id="task-1") is True
+
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "pending"
+    assert row["executor"] == "temporal"
+    assert row["attempts"] == 0
+    assert row["kind"] == "title.suggestion"
     assert row["idempotency_key"] == "idem-1"
     assert row["task_id"] == "task-1"
+    assert row["input"] == {"taskId": "task-1"}
+    assert row["result"] == {}
+    assert row["usage"] == {}
 
 
-async def test_같은_실행_식별자를_다시_보내도_새_행이_생기지_않는다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", "idem-1", None, 2.0, NOW)
+async def test_같은_식별자를_다시_보내도_새_행이_생기지_않는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger, idempotency_key="idem-1")
 
-    assert await ledger.claim("e1", "u1", "title-suggestion", "idem-1", None, 2.0, NOW) is False
+    assert await claim(ledger, idempotency_key="idem-1") is False
 
-    assert len(store.rows("graph_job_executions")) == 1
-
-
-async def test_같은_멱등키가_다른_실행_식별자로_와도_거짓을_낸다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", "idem-1", None, 2.0, NOW)
-
-    assert await ledger.claim("e2", "u1", "title-suggestion", "idem-1", None, 2.0, NOW) is False
-
-    assert len(store.rows("graph_job_executions")) == 1
+    assert len(store.rows("ai_jobs")) == 1
 
 
-async def test_멱등키가_없으면_서로_다른_실행이_각자_행을_세운다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
+async def test_같은_멱등키가_다른_식별자로_와도_거짓을_낸다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger, idempotency_key="idem-1")
 
-    assert await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW) is True
-    assert await ledger.claim("e2", "u1", "title-suggestion", None, None, 2.0, NOW) is True
+    assert await claim(ledger, job_id="j2", idempotency_key="idem-1") is False
 
-    assert len(store.rows("graph_job_executions")) == 2
+    assert len(store.rows("ai_jobs")) == 1
 
 
-async def test_실행_중_표시는_대기_행에서만_옮겨간다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW)
+async def test_멱등키가_없으면_서로_다른_잡이_각자_행을_세운다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
 
-    assert await ledger.mark_running("e1", LATER) is True
+    assert await claim(ledger) is True
+    assert await claim(ledger, job_id="j2") is True
 
-    row = store.rows("graph_job_executions")[0]
+    assert len(store.rows("ai_jobs")) == 2
+
+
+async def test_실행_중_표시는_시도_횟수를_올린다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+
+    assert await ledger.mark_running("j1", LATER) is True
+
+    row = store.rows("ai_jobs")[0]
     assert row["status"] == "running"
+    assert row["attempts"] == 1
     assert row["started_at"] == LATER
 
 
-async def test_이미_실행_중인_행은_다시_옮기지_않는다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW)
-    await ledger.mark_running("e1", NOW)
+async def test_다시_태운_시도도_시도_횟수에_더해진다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.mark_running("j1", NOW)
 
-    assert await ledger.mark_running("e1", LATER) is False
+    assert await ledger.mark_running("j1", LATER) is True
+
+    row = store.rows("ai_jobs")[0]
+    assert row["attempts"] == 2
+    assert row["started_at"] == NOW
 
 
-async def test_종료는_지출과_상태를_함께_남긴다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW)
-    await ledger.mark_running("e1", NOW)
+async def test_종료는_산출과_사용량을_함께_남긴다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.mark_running("j1", NOW)
 
-    assert await ledger.settle("e1", "completed", 0.42, None, LATER) is True
+    settled = await ledger.settle("j1", "completed", {"suggestions": []}, {"costUsd": 0.42}, None, LATER)
 
-    row = store.rows("graph_job_executions")[0]
+    assert settled is True
+    row = store.rows("ai_jobs")[0]
     assert row["status"] == "completed"
-    assert row["cost_usd"] == 0.42
+    assert row["result"] == {"suggestions": []}
+    assert row["usage"] == {"costUsd": 0.42}
     assert row["completed_at"] == LATER
 
 
-async def test_종료는_구조화_결과도_함께_남긴다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW)
-    await ledger.mark_running("e1", NOW)
+async def test_이미_끝난_잡은_다시_닫히지_않는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.settle("j1", "completed", {}, {}, None, NOW)
 
-    assert await ledger.settle("e1", "completed", 0.42, None, LATER, {"suggestions": []}) is True
+    assert await ledger.settle("j1", "failed", {}, {}, "boom", LATER) is False
 
-    row = store.rows("graph_job_executions")[0]
-    assert row["result"] == {"suggestions": []}
+    assert store.rows("ai_jobs")[0]["status"] == "completed"
 
 
-async def test_이미_끝난_행은_다시_닫히지_않는다(store: SqliteLedgerSql) -> None:
-    ledger = GraphJobLedger(store)
-    await ledger.claim("e1", "u1", "title-suggestion", None, None, 2.0, NOW)
-    await ledger.settle("e1", "completed", 0.1, None, NOW)
+async def test_취소는_살아_있는_잡만_닫는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
 
-    assert await ledger.settle("e1", "failed", None, "boom", LATER) is False
+    assert await ledger.cancel("j1", LATER) is True
+    assert await ledger.cancel("j1", LATER) is False
 
-    row = store.rows("graph_job_executions")[0]
-    assert row["status"] == "completed"
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "canceled"
+    assert row["completed_at"] == LATER
+
+
+async def test_궤적은_시도와_순번의_오름차순으로_읽힌다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.record_steps(
+        "j1", "u1", 2, [AgentStepDTO(seq=0, role="assistant", content="second attempt")], LATER
+    )
+    await ledger.record_steps(
+        "j1",
+        "u1",
+        1,
+        [
+            AgentStepDTO(
+                seq=0,
+                role="assistant",
+                content="calling",
+                toolCalls=[AgentStepToolCall(id="c1", name="get_task", args={})],
+                outputTokens=7,
+            ),
+            AgentStepDTO(seq=1, role="tool", content="done", toolName="get_task", toolCallId="c1"),
+        ],
+        NOW,
+    )
+
+    steps = await ledger.steps("j1", "u1")
+
+    assert [(row["attempt"], row["seq"]) for row in steps] == [(1, 0), (1, 1), (2, 0)]
+    assert steps[0]["tool_calls"] == [{"id": "c1", "name": "get_task", "args": {}}]
+    assert steps[0]["output_tokens"] == 7
+    assert steps[1]["tool_name"] == "get_task"
+
+
+async def test_아무것도_싣지_못한_스텝은_궤적에_적히지_않는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+
+    await ledger.record_steps("j1", "u1", 1, [AgentStepDTO(seq=0, role="assistant", content="  ")], NOW)
+
+    assert await ledger.steps("j1", "u1") == []
+
+
+async def test_같은_시도의_같은_순번은_한_번만_적힌다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    step = AgentStepDTO(seq=0, role="assistant", content="once")
+
+    await ledger.record_steps("j1", "u1", 1, [step], NOW)
+    await ledger.record_steps("j1", "u1", 1, [step], LATER)
+
+    assert len(await ledger.steps("j1", "u1")) == 1
+
+
+async def test_남의_잡_궤적은_읽히지_않는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.record_steps("j1", "u1", 1, [AgentStepDTO(seq=0, role="assistant", content="mine")], NOW)
+
+    assert await ledger.steps("j1", "u2") == []

@@ -1,12 +1,14 @@
-"""잡 하나가 끝나며 남길 상태 전이와 관측을 원장에 함께 적는다."""
+"""잡 하나가 끝나며 남길 상태 전이와 궤적과 관측을 원장에 함께 적는다."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from ...shared.agents.runtime.ledger import LedgerSql
-from ...shared.workflows.jobs_ledger import GraphJobLedger
+from ...shared.agents.shared.models import AgentStepDTO
+from ...shared.workflows.jobs_ledger import JobLedger
 
 _INSERT_OBSERVATION = """
 INSERT INTO agent_run_observations (
@@ -30,26 +32,36 @@ RETURNING execution_id
 """
 
 
-class GraphJobExecutionWriter:
-    """잡의 종료 전이와 관측을 한 트랜잭션으로 적는다."""
+@dataclass(frozen=True)
+class JobOutcome:
+    """잡 하나가 남기고 끝나는 종료 상태와 산출과 사용량과 궤적이다."""
+
+    job_id: str
+    user_id: str
+    status: str
+    attempt: int
+    result: dict[str, Any] = field(default_factory=dict)
+    usage: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    steps: list[AgentStepDTO] = field(default_factory=list)
+    observation: dict[str, Any] | None = None
+
+
+class JobExecutionWriter:
+    """잡의 종료 전이와 궤적과 관측을 한 트랜잭션으로 적는다."""
 
     def __init__(self, sql: LedgerSql) -> None:
         self._sql = sql
-        self._ledger = GraphJobLedger(sql)
+        self._ledger = JobLedger(sql)
 
-    async def finalize(
-        self,
-        execution_id: str,
-        user_id: str,
-        status: str,
-        cost_usd: float | None,
-        error: str | None,
-        observation_payload: dict[str, Any] | None,
-        now: datetime,
-        result: dict[str, Any] | None = None,
-    ) -> bool:
-        """잡의 종료 상태와 지출과 구조화 결과를 관측과 함께 적고 전이가 받아들여졌는지 낸다."""
+    async def finalize(self, outcome: JobOutcome, now: datetime) -> bool:
+        """잡의 종료 상태와 궤적과 관측을 함께 적고 전이가 받아들여졌는지 낸다."""
         async with self._sql.transaction():
-            if observation_payload is not None:
-                await self._sql.fetch(_INSERT_OBSERVATION, user_id, observation_payload, now)
-            return await self._ledger.settle(execution_id, status, cost_usd, error, now, result)
+            if outcome.observation is not None:
+                await self._sql.fetch(_INSERT_OBSERVATION, outcome.user_id, outcome.observation, now)
+            await self._ledger.record_steps(
+                outcome.job_id, outcome.user_id, outcome.attempt, outcome.steps, now
+            )
+            return await self._ledger.settle(
+                outcome.job_id, outcome.status, outcome.result, outcome.usage, outcome.error, now
+            )
