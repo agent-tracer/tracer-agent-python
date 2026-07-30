@@ -285,3 +285,113 @@ async def test_이미_종결된_행은_취소_닫기가_건드리지_않는다(h
     row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "completed"
     execution_sql.close()
+
+
+class CapturingNotifier:
+    """알림 토픽으로 나간 잡 상태 전이를 순서대로 붙잡아 두는 대역이다."""
+
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict[str, Any]]] = []
+
+    async def job_updated(self, user_id: str, payload: dict[str, Any]) -> bool:
+        self.published.append((user_id, payload))
+        return True
+
+
+async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
+    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e6")
+    notifier = CapturingNotifier()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, http, _StaticSql(execution_sql), None, None, notifier
+    )
+    payload = {
+        "model": "claude-haiku-4-5",
+        "apiKey": "sk-test",
+        "modelRates": WIRE_MODEL_RATES,
+        "limits": WIRE_LIMITS,
+        "taskId": "task-1",
+        "userId": "user-1",
+        "language": "ko",
+        "context": _TITLE_CONTEXT,
+        "completionCallback": _COMPLETION_CALLBACK,
+        "executionId": "e6",
+        "attemptId": "1",
+    }
+
+    await activities.run(AgentJobRequest("title-suggestion", payload))
+
+    assert [entry[1]["status"] for entry in notifier.published] == ["running", "completed"]
+    assert notifier.published[0][0] == "user-1"
+    assert notifier.published[1][1] == {
+        "jobId": "e6",
+        "kind": "title.suggestion",
+        "status": "completed",
+        "taskId": "task-1",
+    }
+    execution_sql.close()
+
+
+async def test_태스크에_매이지_않은_잡은_태스크_식별자를_싣지_않는다(
+    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e7")
+    notifier = CapturingNotifier()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, http, _StaticSql(execution_sql), None, None, notifier
+    )
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "apiKey": "sk-test",
+        "modelRates": WIRE_MODEL_RATES,
+        "limits": WIRE_LIMITS,
+        "scannedAt": "2026-07-28T00:00:00Z",
+        "userId": "user-1",
+        "language": "ko",
+        "maxSuggestions": 5,
+        "batch": {"candidates": [], "batchTruncated": False},
+        "completionCallback": _COMPLETION_CALLBACK,
+        "executionId": "e7",
+    }
+
+    await activities.run(AgentJobRequest("task-cleanup", payload))
+
+    assert "taskId" not in notifier.published[-1][1]
+    assert notifier.published[-1][1]["kind"] == "task.cleanup"
+    execution_sql.close()
+
+
+async def test_그래프를_돌리기_전에_죽으면_실패가_상태_전이로_알려진다(
+    http: CapturingCompletionClient,
+) -> None:
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e8")
+    notifier = CapturingNotifier()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, http, _StaticSql(execution_sql), None, None, notifier
+    )
+    payload = {
+        "model": "claude-haiku-4-5",
+        "apiKey": "sk-test",
+        "modelRates": WIRE_MODEL_RATES,
+        "limits": WIRE_LIMITS,
+        "taskId": "missing-task",
+        "userId": "user-1",
+        "language": "ko",
+        "completionCallback": _COMPLETION_CALLBACK,
+        "executionId": "e8",
+    }
+
+    with pytest.raises(Exception):  # noqa: B017
+        await activities.run(AgentJobRequest("title-suggestion", payload))
+
+    assert notifier.published[-1] == (
+        "user-1",
+        {"jobId": "e8", "kind": "title.suggestion", "status": "failed", "taskId": "missing-task"},
+    )
+    execution_sql.close()

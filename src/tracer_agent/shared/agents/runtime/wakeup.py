@@ -47,7 +47,7 @@ class UpdatePublisher:
         self._producer: MessageProducer | None = None
         self._lock = asyncio.Lock()
 
-    async def publish(self, key: str, payload: dict[str, str]) -> bool:
+    async def publish(self, key: str, payload: dict[str, Any]) -> bool:
         """갱신 사실 하나를 토픽에 흘리고 보냈는지 낸다."""
         try:
             producer = await self._started()

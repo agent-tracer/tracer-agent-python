@@ -10,9 +10,13 @@ from ..config import task_queue
 JOBS_QUEUE_KEY = "jobs"
 GENERATE_QUEUE_KEY = "generate"
 
-GRAPH_JOB_QUEUE = task_queue(JOBS_QUEUE_KEY)
+JOBS_TASK_QUEUE = task_queue(JOBS_QUEUE_KEY)
 # 최대 15분인 모델 호출이 짧은 액티비티의 슬롯을 점유하지 않도록 생성만 이 큐에서 실행된다.
 GENERATE_TASK_QUEUE = task_queue(GENERATE_QUEUE_KEY)
+
+# 사용자의 열린 화면에 상태 전이를 알리는 토픽이며 봉투와 종류는 계약이 소유한다.
+NOTIFICATIONS_TOPIC = "notifications"
+JOB_UPDATED_NOTIFICATION = "job.updated"
 
 AGENT_JOB_WORKFLOW = "agentJobWorkflow"
 RUN_AGENT_JOB_ACTIVITY = "runAgentJob"

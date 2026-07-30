@@ -9,8 +9,8 @@ from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
     GENERATE_QUEUE_KEY,
     GENERATE_TASK_QUEUE,
-    GRAPH_JOB_QUEUE,
     JOBS_QUEUE_KEY,
+    JOBS_TASK_QUEUE,
     RUN_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
     agent_job_workflow_id,
@@ -23,12 +23,12 @@ _QUEUE_OF = {activity["name"]: activity["queue"] for activity in _AGENT_JOB["act
 
 def test_큐_이름을_접두사와_계약의_키가_만든다() -> None:
     assert {JOBS_QUEUE_KEY, GENERATE_QUEUE_KEY} <= set(_CONTRACT["queues"])
-    assert GRAPH_JOB_QUEUE.split("-", 1) == [DEFAULT_TASK_QUEUE_PREFIX, JOBS_QUEUE_KEY]
+    assert JOBS_TASK_QUEUE.split("-", 1) == [DEFAULT_TASK_QUEUE_PREFIX, JOBS_QUEUE_KEY]
     assert GENERATE_TASK_QUEUE.split("-", 1) == [DEFAULT_TASK_QUEUE_PREFIX, GENERATE_QUEUE_KEY]
 
 
 def test_세_큐가_서로_나뉘어_있다() -> None:
-    assert len({GRAPH_JOB_QUEUE, GENERATE_TASK_QUEUE, CHAT_TASK_QUEUE}) == 3
+    assert len({JOBS_TASK_QUEUE, GENERATE_TASK_QUEUE, CHAT_TASK_QUEUE}) == 3
 
 
 def test_워크플로_이름이_계약이_적은_이름과_같다() -> None:

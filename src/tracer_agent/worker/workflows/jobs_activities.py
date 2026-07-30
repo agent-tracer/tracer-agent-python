@@ -13,6 +13,7 @@ from temporalio.exceptions import is_cancelled_exception
 
 from ...shared.agents.recipe_scan.models import RecipeScanRequest
 from ...shared.agents.runtime.ledger import SqlSource
+from ...shared.agents.runtime.notification import JobStatusNotifier
 from ...shared.agents.shared.models import AgentResponse, PromptFragmentSnapshotDTO
 from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO, ResolvedPromptFragmentDTO
 from ...shared.agents.task_cleanup.models import TaskCleanupRequest
@@ -57,12 +58,14 @@ class AgentJobActivities:
         execution_sql: SqlSource,
         prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
         envelopes: JobEnvelopeSource | None = None,
+        notifier: JobStatusNotifier | None = None,
     ) -> None:
         self._tracer_api_url = tracer_api_url
         self._http = http_client
         self._execution_sql = execution_sql
         self._prompt_fragments = prompt_fragments
         self._envelopes = envelopes
+        self._notifier = notifier
 
     @activity.defn(name=RUN_AGENT_JOB_ACTIVITY)
     async def run(self, request: AgentJobRequest) -> None:
@@ -86,6 +89,12 @@ class AgentJobActivities:
             return
         async with self._execution_sql.connect() as sql:
             await JobLedger(sql).settle(execution_id, "failed", {}, {}, str(error)[:2000], datetime.now(UTC))
+        user_id = request.payload.get("userId")
+        if isinstance(user_id, str) and user_id:
+            task_id = request.payload.get("taskId")
+            await self._notify(
+                request.kind, execution_id, user_id, "failed", task_id if isinstance(task_id, str) else None
+            )
 
     @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
     async def settle_canceled(self, execution_id: str) -> None:
@@ -94,6 +103,17 @@ class AgentJobActivities:
             await JobLedger(sql).settle(
                 execution_id, "canceled", {}, {}, "canceled before execution started", datetime.now(UTC)
             )
+
+    async def _notify(
+        self, kind: AgentJobKind, job_id: str, user_id: str, status: str, task_id: str | None
+    ) -> None:
+        """잡 상태 전이를 알림 토픽에 실으며 발행자가 없으면 아무 일도 하지 않는다."""
+        if self._notifier is None:
+            return
+        payload: dict[str, Any] = {"jobId": job_id, "kind": wire_kind(kind), "status": status}
+        if task_id is not None:
+            payload["taskId"] = task_id
+        await self._notifier.job_updated(user_id, payload)
 
     def _tracer(self, user_id: str) -> TracerApiClient:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
@@ -208,6 +228,7 @@ class AgentJobActivities:
         if req.executionId is not None:
             async with self._execution_sql.connect() as sql:
                 await JobLedger(sql).mark_running(req.executionId, datetime.now(UTC))
+            await self._notify(kind, req.executionId, req.userId, "running", _task_id(req))
 
         async def settle(response: AgentResponse) -> None:
             if req.executionId is None:
@@ -229,10 +250,17 @@ class AgentJobActivities:
             )
             async with self._execution_sql.connect() as sql:
                 await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
+            await self._notify(kind, req.executionId, req.userId, status, _task_id(req))
             if status == "completed":
                 await deliver_job_outputs(self._tracer(req.userId), kind, req.executionId, response.data)
 
         await run_and_deliver(self._http, req.completionCallback, run_once, settle)
+
+
+def _task_id(req: JobRequest) -> str | None:
+    """태스크에 매인 잡만 그 식별자를 알림에 싣는다."""
+    task_id = getattr(req, "taskId", None)
+    return task_id if isinstance(task_id, str) else None
 
 
 def _attempt(attempt_id: str | None) -> int:

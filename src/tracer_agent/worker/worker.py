@@ -15,6 +15,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
+from ..shared.agents.runtime.notification import JobStatusNotifier
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
 from ..shared.config import Settings, get_settings
@@ -28,8 +29,10 @@ from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_spec import (
     GENERATE_QUEUE_KEY,
     GENERATE_TASK_QUEUE,
-    GRAPH_JOB_QUEUE,
+    JOB_UPDATED_NOTIFICATION,
     JOBS_QUEUE_KEY,
+    JOBS_TASK_QUEUE,
+    NOTIFICATIONS_TOPIC,
 )
 from .agents.chat.checkpoint import ChatCheckpointProvider
 from .prompt_registry.bootstrap import resolve_fragments_or_fallback
@@ -79,11 +82,13 @@ class JobWorkerResources:
     http_client: httpx.AsyncClient
     execution: LedgerPoolProvider
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None
+    notifications: UpdatePublisher
 
     async def close(self) -> None:
         """열린 연결을 모두 닫는다."""
         await self.http_client.aclose()
         await self.execution.close()
+        await self.notifications.close()
 
 
 @asynccontextmanager
@@ -125,6 +130,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         http_client=http_client,
         execution=LedgerPoolProvider(settings.agent_dsn()),
         prompt_fragments=prompt_fragments,
+        notifications=UpdatePublisher(settings.kafka_brokers, NOTIFICATIONS_TOPIC),
     )
     try:
         yield opened
@@ -159,6 +165,7 @@ def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobAc
         PooledSql(opened.execution),
         opened.prompt_fragments,
         JobEnvelopeClient(opened.http_client, settings.agent_api_url),
+        JobStatusNotifier(opened.notifications, JOB_UPDATED_NOTIFICATION),
     )
 
 
@@ -176,7 +183,7 @@ def build_job_worker(client: Client, opened: JobWorkerResources, settings: Setti
     """잡 셋 워크플로 하나와 짧은 액티비티만 소비하는 워커를 만든다."""
     return Worker(
         client,
-        task_queue=GRAPH_JOB_QUEUE,
+        task_queue=JOBS_TASK_QUEUE,
         workflows=[AgentJobWorkflow],
         activities=short_job_activities(job_activities(opened, settings)),
         graceful_shutdown_timeout=timedelta(seconds=SHUTDOWN_GRACE_S),

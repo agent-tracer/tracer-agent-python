@@ -11,7 +11,7 @@ from temporalio.service import RPCError, RPCStatusCode
 from .dispatch import TemporalClientProvider
 from .jobs_spec import (
     AGENT_JOB_WORKFLOW,
-    GRAPH_JOB_QUEUE,
+    JOBS_TASK_QUEUE,
     AgentJobKind,
     AgentJobRequest,
     agent_job_workflow_id,
@@ -32,7 +32,7 @@ class TemporalJobDispatch:
                 AGENT_JOB_WORKFLOW,
                 AgentJobRequest(kind, payload),
                 id=agent_job_workflow_id(kind, key),
-                task_queue=GRAPH_JOB_QUEUE,
+                task_queue=JOBS_TASK_QUEUE,
                 # 기본 정책은 완료된 워크플로의 같은 id 재제출을 새 실행으로 받아들이므로 명시로 막는다.
                 id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
             )
