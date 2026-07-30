@@ -32,6 +32,12 @@ from ..shared.agents.chat.surface.executions import (
     list_chat_execution_steps,
     list_chat_executions,
 )
+from ..shared.agents.chat.surface.memories import (
+    CHAT_MEMORIES_PATH,
+    CHAT_MEMORY_PATH,
+    recall_chat_facts,
+    remember_chat_fact,
+)
 from ..shared.agents.chat.surface.stream import CHAT_EXECUTION_EVENTS_PATH, watch_chat_execution
 from ..shared.agents.chat.surface.threads import (
     CHAT_THREAD_MESSAGES_PATH,
@@ -153,6 +159,8 @@ def create_app() -> FastAPI:
     application.get(CHAT_EXECUTION_REPLAY_PATH)(get_chat_replay)
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
     application.post(CHAT_DRAFTS_PATH)(checkpoint_chat_draft)
+    application.get(CHAT_MEMORIES_PATH)(recall_chat_facts)
+    application.put(CHAT_MEMORY_PATH)(remember_chat_fact)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)
     application.get(JOB_PATH)(get_job)
