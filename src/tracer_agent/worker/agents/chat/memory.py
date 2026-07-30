@@ -1,4 +1,4 @@
-"""chat 기억 도구가 확인 대기 없이 tracer-api 기억 API를 즉시 부르는 HTTP 진입점을 소유한다."""
+"""chat 기억 도구가 확인 대기 없이 에이전트의 기억 API를 즉시 부르는 HTTP 진입점을 소유한다."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import httpx
 
-from .bindings import GATE_NONE, TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.bindings import GATE_NONE, TOOL_BINDINGS, fill_path
+
 from .reader import scoped_headers, unwrap_envelope
 
 RECALL_TOOL = "recall_facts"

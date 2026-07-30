@@ -16,6 +16,13 @@ from ..shared.agents.chat.intake.router import (
     cancel_chat_turn,
     enqueue_chat_turn,
 )
+from ..shared.agents.chat.surface.confirmations import (
+    CHAT_CONFIRMATION_PATH,
+    CHAT_CONFIRMATIONS_PATH,
+    decide_chat_tool,
+    propose_chat_tool,
+)
+from ..shared.agents.chat.surface.drafts import CHAT_DRAFTS_PATH, checkpoint_chat_draft
 from ..shared.agents.chat.surface.envelope import CREATED_STATUS as CHAT_CREATED_STATUS
 from ..shared.agents.chat.surface.executions import (
     CHAT_EXECUTION_REPLAY_PATH,
@@ -36,6 +43,7 @@ from ..shared.agents.chat.surface.threads import (
     list_chat_threads,
     rename_chat_thread,
 )
+from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
 from ..shared.agents.envelope.router import (
     CHAT_ENVELOPE_PATH,
@@ -98,6 +106,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
     )
     application.state.execution_watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
+    application.state.chat_tool_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
+    application.state.chat_tool_executor = HttpChatToolExecutor(
+        application.state.chat_tool_http, settings.tracer_api_url
+    )
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
@@ -110,6 +122,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     finally:
         shutdown_observability()
         await application.state.job_envelope_http.aclose()
+        await application.state.chat_tool_http.aclose()
         await application.state.execution_watch.close()
         await application.state.execution_updates.close()
         await application.state.executions.close()
@@ -132,11 +145,14 @@ def create_app() -> FastAPI:
     application.delete(CHAT_THREAD_PATH)(delete_chat_thread)
     application.get(CHAT_THREAD_MESSAGES_PATH)(list_chat_messages)
     application.post(CHAT_MESSAGES_PATH, status_code=ACCEPTED_STATUS)(enqueue_chat_turn)
+    application.post(CHAT_CONFIRMATIONS_PATH, status_code=CHAT_CREATED_STATUS)(propose_chat_tool)
+    application.post(CHAT_CONFIRMATION_PATH)(decide_chat_tool)
     application.get(CHAT_EXECUTIONS_PATH)(list_chat_executions)
     application.get(CHAT_EXECUTION_EVENTS_PATH, response_model=None)(watch_chat_execution)
     application.get(CHAT_EXECUTION_STEPS_PATH)(list_chat_execution_steps)
     application.get(CHAT_EXECUTION_REPLAY_PATH)(get_chat_replay)
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
+    application.post(CHAT_DRAFTS_PATH)(checkpoint_chat_draft)
     application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
     application.post(JOB_CANCEL_PATH)(cancel_job)
     application.get(JOB_PATH)(get_job)

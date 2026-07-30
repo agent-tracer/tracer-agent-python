@@ -1,4 +1,4 @@
-"""chat 도구가 어느 tracer-api REST API의 뷰인지를 계약과 같은 값으로 소유한다."""
+"""chat 도구가 어느 REST API의 뷰인지를 계약과 같은 값으로 소유한다."""
 
 from __future__ import annotations
 

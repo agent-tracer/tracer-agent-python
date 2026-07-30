@@ -1,4 +1,4 @@
-"""chat 쓰기 도구가 tracer-api 확인 창구에 대기 행을 세우는 HTTP 진입점을 소유한다."""
+"""chat 쓰기 도구가 에이전트의 확인 창구에 대기 행을 세우는 HTTP 진입점을 소유한다."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 import httpx
 
-from .bindings import GATE_CONFIRM, TOOL_BINDINGS
+from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BINDINGS
+
 from .reader import scoped_headers, unwrap_envelope
 
 # 승인 대기 행을 세우는 창구이며 도구가 부를 API 자체는 승인된 뒤에 서버가 부른다.

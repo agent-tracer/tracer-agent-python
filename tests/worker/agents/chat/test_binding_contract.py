@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from tests.support.contract import agent_spec
-from tracer_agent.worker.agents.chat.bindings import (
+from tracer_agent.shared.agents.chat.tools.bindings import (
     GATE_CONFIRM,
     GATE_NONE,
     LOCAL_TOOL_NAMES,

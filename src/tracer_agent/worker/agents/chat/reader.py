@@ -1,4 +1,4 @@
-"""chat 읽기 도구가 tracer-api 읽기 API를 사용자 범위로 되읽는 HTTP 진입점을 소유한다."""
+"""chat 읽기 도구가 추적 API를 사용자 범위로 되읽는 HTTP 진입점을 소유한다."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from typing import Any
 
 import httpx
 
-from .bindings import GATE_NONE, TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.bindings import GATE_NONE, TOOL_BINDINGS, fill_path
 
-# tracer-api가 요청자를 식별하는 헤더이며 실행 범위 토큰이 있으면 서버가 이 값을 토큰의 것으로 덮는다.
+# 창구가 요청자를 식별하는 헤더이며 실행 범위 토큰이 있으면 서버가 이 값을 토큰의 것으로 덮는다.
 USER_HEADER = "x-monitor-user"
 
 
@@ -33,7 +33,7 @@ def scoped_headers(user_id: str, scope_token: str | None) -> dict[str, str]:
 
 
 def unwrap_envelope(raw: str) -> str:
-    """tracer-api 성공 봉투를 벗겨 모델이 두 백엔드에서 같은 필드를 보게 한다."""
+    """성공 봉투를 벗겨 모델이 두 구현체에서 같은 필드를 보게 한다."""
     try:
         payload = json.loads(raw)
     except ValueError:
