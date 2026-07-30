@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-# TypeScript 구현체의 워커가 "sdk-jobs"를 폴링하므로 큐를 나눠야 두 구현체가 같은 실행을 가져가지 않는다.
-GRAPH_JOB_QUEUE = "graph-jobs"
+from ..config import task_queue
 
-# 워크플로 이름과 액티비티 이름도 갈라 두 백엔드의 워크플로가 서로를 덮어쓰지 않게 한다.
-AGENT_JOB_WORKFLOW = "graphAgentJobWorkflow"
-RUN_AGENT_JOB_ACTIVITY = "runGraphAgentJob"
+JOBS_QUEUE_KEY = "jobs"
+
+GRAPH_JOB_QUEUE = task_queue(JOBS_QUEUE_KEY)
+
+AGENT_JOB_WORKFLOW = "agentJobWorkflow"
+RUN_AGENT_JOB_ACTIVITY = "runAgentJob"
 # activity가 돌기 전에 취소가 닿으면 워크플로가 이 액티비티로 원장을 직접 닫는다.
-SETTLE_CANCELED_JOB_ACTIVITY = "settleCanceledGraphJob"
+SETTLE_CANCELED_JOB_ACTIVITY = "settleCanceledAgentJob"
 
 AgentJobKind = Literal["title-suggestion", "task-cleanup", "recipe-scan"]
 
@@ -27,8 +29,8 @@ JOB_CANCEL_SETTLE_TIMEOUT_S = 30.0
 
 
 def agent_job_workflow_id(kind: AgentJobKind, key: str) -> str:
-    """잡 워크플로 식별자를 잡 종류와 접수 키로 만들어 TypeScript 구현체의 것과 겹치지 않는다."""
-    return f"graph-job:{kind}:{key}"
+    """잡 워크플로 식별자를 잡 종류와 접수 키로 만든다."""
+    return f"job:{kind}:{key}"
 
 
 @dataclass

@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from temporalio.client import Client
+
+# 배포가 이 환경변수로 큐 접두사를 주며, 나란히 띄운 두 구현체는 다른 값을 받아 서로 다른 큐를 본다.
+TASK_QUEUE_PREFIX_ENV = "AGENT_TASK_QUEUE_PREFIX"
+DEFAULT_TASK_QUEUE_PREFIX = "agent"
+
+
+def task_queue(key: str) -> str:
+    """계약이 정한 큐 키 앞에 배포가 준 접두사를 붙여 큐의 완전한 이름을 만든다."""
+    prefix = os.environ.get(TASK_QUEUE_PREFIX_ENV, "").strip() or DEFAULT_TASK_QUEUE_PREFIX
+    return f"{prefix}-{key}"
 
 
 class Settings(BaseSettings):

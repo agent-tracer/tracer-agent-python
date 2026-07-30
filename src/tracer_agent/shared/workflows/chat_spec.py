@@ -5,24 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-# TypeScript 구현체의 워커가 "sdk-chat"를 폴링하므로 큐를 나눠야 두 구현체가 같은 실행을 가져가지 않는다.
-CHAT_TASK_QUEUE = "graph-chat"
+from ..config import task_queue
 
-# 워크플로 이름과 식별자 접두사도 갈라 두 백엔드의 워크플로가 서로를 덮어쓰지 않게 한다.
-CHAT_THREAD_WORKFLOW = "graphChatThreadWorkflow"
-CHAT_EXECUTION_WORKFLOW = "graphChatExecutionWorkflow"
-THREAD_WORKFLOW_PREFIX = "graph-chat-thread"
-EXECUTION_WORKFLOW_PREFIX = "graph-chat"
+CHAT_QUEUE_KEY = "chat"
+CHAT_TASK_QUEUE = task_queue(CHAT_QUEUE_KEY)
+
+CHAT_THREAD_WORKFLOW = "chatThreadWorkflow"
+CHAT_EXECUTION_WORKFLOW = "chatExecutionWorkflow"
+THREAD_WORKFLOW_PREFIX = "chat-thread"
+EXECUTION_WORKFLOW_PREFIX = "chat"
 
 CHAT_ENQUEUE_SIGNAL = "enqueueChatExecution"
 
 # 실행 갱신을 다른 replica의 SSE에 알리는 토픽이며 식별자만 나른다.
 CHAT_EXECUTION_UPDATES_TOPIC = "chat.execution.updates"
 
-PREPARE_ACTIVITY = "prepareGraphChatExecution"
-GENERATE_ACTIVITY = "generateGraphChatExecution"
-FINALIZE_ACTIVITY = "finalizeGraphChatExecution"
-FAIL_ACTIVITY = "failGraphChatExecution"
+PREPARE_ACTIVITY = "prepareChatExecution"
+GENERATE_ACTIVITY = "generateChatExecution"
+FINALIZE_ACTIVITY = "finalizeChatExecution"
+FAIL_ACTIVITY = "failChatExecution"
 
 # 스레드가 다른 실행에 잠겨 준비를 못 한 것이며, 이 실행의 실패가 아니다.
 THREAD_BUSY_FAILURE = "chat.thread-busy"
@@ -53,12 +54,12 @@ STOP_CANCELED = "canceled"
 
 
 def thread_workflow_id(thread_id: str) -> str:
-    """스레드 워크플로 식별자를 만들며 TypeScript 구현체의 것과 겹치지 않는다."""
+    """스레드 하나에 하나뿐인 워크플로 식별자를 만든다."""
     return f"{THREAD_WORKFLOW_PREFIX}:{thread_id}"
 
 
 def execution_workflow_id(execution_id: str) -> str:
-    """실행 워크플로 식별자를 만들며 TypeScript 구현체의 것과 겹치지 않는다."""
+    """실행 하나에 하나뿐인 워크플로 식별자를 만든다."""
     return f"{EXECUTION_WORKFLOW_PREFIX}:{execution_id}"
 
 
