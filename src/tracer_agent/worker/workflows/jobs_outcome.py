@@ -17,10 +17,11 @@ def status_and_error(response: AgentResponse) -> tuple[str, str | None]:
 
 
 def job_usage(response: AgentResponse, cost_usd: float | None) -> dict[str, Any]:
-    """이 잡이 태운 모델과 토큰과 비용을 원장 한 칸에 담을 모양으로 낸다."""
+    """이 잡이 태운 모델의 별칭과 토큰과 비용을 원장 한 칸에 담을 모양으로 낸다."""
     usage = response.usage
     return {
-        "model": response.actualModel or response.modelUsed,
+        # 별칭은 단가표의 키이므로 이 칸과 costUsd가 한 기록 안에서 같은 모델을 가리킨다.
+        "model": response.modelUsed,
         "durationMs": response.durationMs,
         "costUsd": cost_usd,
         "numTurns": response.numTurns,

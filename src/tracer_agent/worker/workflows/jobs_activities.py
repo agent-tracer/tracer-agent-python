@@ -209,9 +209,7 @@ class AgentJobActivities:
             if req.executionId is None:
                 return
             status, error = status_and_error(response)
-            cost_usd = ModelRates(req.modelRates).estimate_cost_usd(
-                response.actualModel or response.modelUsed, response.usage
-            )
+            cost_usd = ModelRates(req.modelRates).estimate_cost_usd(response.modelUsed, response.usage)
             outcome = JobOutcome(
                 job_id=req.executionId,
                 user_id=req.userId,
