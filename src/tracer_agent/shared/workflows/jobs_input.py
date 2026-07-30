@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..agents.shared.models import TrimmedStr
 
 DEFAULT_MAX_SUGGESTIONS = 20
 MAX_SUGGESTIONS_CAP = 50
@@ -17,9 +21,9 @@ class RecipeScanJobInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    taskId: str = Field(min_length=1, max_length=64)
-    userPrompt: str | None = Field(default=None, min_length=1, max_length=4000)
-    language: str | None = Field(default=None, min_length=1, max_length=16)
+    taskId: TrimmedStr = Field(min_length=1, max_length=64)
+    userPrompt: TrimmedStr | None = Field(default=None, min_length=1, max_length=4000)
+    language: TrimmedStr | None = Field(default=None, min_length=1, max_length=16)
     trigger: Literal["dashboard", "session"] | None = None
 
 
@@ -28,7 +32,7 @@ class TitleSuggestionJobInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    taskId: str = Field(min_length=1, max_length=64)
+    taskId: TrimmedStr = Field(min_length=1, max_length=64)
 
 
 class TaskCleanupFilters(BaseModel):
@@ -52,12 +56,12 @@ class RuleGenerationJobInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    taskId: str = Field(min_length=1, max_length=64)
+    taskId: TrimmedStr = Field(min_length=1, max_length=64)
     # 규칙이 매달릴 근거 입력이며 판정은 이 입력 이후의 이벤트만 본다.
-    anchorEventId: str = Field(min_length=1, max_length=64)
+    anchorEventId: TrimmedStr = Field(min_length=1, max_length=64)
     focus: Literal["recent"] | None = None
     maxRules: int | None = Field(default=None, ge=1, le=MAX_RULES_CAP)
-    intent: str | None = Field(default=None, min_length=1, max_length=INTENT_MAX_LENGTH)
+    intent: TrimmedStr | None = Field(default=None, min_length=1, max_length=INTENT_MAX_LENGTH)
 
 
 # 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
@@ -102,3 +106,33 @@ def build_payload(
         "language": "auto",
         "maxSuggestions": job_input.filters.maxSuggestions or DEFAULT_MAX_SUGGESTIONS,
     }
+
+
+# 같은 멱등키의 두 접수가 같은 입력인지 가르는 칸이며 종류마다 이 순서로 적는다.
+IDEMPOTENCY_KEYS: dict[str, tuple[str, ...]] = {
+    "title.suggestion": ("taskId",),
+    "recipe.scan": ("taskId", "userPrompt", "language", "trigger"),
+    "task.cleanup": ("filters.maxSuggestions",),
+    "rule.generation": ("taskId", "anchorEventId", "focus", "maxRules", "intent"),
+}
+
+
+def canonical_input(kind: str, job_input: BaseModel) -> str:
+    """두 구현체가 같은 바이트를 먹도록 그 종류가 정한 칸만 정해진 순서로 적는다."""
+    dumped = job_input.model_dump(mode="json")
+    canonical = {key: _read_path(dumped, key) for key in IDEMPOTENCY_KEYS[kind]}
+    return json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
+
+
+def input_hash(kind: str, job_input: BaseModel) -> str:
+    """접수가 다듬은 도메인 입력의 안정 해시이며 멱등 판정은 이 값만 본다."""
+    return hashlib.sha256(canonical_input(kind, job_input).encode()).hexdigest()
+
+
+def _read_path(dumped: Any, key: str) -> Any:
+    value: Any = dumped
+    for part in key.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value

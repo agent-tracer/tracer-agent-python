@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -16,7 +15,13 @@ from temporalio.exceptions import ApplicationError
 from ..agents.runtime.ledger import SqlSource
 from .jobs_anchor import RuleAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
-from .jobs_input import INPUT_MODEL_BY_KIND, RuleGenerationJobInput, build_payload, task_id_of
+from .jobs_input import (
+    INPUT_MODEL_BY_KIND,
+    RuleGenerationJobInput,
+    build_payload,
+    input_hash,
+    task_id_of,
+)
 from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR, runs_locally
 from .jobs_ledger import JobLedger
 from .jobs_view import job_dto
@@ -72,7 +77,7 @@ async def enqueue_job(request: Request) -> JSONResponse:
     ):
         return error_envelope(*INVALID_RULE_ANCHOR)
     idempotency_key = _idempotency_key(enqueue.idempotencyKey)
-    input_hash = None if idempotency_key is None else _input_hash(enqueue.input)
+    request_hash = None if idempotency_key is None else input_hash(enqueue.kind, job_input)
     now = datetime.now(UTC)
 
     if not runs_locally(enqueue.kind):
@@ -93,7 +98,7 @@ async def enqueue_job(request: Request) -> JSONResponse:
             JOB_EXECUTOR[enqueue.kind],
             task_id_of(job_input),
             idempotency_key,
-            input_hash,
+            request_hash,
             enqueue.input,
             now,
         )
@@ -105,7 +110,7 @@ async def enqueue_job(request: Request) -> JSONResponse:
             row = None
     if row is None:
         return error_envelope(*NOT_FOUND)
-    if not created and row["idempotency_input_hash"] != input_hash:
+    if not created and row["idempotency_input_hash"] != request_hash:
         return error_envelope(*IDEMPOTENCY_CONFLICT)
 
     job_id = str(row["id"])
@@ -153,12 +158,6 @@ def _idempotency_key(value: str | None) -> str | None:
     """공백뿐인 멱등키는 키를 싣지 않은 것과 같게 본다."""
     trimmed = (value or "").strip()
     return trimmed or None
-
-
-def _input_hash(job_input: dict[str, Any]) -> str:
-    """같은 멱등키로 다시 온 접수가 같은 입력인지를 가르는 안정 해시다."""
-    encoded = json.dumps(job_input, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:

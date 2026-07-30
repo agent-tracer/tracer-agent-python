@@ -195,6 +195,21 @@ def test_같은_멱등키에_같은_입력이면_먼저_만든_잡을_낸다(cli
     assert len(store.rows("ai_jobs")) == 1
 
 
+def test_다듬기만_다른_입력은_같은_잡으로_본다(client: TestClient, store: SqliteLedgerSql) -> None:
+    first = client.post(
+        PATH,
+        json={"kind": "recipe.scan", "input": {"taskId": "task-1"}, "idempotencyKey": "idem-1"},
+    )
+    second = client.post(
+        PATH,
+        json={"kind": "recipe.scan", "input": {"taskId": " task-1 "}, "idempotencyKey": "idem-1"},
+    )
+
+    assert (first.status_code, second.status_code) == (202, 202)
+    assert first.json()["data"]["job"]["id"] == second.json()["data"]["job"]["id"]
+    assert len(store.rows("ai_jobs")) == 1
+
+
 def test_같은_멱등키에_다른_입력이면_409를_낸다(
     client: TestClient, dispatch: FakeJobDispatch, store: SqliteLedgerSql
 ) -> None:
