@@ -8,6 +8,7 @@ from tracer_agent.worker.agents.task_cleanup.graph import TASK_CLEANUP_GRAPH, _d
 
 
 def test_그래프의_간선_집합을_고정한다() -> None:
+    print("TASK_CLEANUP_GRAPH 간선 집합:")
     print(TASK_CLEANUP_GRAPH.get_graph().draw_ascii())
     assert edge_lines(TASK_CLEANUP_GRAPH) == {
         "__start__ → triage",

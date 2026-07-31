@@ -8,6 +8,7 @@ from tracer_agent.worker.agents.recipe_scan.graph import RECIPE_SCAN_GRAPH, _dis
 
 
 def test_그래프의_간선_집합을_고정한다() -> None:
+    print("RECIPE_SCAN_GRAPH 간선 집합:")
     print(RECIPE_SCAN_GRAPH.get_graph().draw_ascii())
     assert edge_lines(RECIPE_SCAN_GRAPH) == {
         "__start__ → survey",
