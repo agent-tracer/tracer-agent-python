@@ -36,6 +36,7 @@ from ..shared.workflows.jobs_spec import (
 )
 from .agents.chat.checkpoint import ChatCheckpointProvider
 from .agents.shared.contract_prompt_source import ContractPromptSource
+from .sdk_metrics import open_sdk_metrics
 from .workflows.chat_activities import ChatExecutionActivities
 from .workflows.chat_workflows import ChatExecutionWorkflow, ChatThreadWorkflow
 from .workflows.envelope import ChatEnvelopeClient
@@ -208,6 +209,8 @@ async def serve(queue: WorkerQueue) -> None:
     settings = get_settings()
     settings.configure_langsmith()
     shutdown_observability = configure_observability()
+    # SDK runtime 은 클라이언트보다 먼저 서야 그 클라이언트와 워커의 지표가 같은 창구로 나간다.
+    open_sdk_metrics()
     client = await settings.connect_temporal()
     try:
         if queue == JOBS_QUEUE_KEY:
