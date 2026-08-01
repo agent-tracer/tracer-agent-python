@@ -109,20 +109,56 @@ def _carries_body(folded: str, word: str) -> bool:
     minimum = _minimum_body_length()
     start = folded.find(word)
     while start != -1:
-        if _body_length(folded, start + len(word)) >= minimum:
+        if _body_bounds(folded, start + len(word))[0] >= minimum:
             return True
         start = folded.find(word, start + 1)
     return False
 
 
-def _body_length(folded: str, index: int) -> int:
+def _body_bounds(folded: str, index: int) -> tuple[int, int]:
+    """낱말 뒤에서 자격의 몸통이 차지하는 길이와 그 끝자리를 낸다."""
     if _skips_space_between():
         while index < len(folded) and folded[index] == " ":
             index += 1
-    length = 0
-    while index + length < len(folded) and folded[index + length] in _BODY_CHARACTERS:
-        length += 1
-    return length
+    end = index
+    while end < len(folded) and folded[end] in _BODY_CHARACTERS:
+        end += 1
+    return end - index, end
+
+
+def _suspect_spans(folded: str) -> list[tuple[int, int]]:
+    """낱말과 그 뒤의 몸통이 이룬 구간을 겹치지 않게 모아 앞에서부터 낸다."""
+    minimum = _minimum_body_length()
+    found: list[tuple[int, int]] = []
+    for word in _value_words():
+        start = folded.find(word)
+        while start != -1:
+            length, end = _body_bounds(folded, start + len(word))
+            if length >= minimum:
+                found.append((start, end))
+            start = folded.find(word, start + 1)
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(found):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _covered_text(text: str) -> str:
+    """걸린 구간만 표시로 바꾸고 낱말 앞과 몸통 뒤의 본문은 그대로 남긴다."""
+    spans = _suspect_spans(text.casefold())
+    if not spans:
+        return text
+    kept: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        kept.append(text[cursor:start])
+        kept.append(marker())
+        cursor = end
+    kept.append(text[cursor:])
+    return "".join(kept)
 
 
 def redact(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
@@ -139,14 +175,14 @@ def redact_text(text: str, *, stage: RedactionStage) -> str:
         return text
     if discards(stage):
         raise SuspectPayloadError("payload carries a credential-shaped value")
-    return marker()
+    return _covered_text(text)
 
 
 def _covered(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
     if isinstance(value, Mapping):
         return {key: _covered_entry(str(key), nested, stage=stage) for key, nested in value.items()}
     if isinstance(value, str):
-        return marker() if inspects_values(stage) and is_suspect_text(value) else value
+        return _covered_text(value) if inspects_values(stage) else value
     if isinstance(value, int | float | bool) or value is None:
         return value
     if isinstance(value, Sequence):

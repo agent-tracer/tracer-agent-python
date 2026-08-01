@@ -42,7 +42,7 @@ async def test_되읽은_것에_담긴_자격은_모델이_받는_문자열에_�
         text = await tool.coroutine(taskId="task-1")
 
     assert _CREDENTIAL not in text
-    assert json.loads(text) == {"taskId": "task-1", "note": _MARKER}
+    assert json.loads(text) == {"taskId": "task-1", "note": f"Authorization: {_MARKER}"}
 
 
 async def test_key가_평범해도_값이_자격이면_가려진다() -> None:
@@ -103,7 +103,8 @@ async def test_모델의_답에_실린_자격은_사용자에게_나가기_전�
 ) -> None:
     answer = await _answer(monkeypatch, f"토큰은 {_CREDENTIAL} 입니다")
 
-    assert answer == _MARKER
+    assert _CREDENTIAL not in answer
+    assert f"토큰은 {_MARKER} 입니다" in answer
 
 
 async def test_자격이_없는_답은_그대로_사용자에게_나간다(monkeypatch: pytest.MonkeyPatch) -> None:

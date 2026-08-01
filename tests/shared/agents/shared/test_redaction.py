@@ -80,8 +80,20 @@ class Test자리마다의_판단:
 
         assert covered == {"apiKey": marker(), "note": "평범한 본문", "items": [marker()]}
 
-    def test_사용자에게_나가는_답에_자격이_실리면_표시로_바꾼다(self) -> None:
-        assert redact_text(f"토큰은 sk-ant-{_BODY} 입니다", stage=RedactionStage.OUTPUT) == marker()
+    def test_이름이_걸리면_그_값_전체를_바꾼다(self) -> None:
+        payload = {"apiKey": f"앞 sk-ant-{_BODY} 뒤"}
+
+        assert redact(payload, stage=RedactionStage.QUERY) == {"apiKey": marker()}
+
+    def test_값이_걸리면_낱말과_몸통이_이룬_구간만_바꾼다(self) -> None:
+        covered = redact_text(f"토큰은 sk-ant-{_BODY} 입니다", stage=RedactionStage.OUTPUT)
+
+        assert covered == f"토큰은 {marker()} 입니다"
+
+    def test_낱말만_있고_몸통이_없는_본문은_그대로_나간다(self) -> None:
+        본문 = "The bearer of this token is the worker."
+
+        assert redact_text(본문, stage=RedactionStage.OUTPUT) == 본문
 
     def test_자격이_없는_답은_그대로_나간다(self) -> None:
         assert redact_text("정리했습니다", stage=RedactionStage.OUTPUT) == "정리했습니다"
