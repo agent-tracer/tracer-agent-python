@@ -68,6 +68,10 @@ class Test추적_자리:
         with pytest.raises(SuspectPayloadError):
             redact({key: value, "prompt": "평범한 프롬프트 본문"}, stage=RedactionStage.TRACE)
 
+    def test_key가_평범해도_값이_자격이면_payload_전체를_막는다(self) -> None:
+        with pytest.raises(SuspectPayloadError):
+            redact({"note": "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9"}, stage=RedactionStage.TRACE)
+
     def test_다룰_수_없는_모양의_값도_막는다(self) -> None:
         with pytest.raises(SuspectPayloadError):
             redact({"note": object()}, stage=RedactionStage.TRACE)

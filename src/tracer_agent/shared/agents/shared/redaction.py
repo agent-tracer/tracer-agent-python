@@ -7,13 +7,18 @@ from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from string import ascii_letters, digits
 from typing import Any
 
 # 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
 REDACTION_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "shared" / "redaction.json"
 
+# 계약이 자격의 몸통에 허용한 글자는 영문자와 숫자와 세 구분자다.
+_BODY_CHARACTERS = frozenset(ascii_letters + digits + "-_.")
+
 _DISCARD = "discard"
 _KEYS = "keys"
+_VALUES = "values"
 
 type RedactableScalar = str | int | float | bool | None
 type RedactableValue = RedactableScalar | Mapping[str, RedactableValue] | Sequence[RedactableValue]
@@ -48,6 +53,21 @@ def _key_words() -> tuple[str, ...]:
     return tuple(_folded_key(str(word)) for word in _rules()[_KEYS]["words"])
 
 
+@lru_cache(maxsize=1)
+def _value_words() -> tuple[str, ...]:
+    return tuple(str(word).casefold() for word in _rules()[_VALUES]["words"])
+
+
+@lru_cache(maxsize=1)
+def _minimum_body_length() -> int:
+    return int(_rules()[_VALUES]["requiresTrailingBody"]["minLength"])
+
+
+@lru_cache(maxsize=1)
+def _skips_space_between() -> bool:
+    return bool(_rules()[_VALUES]["requiresTrailingBody"]["skipSpaceBetween"])
+
+
 @lru_cache(maxsize=len(RedactionStage))
 def _stage_rule(stage: RedactionStage) -> tuple[str, frozenset[str]]:
     declared: dict[str, Any] = _rules()["stages"][stage.value]
@@ -64,6 +84,11 @@ def inspects_keys(stage: RedactionStage) -> bool:
     return _KEYS in _stage_rule(stage)[1]
 
 
+def inspects_values(stage: RedactionStage) -> bool:
+    """이 자리가 값의 모양을 보는지 낸다."""
+    return _VALUES in _stage_rule(stage)[1]
+
+
 def _folded_key(key: str) -> str:
     return "".join(character for character in key.casefold() if character.isalnum())
 
@@ -74,6 +99,32 @@ def is_suspect_key(key: str) -> bool:
     return any(word in folded for word in _key_words())
 
 
+def is_suspect_text(text: str) -> bool:
+    """구분자를 지키고 접은 문자열에서 계약의 값 낱말 뒤에 자격의 몸통이 이어지는지 견준다."""
+    folded = text.casefold()
+    return any(_carries_body(folded, word) for word in _value_words())
+
+
+def _carries_body(folded: str, word: str) -> bool:
+    minimum = _minimum_body_length()
+    start = folded.find(word)
+    while start != -1:
+        if _body_length(folded, start + len(word)) >= minimum:
+            return True
+        start = folded.find(word, start + 1)
+    return False
+
+
+def _body_length(folded: str, index: int) -> int:
+    if _skips_space_between():
+        while index < len(folded) and folded[index] == " ":
+            index += 1
+    length = 0
+    while index + length < len(folded) and folded[index + length] in _BODY_CHARACTERS:
+        length += 1
+    return length
+
+
 def redact(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
     """자리가 정한 대로 걸린 값만 표시로 바꾸거나 payload 를 통째로 폐기한다."""
     if discards(stage):
@@ -82,10 +133,21 @@ def redact(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
     return _covered(value, stage=stage)
 
 
+def redact_text(text: str, *, stage: RedactionStage) -> str:
+    """경계를 넘는 문자열 하나를 자리의 규칙으로 견주어 걸리면 표시로 바꾼다."""
+    if not (inspects_values(stage) and is_suspect_text(text)):
+        return text
+    if discards(stage):
+        raise SuspectPayloadError("payload carries a credential-shaped value")
+    return marker()
+
+
 def _covered(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
     if isinstance(value, Mapping):
         return {key: _covered_entry(str(key), nested, stage=stage) for key, nested in value.items()}
-    if isinstance(value, str | int | float | bool) or value is None:
+    if isinstance(value, str):
+        return marker() if inspects_values(stage) and is_suspect_text(value) else value
+    if isinstance(value, int | float | bool) or value is None:
         return value
     if isinstance(value, Sequence):
         return [_covered(nested, stage=stage) for nested in value]
@@ -105,7 +167,11 @@ def _assert_clean(value: RedactableValue, *, stage: RedactionStage, path: str) -
                 raise SuspectPayloadError(f"payload carries a credential name at {path}.{key}")
             _assert_clean(nested, stage=stage, path=f"{path}.{key}")
         return
-    if isinstance(value, str | int | float | bool) or value is None:
+    if isinstance(value, str):
+        if inspects_values(stage) and is_suspect_text(value):
+            raise SuspectPayloadError(f"payload carries a credential-shaped value at {path}")
+        return
+    if isinstance(value, int | float | bool) or value is None:
         return
     if isinstance(value, Sequence):
         for index, nested in enumerate(value):
