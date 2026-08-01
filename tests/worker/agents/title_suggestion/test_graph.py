@@ -9,7 +9,7 @@ import pytest
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
-from tests.support.prompts import TITLE_SUGGESTION_PROMPT
+from tests.support.prompts import CONTRACT_VERSION, TITLE_SUGGESTION_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
 from tracer_agent.worker.agents.runtime.execution.runner import execute
@@ -85,6 +85,8 @@ async def _run(
         req.model,
         req.deadlineMs,
         lambda usage: title_mod.run_title_suggestion(req, fake_ledger, usage, TITLE_SUGGESTION_PROMPT),
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
     return chat, result, fake_ledger
 

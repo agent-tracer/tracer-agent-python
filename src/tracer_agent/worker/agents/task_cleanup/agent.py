@@ -21,7 +21,7 @@ from .nodes.decision import InvestigateNode, RepairNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
 from .nodes.result import EmptyNode, FinalizeNode
 from .policy import build_routes
-from .prompts import PROMPT_VERSION, build_prompt_bundle
+from .prompts import build_prompt_bundle
 from .reader import CleanupLedgerReader
 
 AGENT_NAME = "task-cleanup"
@@ -131,7 +131,7 @@ async def run_task_cleanup(
             TraceSafeMetadata(
                 agent_name=AGENT_NAME,
                 model_requested=req.model,
-                prompt_version=PROMPT_VERSION,
+                prompt_version=prompt.version(),
                 job_id=req.jobId,
             ),
         ),

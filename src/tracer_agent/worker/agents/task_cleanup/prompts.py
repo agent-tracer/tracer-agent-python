@@ -8,8 +8,6 @@ from tracer_agent.shared.agents.task_cleanup.models import InspectReport
 
 from ..shared.prompt_source_port import AgentPrompt
 
-PROMPT_VERSION = "task-cleanup-native-v6"
-
 # 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
 TEMPLATE_KEYS: dict[str, str] = {
     "investigatorSystemPrompt": "task-cleanup.investigator.system",

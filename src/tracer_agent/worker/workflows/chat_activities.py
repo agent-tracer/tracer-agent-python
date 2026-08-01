@@ -14,7 +14,6 @@ from ...shared.agents.chat.execution_ledger import CLAIMED, THREAD_BUSY, ChatExe
 from ...shared.agents.chat.models import ChatRequest
 from ...shared.agents.runtime.ledger import LedgerSql, SqlSource
 from ...shared.agents.runtime.wakeup import UpdatePublisher
-from ...shared.agents.shared.models import ResolvedPromptTemplateHashDTO
 from ...shared.workflows.chat_spec import (
     FAIL_ACTIVITY,
     FINALIZE_ACTIVITY,
@@ -31,11 +30,10 @@ from ...shared.workflows.chat_spec import (
 from ..agents.chat.agent import AGENT_NAME, run_chat
 from ..agents.chat.checkpoint import ChatCheckpointProvider
 from ..agents.chat.execution_writer import ChatExecutionWriter
-from ..agents.chat.prompts import PROMPT_VERSION, SYSTEM_TEMPLATE, build_system_prompt
+from ..agents.chat.prompts import build_system_prompt
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.shared.prompt_source_port import AgentPrompt
-from ..agents.shared.resolved_prompt_hash import ResolvedPromptBundleHash, resolved_prompt_bundle_hash
 from .chat_turn import (
     canceled_turn,
     completed_turn,
@@ -69,10 +67,6 @@ class ChatExecutionActivities:
         self._prompt = prompt
         self._system_prompt = build_system_prompt(prompt)
 
-    def _resolved_prompt(self) -> ResolvedPromptBundleHash:
-        """이번 실행이 조립한 시스템 프롬프트의 해시이며 관측이 그것을 싣는다."""
-        return resolved_prompt_bundle_hash({SYSTEM_TEMPLATE: self._system_prompt})
-
     @activity.defn(name=PREPARE_ACTIVITY)
     async def prepare(self, request: ChatExecutionRequest) -> PreparedChatExecution:
         """대기 실행 하나를 running 자리로 옮기고 이번 턴이 쓸 사실을 낸다."""
@@ -96,7 +90,6 @@ class ChatExecutionActivities:
         request = turn_request(prepared, envelope.fields)
         await self._begin_attempt(prepared, attempt, envelope.draft_token_hash)
         traces: list[ExecutionTrace] = []
-        resolved = self._resolved_prompt()
         heartbeat = asyncio.ensure_future(_heartbeat())
         try:
             response = await execute(
@@ -109,22 +102,16 @@ class ChatExecutionActivities:
                 f"{prepared.execution_id}:{attempt}",
                 execution_id=prepared.execution_id,
                 attempt_id=str(attempt),
-                prompt_version=PROMPT_VERSION,
-                resolved_prompt_hash=resolved.resolved_prompt_hash,
-                resolved_prompt_hashes=[
-                    ResolvedPromptTemplateHashDTO(
-                        templateKey=item.template_key, contentHash=item.content_hash
-                    )
-                    for item in resolved.resolved_prompt_hashes
-                ],
+                prompt_version=self._prompt.version(),
+                tool_contract_version=self._prompt.tool_contract_version,
             )
         except asyncio.CancelledError:
             # 취소된 턴도 그때까지 모델이 쓴 답변과 궤적을 남겨야 화면에 보인 것이 사라지지 않는다.
-            return canceled_turn(prepared, attempt, request, _trace(traces))
+            return canceled_turn(prepared, attempt, request, _trace(traces), self._prompt)
         finally:
             heartbeat.cancel()
         if response.observation is not None and response.observation.status == "cancelled":
-            return canceled_turn(prepared, attempt, request, _trace(traces))
+            return canceled_turn(prepared, attempt, request, _trace(traces), self._prompt)
         if response.error is not None and response.observation is not None:
             async with self._sql.connect() as sql:
                 await ChatExecutionWriter(sql).record_observation(

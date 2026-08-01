@@ -10,7 +10,7 @@ import pytest
 from tests.support.chat_api import FakeChatMemoryApi
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
-from tests.support.prompts import CHAT_PROMPT
+from tests.support.prompts import CHAT_PROMPT, CONTRACT_VERSION
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.chat import agent as chat_mod
@@ -53,6 +53,8 @@ async def _run(
             req.model,
             req.deadlineMs,
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
         )
 
 
@@ -131,6 +133,8 @@ async def _run_replay(
             req.model,
             req.deadlineMs,
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
         )
     return response, chat
 
@@ -231,6 +235,8 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
             req.model,
             req.deadlineMs,
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
         )
 
     hosts = dict(reversed([(path, host) for host, path in seen]))

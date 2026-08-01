@@ -7,12 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.contract import agent_prompt
+from tests.support.contract import agent_prompt, agent_tools
 from tracer_agent.worker.agents.shared.contract_prompt_source import (
     ContractPromptSource,
     ContractPromptUnavailable,
 )
-from tracer_agent.worker.agents.shared.prompt_source_port import PromptSlotMissing
+from tracer_agent.worker.agents.shared.prompt_source_port import (
+    AgentPrompt,
+    PromptSlotMissing,
+    PromptTemplate,
+    PromptVersionDiverged,
+)
 
 AGENTS = ("chat", "recipe-scan", "task-cleanup", "title-suggestion")
 
@@ -36,6 +41,25 @@ def test_조각의_자리표시자는_하나도_남지_않는다(agent: str) -> 
     for template in resolved.templates.values():
         for slot in template.slots.values():
             assert "${" not in slot.content
+
+
+@pytest.mark.parametrize("agent", AGENTS)
+def test_계약이_준_판을_프롬프트와_도구_양쪽에서_낸다(agent: str) -> None:
+    declared = agent_prompt(agent)["templates"]
+    resolved = ContractPromptSource().resolve(agent)
+
+    assert resolved.version() == next(iter(declared.values()))["version"]
+    assert resolved.tool_contract_version == agent_tools(agent)["version"]
+
+
+def test_template_의_판이_갈리면_실을_판을_고르지_않는다() -> None:
+    templates = {
+        "a": PromptTemplate(version="v0.0.1", slots={}),
+        "b": PromptTemplate(version="v0.0.2", slots={}),
+    }
+
+    with pytest.raises(PromptVersionDiverged):
+        AgentPrompt(templates=templates, language_directives={}, tool_contract_version="v0.0.1").version()
 
 
 @pytest.mark.parametrize("agent", AGENTS)

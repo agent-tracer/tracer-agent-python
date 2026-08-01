@@ -14,7 +14,6 @@ from tracer_agent.shared.agents.shared.models import (
     ModelCallObservationDTO,
     ObservationUsageDTO,
     OrchestrationEventKind,
-    ResolvedPromptTemplateHashDTO,
     ToolCallObservationDTO,
     UsageDTO,
     ValidationObservationDTO,
@@ -123,10 +122,9 @@ class ExecutionTrace:
         agent_name: str,
         model_requested: str,
         prompt_version: str,
+        tool_contract_version: str,
         duration_ms: int,
         error_subtype: str | None,
-        resolved_prompt_hash: str | None = None,
-        resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
     ) -> AgentRunObservationDTO:
         """원문 content와 도구 payload를 버리고 공통 terminal observation만 만든다."""
         status: ObservationStatus = (
@@ -163,8 +161,8 @@ class ExecutionTrace:
             modelRequested=model_requested,
             modelActual=actual_model,
             promptVersion=prompt_version,
-            promptContentHash=f"sha256:{hashlib.sha256(f'{agent_name}:{prompt_version}'.encode()).hexdigest()}",
-            toolContractVersion="tool-contract-v1",
+            promptContentHash=_prompt_identity(agent_name, prompt_version),
+            toolContractVersion=tool_contract_version,
             status=status,
             durationMs=duration_ms,
             usage=usage,
@@ -176,9 +174,12 @@ class ExecutionTrace:
             ),
             modelCalls=[model_call],
             toolCalls=_tool_observations(self.steps, execution_id, attempt_id, status),
-            resolvedPromptHash=resolved_prompt_hash,
-            resolvedPromptHashes=resolved_prompt_hashes,
         )
+
+
+def _prompt_identity(agent_name: str, prompt_version: str) -> str:
+    """원장이 요구하는 프롬프트 식별자이며 계약이 준 에이전트 이름과 판만을 재료로 쓴다."""
+    return f"sha256:{hashlib.sha256(f'{agent_name}:{prompt_version}'.encode()).hexdigest()}"
 
 
 def _last_finish_reason(steps: list[AgentStepDTO]) -> str | None:

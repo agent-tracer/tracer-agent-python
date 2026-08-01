@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeTracerApi, mk_ai
-from tests.support.prompts import CHAT_PROMPT, TASK_CLEANUP_PROMPT
+from tests.support.prompts import CHAT_PROMPT, CONTRACT_VERSION, TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
@@ -159,7 +159,9 @@ async def _run(_chat: GreedyChat, ledger: FakeTracerApi) -> Any:
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT),  # type: ignore[arg-type]
+        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT),  # type: ignore[arg-type],
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
 
 

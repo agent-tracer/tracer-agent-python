@@ -25,7 +25,7 @@ from .nodes.candidate import (
     ValidateCandidateNode,
 )
 from .policy import build_routes
-from .prompts import PROMPT_VERSION, build_prompt_bundle
+from .prompts import build_prompt_bundle
 from .reader import TitleLedgerReader
 
 AGENT_NAME = "title-suggestion"
@@ -107,7 +107,7 @@ async def run_title_suggestion(
             TraceSafeMetadata(
                 agent_name=AGENT_NAME,
                 model_requested=req.model,
-                prompt_version=PROMPT_VERSION,
+                prompt_version=prompt.version(),
                 job_id=req.jobId,
             ),
         ),

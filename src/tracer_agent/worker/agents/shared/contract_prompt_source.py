@@ -31,7 +31,8 @@ class ContractPromptSource:
     def resolve(self, agent_name: str) -> AgentPrompt:
         """에이전트 하나의 조각을 상한으로 치환해 template 별로 묶는다."""
         prompt = self._read(f"agent/{agent_name}/prompt.json")
-        values = self._placeholder_values(agent_name)
+        tools = self._read(f"agent/{agent_name}/tool.json")
+        values = _placeholder_values(tools)
         fragments = prompt["fragments"]
         templates = {
             key: PromptTemplate(
@@ -46,15 +47,11 @@ class ContractPromptSource:
             )
             for key, template in prompt["templates"].items()
         }
-        return AgentPrompt(templates=templates, language_directives=_directives(fragments))
-
-    def _placeholder_values(self, agent_name: str) -> Mapping[str, str]:
-        tools = self._read(f"agent/{agent_name}/tool.json")
-        values = {name: str(value) for name, value in tools.get("limits", {}).items()}
-        coordinator = tools.get("orchestration", {}).get("coordinatorTools", [])
-        if coordinator:
-            values[_COORDINATOR_PLACEHOLDER] = str(coordinator[0])
-        return values
+        return AgentPrompt(
+            templates=templates,
+            language_directives=_directives(fragments),
+            tool_contract_version=str(tools["version"]),
+        )
 
     def _read(self, relative: str) -> Any:
         path = self._root / relative
@@ -64,6 +61,14 @@ class ContractPromptSource:
             raise ContractPromptUnavailable(f"contract file is unreadable: {path}") from unreadable
         except ValueError as invalid:
             raise ContractPromptUnavailable(f"contract file is not valid JSON: {path}") from invalid
+
+
+def _placeholder_values(tools: Mapping[str, Any]) -> Mapping[str, str]:
+    values = {name: str(value) for name, value in tools.get("limits", {}).items()}
+    coordinator = tools.get("orchestration", {}).get("coordinatorTools", [])
+    if coordinator:
+        values[_COORDINATOR_PLACEHOLDER] = str(coordinator[0])
+    return values
 
 
 def _joined(lines: list[str]) -> str:

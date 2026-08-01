@@ -8,9 +8,6 @@ from tracer_agent.shared.agents.recipe_scan.models import MAX_RECIPE_CANDIDATES,
 
 from ..shared.prompt_source_port import AgentPrompt
 
-# 프롬프트 버전은 실행 궤적과 평가 코퍼스에서 의미 변화의 경계를 식별하는 값이다.
-PROMPT_VERSION = "recipe-scan-native-v8"
-
 # 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
 TEMPLATE_KEYS: dict[str, str] = {
     "investigatorSystemPrompt": "recipe-scan.investigator.system",

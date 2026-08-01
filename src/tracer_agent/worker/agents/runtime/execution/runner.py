@@ -10,7 +10,6 @@ from typing import Any
 from tracer_agent.shared.agents.shared.models import (
     AgentErrorDTO,
     AgentResponse,
-    ResolvedPromptTemplateHashDTO,
     UsageDTO,
 )
 
@@ -36,9 +35,9 @@ async def execute(
     input_hash: str = "",
     execution_id: str | None = None,
     attempt_id: str | None = None,
-    prompt_version: str = "runtime-v1",
-    resolved_prompt_hash: str | None = None,
-    resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
+    *,
+    prompt_version: str,
+    tool_contract_version: str,
 ) -> AgentResponse:
     """에이전트 실행을 등록하고 표준 응답으로 돌려준다."""
     key = run_id or idempotency_key or job_id
@@ -53,9 +52,8 @@ async def execute(
                 parent_context,
                 execution_id,
                 attempt_id or "1",
-                prompt_version,
-                resolved_prompt_hash,
-                resolved_prompt_hashes,
+                prompt_version=prompt_version,
+                tool_contract_version=tool_contract_version,
             ),
             label=label,
             model=model,
@@ -81,9 +79,9 @@ async def _execute(
     parent_context: Any = None,
     execution_id: str | None = None,
     attempt_id: str = "1",
-    prompt_version: str = "runtime-v1",
-    resolved_prompt_hash: str | None = None,
-    resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
+    *,
+    prompt_version: str,
+    tool_contract_version: str,
 ) -> AgentResponse:
     started = time.monotonic()
     trace = ExecutionTrace()
@@ -128,10 +126,9 @@ async def _execute(
             agent_name=label,
             model_requested=model,
             prompt_version=prompt_version,
+            tool_contract_version=tool_contract_version,
             duration_ms=duration_ms,
             error_subtype=error_subtype,
-            resolved_prompt_hash=resolved_prompt_hash,
-            resolved_prompt_hashes=resolved_prompt_hashes,
         )
     )
     return AgentResponse(

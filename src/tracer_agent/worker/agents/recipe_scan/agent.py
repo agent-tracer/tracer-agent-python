@@ -22,7 +22,7 @@ from .nodes.probe import ProbeNode
 from .nodes.result import EmptyNode, FinalizeNode, wire_provenance
 from .nodes.survey import SurveyNode
 from .policy import build_routes
-from .prompts import PROMPT_VERSION, build_prompt_bundle
+from .prompts import build_prompt_bundle
 from .reader import RecipeLedgerReader
 from .search import RecipeSearchReader
 
@@ -127,7 +127,7 @@ async def run_recipe_scan(
             TraceSafeMetadata(
                 agent_name=AGENT_NAME,
                 model_requested=req.model,
-                prompt_version=PROMPT_VERSION,
+                prompt_version=prompt.version(),
                 job_id=req.jobId,
             ),
         ),

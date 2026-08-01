@@ -7,8 +7,6 @@ from tracer_agent.shared.agents.chat.models import ChatFact
 from ..shared.prompt_source_port import AgentPrompt
 from ..shared.safety_policy import SAFETY_POLICY
 
-PROMPT_VERSION = "chat-native-v3"
-
 SYSTEM_TEMPLATE = "chat.assistant.system"
 
 

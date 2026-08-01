@@ -18,9 +18,9 @@ from ...shared.workflows.chat_spec import (
     PreparedChatExecution,
 )
 from ..agents.chat.execution_writer import ChatTurnOutcome
-from ..agents.chat.prompts import PROMPT_VERSION
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.pricing import ModelRates
+from ..agents.shared.prompt_source_port import AgentPrompt
 
 INVALID_ENVELOPE = "chat.invalid-envelope"
 GENERATE_FAILED = "chat.generate-failed"
@@ -70,6 +70,7 @@ def canceled_turn(
     attempt: int,
     request: ChatRequest,
     trace: ExecutionTrace,
+    prompt: AgentPrompt,
 ) -> GeneratedChatExecution:
     """취소로 끊긴 턴이 그때까지 쌓은 답변과 궤적과 지출을 산출물로 낸다."""
     return _turn(
@@ -89,7 +90,8 @@ def canceled_turn(
             job_id=None,
             agent_name="chat",
             model_requested=request.model,
-            prompt_version=PROMPT_VERSION,
+            prompt_version=prompt.version(),
+            tool_contract_version=prompt.tool_contract_version,
             duration_ms=0,
             error_subtype="cancelled",
         ).model_dump(mode="json"),

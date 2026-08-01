@@ -8,6 +8,9 @@ from tracer_agent.worker.agents.shared.prompt_source_port import AgentPrompt
 _SOURCE = ContractPromptSource()
 
 CHAT_PROMPT: AgentPrompt = _SOURCE.resolve("chat")
+
+# 관측이 싣는 판이며 계약이 네 에이전트에 같은 값을 준다.
+CONTRACT_VERSION: str = CHAT_PROMPT.version()
 RECIPE_SCAN_PROMPT: AgentPrompt = _SOURCE.resolve("recipe-scan")
 TASK_CLEANUP_PROMPT: AgentPrompt = _SOURCE.resolve("task-cleanup")
 TITLE_SUGGESTION_PROMPT: AgentPrompt = _SOURCE.resolve("title-suggestion")

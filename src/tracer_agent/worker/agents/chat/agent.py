@@ -19,7 +19,7 @@ from .checkpoint import ChatCheckpointProvider
 from .drafts import DraftPublisher
 from .graph import CHAT_GRAPH
 from .nodes.converse import ConverseNode
-from .prompts import PROMPT_VERSION, build_system_prompt
+from .prompts import build_system_prompt
 
 AGENT_NAME = "chat"
 
@@ -100,7 +100,7 @@ async def run_chat(
             TraceSafeMetadata(
                 agent_name=AGENT_NAME,
                 model_requested=req.model,
-                prompt_version=PROMPT_VERSION,
+                prompt_version=prompt.version(),
                 job_id=req.jobId,
                 execution_id=req.executionId,
                 attempt_id=None if req.draftCallback is None else str(req.draftCallback.attempt),

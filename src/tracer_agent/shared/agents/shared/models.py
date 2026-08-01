@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 
 def _strip(value: object) -> object:
@@ -212,14 +212,6 @@ class ValidationObservationDTO(BaseModel):
     citationRecall: float | None = Field(default=None, ge=0, le=1)
 
 
-class ResolvedPromptTemplateHashDTO(BaseModel):
-    """완성된 prompt template 하나의 본문 hash다."""
-
-    model_config = ConfigDict(extra="forbid")
-    templateKey: str = Field(min_length=1)
-    contentHash: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-
 class AgentRunObservationDTO(BaseModel):
     """원문 prompt·출력·도구 payload·오류 본문을 담을 수 없는 terminal 실행 요약이다."""
 
@@ -243,15 +235,6 @@ class AgentRunObservationDTO(BaseModel):
     validation: ValidationObservationDTO
     modelCalls: list[ModelCallObservationDTO]
     toolCalls: list[ToolCallObservationDTO]
-    resolvedPromptHash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    resolvedPromptHashes: list[ResolvedPromptTemplateHashDTO] | None = None
-
-    @model_validator(mode="after")
-    def resolved_prompt_hashes_are_atomic(self) -> AgentRunObservationDTO:
-        """조립 결과의 전체 hash와 template별 hash가 한쪽만 남는 관측을 거부한다."""
-        if (self.resolvedPromptHash is None) != (self.resolvedPromptHashes is None):
-            raise ValueError("resolved prompt hashes must appear together")
-        return self
 
 
 from .agent_response import AgentResponse as AgentResponse  # noqa: E402

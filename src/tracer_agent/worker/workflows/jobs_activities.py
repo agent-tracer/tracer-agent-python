@@ -28,7 +28,6 @@ from ...shared.workflows.jobs_spec import (
     AgentJobRequest,
 )
 from ..agents.recipe_scan.agent import run_recipe_scan
-from ..agents.recipe_scan.prompts import PROMPT_VERSION as RECIPE_PROMPT_VERSION
 from ..agents.runtime.execution.completion import run_and_deliver
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
@@ -36,15 +35,11 @@ from ..agents.runtime.outputs import deliver_job_outputs
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient
 from ..agents.shared.prompt_source_port import AgentPrompt
-from ..agents.shared.resolved_prompt_hash import template_hashes
 from ..agents.task_cleanup.agent import run_task_cleanup
-from ..agents.task_cleanup.prompts import PROMPT_VERSION as CLEANUP_PROMPT_VERSION
 from ..agents.task_cleanup.reader import load_cleanup_batch
 from ..agents.title_suggestion.agent import run_title_suggestion
-from ..agents.title_suggestion.prompts import PROMPT_VERSION as TITLE_PROMPT_VERSION
 from ..agents.title_suggestion.reader import load_title_context
 from .jobs_outcome import job_usage, status_and_error
-from .jobs_prompts import resolved_prompts
 from .jobs_writer import JobExecutionWriter, JobOutcome
 
 JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
@@ -66,7 +61,6 @@ class AgentJobActivities:
         self._http = http_client
         self._execution_sql = execution_sql
         self._prompts = prompts
-        self._resolved = resolved_prompts(prompts)
         self._envelopes = envelopes
         self._notifier = notifier
 
@@ -137,7 +131,7 @@ class AgentJobActivities:
             ) -> dict[str, object]:
                 return await run_title_suggestion(req, tracer, trace, self._prompts["title-suggestion"])
 
-            await self._run_and_deliver(kind, title_req, title_body, TITLE_PROMPT_VERSION)
+            await self._run_and_deliver(kind, title_req, title_body)
             return
         if kind == "task-cleanup":
             if "batch" not in payload:
@@ -156,7 +150,7 @@ class AgentJobActivities:
             ) -> dict[str, object]:
                 return await run_task_cleanup(req, tracer, trace, self._prompts["task-cleanup"])
 
-            await self._run_and_deliver(kind, cleanup_req, cleanup_body, CLEANUP_PROMPT_VERSION)
+            await self._run_and_deliver(kind, cleanup_req, cleanup_body)
             return
         recipe_req = RecipeScanRequest.model_validate(payload)
 
@@ -165,7 +159,7 @@ class AgentJobActivities:
         ) -> dict[str, object]:
             return await run_recipe_scan(req, tracer, trace, self._prompts["recipe-scan"])
 
-        await self._run_and_deliver(kind, recipe_req, recipe_body, RECIPE_PROMPT_VERSION)
+        await self._run_and_deliver(kind, recipe_req, recipe_body)
 
     async def _resolve_payload(self, request: AgentJobRequest) -> dict[str, Any]:
         """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 당겨온다."""
@@ -184,9 +178,8 @@ class AgentJobActivities:
         kind: AgentJobKind,
         req: JobRequest,
         body: AgentBody,
-        prompt_version: str,
     ) -> None:
-        resolved = self._resolved[kind]
+        prompt = self._prompts[kind]
 
         async def run_once() -> AgentResponse:
             return await execute(
@@ -201,9 +194,8 @@ class AgentJobActivities:
                 req.idempotency_input_hash(),
                 req.executionId,
                 req.attemptId,
-                prompt_version,
-                resolved_prompt_hash=resolved.resolved_prompt_hash,
-                resolved_prompt_hashes=template_hashes(resolved),
+                prompt_version=prompt.version(),
+                tool_contract_version=prompt.tool_contract_version,
             )
 
         if req.executionId is not None:

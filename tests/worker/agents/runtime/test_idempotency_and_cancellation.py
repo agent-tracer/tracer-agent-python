@@ -6,6 +6,7 @@ import asyncio
 
 import pytest
 
+from tests.support.prompts import CONTRACT_VERSION
 from tracer_agent.worker.agents.runtime.execution.registry import cancel_run
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 
@@ -18,8 +19,24 @@ async def test_같은_idempotency_key는_본체를_한_번만_실행한다() -> 
         calls += 1
         return {"ok": True}
 
-    first = await execute("title-suggestion", "model", 1_000, body, idempotency_key="key-1")
-    second = await execute("title-suggestion", "model", 1_000, body, idempotency_key="key-1")
+    first = await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        idempotency_key="key-1",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
+    second = await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        idempotency_key="key-1",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
 
     assert calls == 1
     assert first.data == {"ok": True}
@@ -36,9 +53,29 @@ async def test_동시에_들어온_같은_key는_진행중인_실행을_공유�
         await release.wait()
         return {"ok": True}
 
-    first = asyncio.ensure_future(execute("title-suggestion", "model", 1_000, body, idempotency_key="key-2"))
+    first = asyncio.ensure_future(
+        execute(
+            "title-suggestion",
+            "model",
+            1_000,
+            body,
+            idempotency_key="key-2",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
+    )
     await asyncio.sleep(0)  # 첫 실행이 캐시에 등록될 시간을 준다.
-    second = asyncio.ensure_future(execute("title-suggestion", "model", 1_000, body, idempotency_key="key-2"))
+    second = asyncio.ensure_future(
+        execute(
+            "title-suggestion",
+            "model",
+            1_000,
+            body,
+            idempotency_key="key-2",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
+    )
     await asyncio.sleep(0)
     release.set()
 
@@ -56,8 +93,24 @@ async def test_idempotency_key가_다르면_각각_실행한다() -> None:
         calls += 1
         return {"ok": True}
 
-    await execute("title-suggestion", "model", 1_000, body, idempotency_key="key-a")
-    await execute("title-suggestion", "model", 1_000, body, idempotency_key="key-b")
+    await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        idempotency_key="key-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
+    await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        idempotency_key="key-b",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
 
     assert calls == 2
 
@@ -70,8 +123,22 @@ async def test_idempotency_key가_없으면_매번_실행한다() -> None:
         calls += 1
         return {"ok": True}
 
-    await execute("title-suggestion", "model", 1_000, body)
-    await execute("title-suggestion", "model", 1_000, body)
+    await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
+    await execute(
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
 
     assert calls == 2
 
@@ -86,8 +153,24 @@ async def test_실패한_idempotency_key는_다음_Temporal_시도에서_다시_
             raise RuntimeError("retryable provider failure")
         return {"ok": True}
 
-    first = await execute("recipe-scan", "model", 1_000, body, idempotency_key="retry-key")
-    second = await execute("recipe-scan", "model", 1_000, body, idempotency_key="retry-key")
+    first = await execute(
+        "recipe-scan",
+        "model",
+        1_000,
+        body,
+        idempotency_key="retry-key",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
+    second = await execute(
+        "recipe-scan",
+        "model",
+        1_000,
+        body,
+        idempotency_key="retry-key",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
 
     assert first.error is not None
     assert second.data == {"ok": True}
@@ -112,12 +195,28 @@ async def test_만료시각이_지나도_진행중인_실행은_다시_시작하
         return {"ok": True}
 
     first = asyncio.ensure_future(
-        execute("recipe-scan", "model", 1_000, body, idempotency_key="long-running-key")
+        execute(
+            "recipe-scan",
+            "model",
+            1_000,
+            body,
+            idempotency_key="long-running-key",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
     )
     await asyncio.sleep(0)
     clock = 2.0
     second = asyncio.ensure_future(
-        execute("recipe-scan", "model", 1_000, body, idempotency_key="long-running-key")
+        execute(
+            "recipe-scan",
+            "model",
+            1_000,
+            body,
+            idempotency_key="long-running-key",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
     )
     await asyncio.sleep(0)
     release.set()
@@ -143,7 +242,15 @@ async def test_성공_캐시_TTL은_실행_완료부터_계산한다(monkeypatch
         return {"ok": True}
 
     first = asyncio.ensure_future(
-        execute("recipe-scan", "model", 1_000, body, idempotency_key="completed-cache-key")
+        execute(
+            "recipe-scan",
+            "model",
+            1_000,
+            body,
+            idempotency_key="completed-cache-key",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
     )
     await asyncio.sleep(0)
     clock = 2.0
@@ -151,7 +258,15 @@ async def test_성공_캐시_TTL은_실행_완료부터_계산한다(monkeypatch
     await first
     clock = 2.5
 
-    second = await execute("recipe-scan", "model", 1_000, body, idempotency_key="completed-cache-key")
+    second = await execute(
+        "recipe-scan",
+        "model",
+        1_000,
+        body,
+        idempotency_key="completed-cache-key",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
+    )
 
     assert second.data == {"ok": True}
     assert calls == 1
@@ -184,6 +299,8 @@ async def test_같은_key의_다른_실행_범위는_거부한다(
         body,
         idempotency_key=key,
         input_hash="input-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
     conflict = await execute(
         label,
@@ -192,6 +309,8 @@ async def test_같은_key의_다른_실행_범위는_거부한다(
         body,
         idempotency_key=key,
         input_hash=input_hash,
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
 
     assert calls == 1
@@ -208,10 +327,24 @@ async def test_같은_key라도_다른_agent는_독립적으로_실행한다() -
         return {"ok": True}
 
     first = await execute(
-        "title-suggestion", "model", 1_000, body, idempotency_key="agent-scoped-key", input_hash="input-a"
+        "title-suggestion",
+        "model",
+        1_000,
+        body,
+        idempotency_key="agent-scoped-key",
+        input_hash="input-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
     second = await execute(
-        "recipe-scan", "model", 1_000, body, idempotency_key="agent-scoped-key", input_hash="input-a"
+        "recipe-scan",
+        "model",
+        1_000,
+        body,
+        idempotency_key="agent-scoped-key",
+        input_hash="input-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
 
     assert first.error is None
@@ -235,6 +368,8 @@ async def test_같은_key의_다른_job은_거부한다() -> None:
         job_id="job-a",
         idempotency_key="job-scoped-key",
         input_hash="input-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
     conflict = await execute(
         "title-suggestion",
@@ -244,6 +379,8 @@ async def test_같은_key의_다른_job은_거부한다() -> None:
         job_id="job-b",
         idempotency_key="job-scoped-key",
         input_hash="input-a",
+        prompt_version=CONTRACT_VERSION,
+        tool_contract_version=CONTRACT_VERSION,
     )
 
     assert calls == 1
@@ -259,7 +396,17 @@ class TestCancelRun:
             started.set()
             await asyncio.Event().wait()  # 영원히 대기(취소로만 끝난다)
 
-        task = asyncio.ensure_future(execute("recipe-scan", "model", 5_000, body, job_id="job-cancel-1"))
+        task = asyncio.ensure_future(
+            execute(
+                "recipe-scan",
+                "model",
+                5_000,
+                body,
+                job_id="job-cancel-1",
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            )
+        )
         await started.wait()
         task.cancel()
 
@@ -275,7 +422,17 @@ class TestCancelRun:
             await release.wait()
             return {"ok": True}
 
-        task = asyncio.ensure_future(execute("recipe-scan", "model", 5_000, body, run_id="run-1"))
+        task = asyncio.ensure_future(
+            execute(
+                "recipe-scan",
+                "model",
+                5_000,
+                body,
+                run_id="run-1",
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            )
+        )
         await started.wait()
 
         assert cancel_run("run-1") is True
@@ -292,7 +449,17 @@ class TestCancelRun:
             await release.wait()
             return {"ok": True}
 
-        task = asyncio.ensure_future(execute("recipe-scan", "model", 5_000, body, job_id="job-cancel-2"))
+        task = asyncio.ensure_future(
+            execute(
+                "recipe-scan",
+                "model",
+                5_000,
+                body,
+                job_id="job-cancel-2",
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            )
+        )
         await started.wait()
 
         assert cancel_run("job-cancel-2") is True
@@ -307,7 +474,15 @@ class TestCancelRun:
         async def body(_usage: object) -> dict[str, object]:
             return {"ok": True}
 
-        res = await execute("title-suggestion", "model", 1_000, body, run_id="run-done")
+        res = await execute(
+            "title-suggestion",
+            "model",
+            1_000,
+            body,
+            run_id="run-done",
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        )
 
         assert res.data == {"ok": True}
         assert cancel_run("run-done") is False

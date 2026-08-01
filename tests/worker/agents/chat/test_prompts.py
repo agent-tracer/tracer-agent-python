@@ -49,7 +49,11 @@ def test_slot이_없으면_코드_기본값으로_물러서지_않고_던진다(
     template = PromptTemplate(
         version="v0.0.1", slots={"memoryRule": PromptSlot(content="", version="v0.0.1")}
     )
-    incomplete = AgentPrompt(templates={"chat.assistant.system": template}, language_directives={})
+    incomplete = AgentPrompt(
+        templates={"chat.assistant.system": template},
+        language_directives={},
+        tool_contract_version="v0.0.1",
+    )
 
     with pytest.raises(PromptSlotMissing):
         build_system_prompt(incomplete)
