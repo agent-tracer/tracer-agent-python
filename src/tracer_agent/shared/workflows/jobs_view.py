@@ -29,6 +29,7 @@ def job_dto(row: SqlRow) -> dict[str, Any]:
         "userId": row["user_id"],
         "kind": row["kind"],
         "executor": row["executor"],
+        "backend": row["backend"],
         "status": row["status"],
         "attempts": row["attempts"],
         "taskId": row["task_id"],

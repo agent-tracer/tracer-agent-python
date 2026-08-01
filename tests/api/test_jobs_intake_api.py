@@ -14,6 +14,7 @@ from tests.support.contract import conformance_case
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, declared_axes
 from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
@@ -156,6 +157,23 @@ def test_recipe_scan_접수는_202와_원장_행을_낸다(
     assert row["executor"] == "temporal"
     assert row["input"] == {"taskId": "task-1"}
     assert row["task_id"] == "task-1"
+
+
+def test_대기_중인_잡도_접수구의_축을_원장에_갖는다(client: TestClient, store: SqliteLedgerSql) -> None:
+    res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
+
+    job = res.json()["data"]["job"]
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "pending"
+    assert row["backend"] == AGENT_AXIS
+    assert job["backend"] in declared_axes()
+
+
+def test_접수_본문은_축을_싣지_못한다(client: TestClient, store: SqliteLedgerSql) -> None:
+    res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}, "backend": "ts"})
+
+    assert res.status_code == 400
+    assert store.rows("ai_jobs") == []
 
 
 def test_자기신고_헤더가_사용자를_정한다(client: TestClient, dispatch: FakeJobDispatch) -> None:
@@ -327,6 +345,8 @@ def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸�
     assert job["status"] == "pending"
     row = store.rows("ai_jobs")[0]
     assert row["executor"] == "local"
+    # 워크플로가 아니라 로컬 실행기가 태워도 접수구가 정한 축은 같다.
+    assert row["backend"] == AGENT_AXIS
     assert row["task_id"] == "task-1"
     # 로컬 실행기가 가져가는 잡이라 워크플로도 실행 봉투도 접수가 부르지 않는다.
     assert dispatch.started == []

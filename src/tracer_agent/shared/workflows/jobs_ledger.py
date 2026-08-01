@@ -7,14 +7,15 @@ from datetime import datetime
 from typing import Any
 
 from ..agents.runtime.ledger import LedgerSql, SqlRow, UniqueViolation
+from ..agents.shared.axis import AGENT_AXIS
 from ..agents.shared.models import AgentStepDTO
 
 _CLAIM = """
 INSERT INTO ai_jobs (
-    id, user_id, kind, executor, status, attempts, task_id, idempotency_key,
+    id, user_id, kind, executor, backend, status, attempts, task_id, idempotency_key,
     idempotency_input_hash, input, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, 'pending', 0, $5, $6, $7, $8, $9, $9)
+VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, $7, $8, $9, $10, $10)
 ON CONFLICT (id) DO NOTHING
 RETURNING id
 """
@@ -101,7 +102,7 @@ class JobLedger:
         job_input: dict[str, Any],
         now: datetime,
     ) -> bool:
-        """이 멱등키의 행이 이미 있으면 새로 세우지 않고 거짓을 낸다."""
+        """이 접수구가 받았다는 것이 곧 축이므로 축을 함께 적고, 이 멱등키의 행이 이미 있으면 거짓을 낸다."""
         try:
             rows = await self._sql.fetch(
                 _CLAIM,
@@ -109,6 +110,7 @@ class JobLedger:
                 user_id,
                 kind,
                 executor,
+                AGENT_AXIS,
                 task_id,
                 idempotency_key,
                 idempotency_input_hash,

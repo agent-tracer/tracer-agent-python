@@ -136,6 +136,7 @@ CREATE TABLE ai_jobs (
     user_id TEXT NOT NULL,
     kind TEXT NOT NULL,
     executor TEXT NOT NULL,
+    backend TEXT NOT NULL,
     status TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     task_id TEXT,
@@ -155,6 +156,9 @@ CREATE TABLE ai_jobs (
 
 CREATE UNIQUE INDEX ai_jobs_idempotency_key
     ON ai_jobs (user_id, kind, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX ai_jobs_active_backend
+    ON ai_jobs (backend, kind) WHERE status IN ('pending', 'running');
 
 CREATE TABLE ai_job_steps (
     id TEXT PRIMARY KEY,
