@@ -27,14 +27,7 @@ def test_계약이_준_판을_그대로_싣는다() -> None:
     assert observation.toolContractVersion == "v0.0.1"  # type: ignore[attr-defined]
 
 
-def test_프롬프트_식별자는_에이전트와_판만을_재료로_쓴다() -> None:
-    same = _observation("chat").promptContentHash  # type: ignore[attr-defined]
-    other = _observation("recipe-scan").promptContentHash  # type: ignore[attr-defined]
+def test_관측은_해시를_하나도_싣지_않는다() -> None:
+    carried = _observation("chat").model_dump()  # type: ignore[attr-defined]
 
-    assert same == _observation("chat").promptContentHash  # type: ignore[attr-defined]
-    assert same != other
-    assert same.startswith("sha256:")
-
-
-def test_관측은_조립_결과의_해시를_싣지_않는다() -> None:
-    assert "resolvedPromptHash" not in _observation("chat").model_dump()  # type: ignore[attr-defined]
+    assert not [key for key in carried if "Hash" in key]

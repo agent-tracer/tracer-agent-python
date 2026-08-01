@@ -11,7 +11,6 @@ def test_추적_뿌리_메타데이터가_langsmith_설정을_이룬다():
         execution_id="e1",
         attempt_id="a1",
         job_id="j1",
-        prompt_content_hash="abcd",
         tool_contract_version="v2",
     )
 

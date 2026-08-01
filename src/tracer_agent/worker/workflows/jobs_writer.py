@@ -13,14 +13,14 @@ from ...shared.workflows.jobs_ledger import JobLedger
 _INSERT_OBSERVATION = """
 INSERT INTO agent_run_observations (
     execution_id, attempt_id, user_id, job_id,
-    agent_name, backend, model_requested, model_actual, prompt_version, prompt_content_hash,
+    agent_name, backend, model_requested, model_actual, prompt_version,
     tool_contract_version, status, duration_ms, usage, cost_usd,
     landed, repair_attempted, validation, model_calls, tool_calls, created_at
 )
 SELECT
     payload->>'executionId', payload->>'attemptId', $1, payload->>'jobId',
     payload->>'agentName', payload->>'backend', payload->>'modelRequested', payload->>'modelActual',
-    payload->>'promptVersion', payload->>'promptContentHash', payload->>'toolContractVersion',
+    payload->>'promptVersion', payload->>'toolContractVersion',
     payload->>'status', (payload->>'durationMs')::integer,
     payload->'usage', (payload->>'costUsd')::double precision, (payload->>'landed')::boolean,
     (payload->>'repairAttempted')::boolean, payload->'validation', payload->'modelCalls',

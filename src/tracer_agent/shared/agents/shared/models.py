@@ -224,7 +224,6 @@ class AgentRunObservationDTO(BaseModel):
     modelRequested: TrimmedStr
     modelActual: str | None
     promptVersion: TrimmedStr
-    promptContentHash: TrimmedStr
     toolContractVersion: TrimmedStr
     status: Literal["succeeded", "failed", "cancelled"]
     durationMs: int = Field(ge=0)

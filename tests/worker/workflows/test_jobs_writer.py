@@ -33,7 +33,6 @@ def observation(**overrides: Any) -> dict[str, Any]:
         "modelRequested": "model",
         "modelActual": "model",
         "promptVersion": "1.0.0",
-        "promptContentHash": "sha256:test",
         "toolContractVersion": "1.0.0",
         "status": "succeeded",
         "durationMs": 1,

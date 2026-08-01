@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -161,7 +160,6 @@ class ExecutionTrace:
             modelRequested=model_requested,
             modelActual=actual_model,
             promptVersion=prompt_version,
-            promptContentHash=_prompt_identity(agent_name, prompt_version),
             toolContractVersion=tool_contract_version,
             status=status,
             durationMs=duration_ms,
@@ -175,11 +173,6 @@ class ExecutionTrace:
             modelCalls=[model_call],
             toolCalls=_tool_observations(self.steps, execution_id, attempt_id, status),
         )
-
-
-def _prompt_identity(agent_name: str, prompt_version: str) -> str:
-    """원장이 요구하는 프롬프트 식별자이며 계약이 준 에이전트 이름과 판만을 재료로 쓴다."""
-    return f"sha256:{hashlib.sha256(f'{agent_name}:{prompt_version}'.encode()).hexdigest()}"
 
 
 def _last_finish_reason(steps: list[AgentStepDTO]) -> str | None:

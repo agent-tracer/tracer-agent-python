@@ -132,7 +132,6 @@ def observation_row(status: str) -> dict[str, Any]:
         "backend": "python",
         "model_requested": "model",
         "prompt_version": "1.0.0",
-        "prompt_content_hash": "sha256:test",
         "tool_contract_version": "1.0.0",
         "status": status,
         "duration_ms": 1,

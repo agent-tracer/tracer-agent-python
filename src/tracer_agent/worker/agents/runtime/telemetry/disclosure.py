@@ -28,7 +28,6 @@ class TraceSafeMetadata(BaseModel):
     backend: TraceBackend = TraceBackend.PYTHON
     model_requested: str
     prompt_version: str
-    prompt_content_hash: str | None = None
     tool_contract_version: str | None = None
     job_id: str | None = None
     execution_id: str | None = None
@@ -41,7 +40,6 @@ class TraceSafeMetadata(BaseModel):
             "agent_tracer.backend": self.backend.value,
             "agent_tracer.model.requested": self.model_requested,
             "agent_tracer.prompt.version": self.prompt_version,
-            "agent_tracer.prompt.content_hash": self.prompt_content_hash,
             "agent_tracer.tool.contract.version": self.tool_contract_version,
             "agent_tracer.job.id": self.job_id,
             "agent_tracer.execution.id": self.execution_id,
