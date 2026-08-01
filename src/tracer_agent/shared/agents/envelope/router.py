@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -78,6 +79,8 @@ async def issue_chat_execution_envelope(
         read_api_base_url=read_api_base_url,
         agent_api_base_url=agent_api_base_url,
         grant=issue_draft_grant(),
+        user_id=str(row["user_id"]),
+        now_ms=int(time.time() * 1000),
     )
     return JSONResponse(status_code=200, content={"ok": True, "data": data})
 

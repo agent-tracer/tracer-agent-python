@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tracer_agent.shared.agents.shared import scope_token
+
 from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
@@ -20,6 +22,8 @@ def chat_envelope(
     read_api_base_url: str,
     agent_api_base_url: str,
     grant: DraftGrant,
+    user_id: str,
+    now_ms: int,
 ) -> dict[str, Any]:
     """대화 한 시도가 쓸 카탈로그 값과 자격과 draft 창구를 봉투로 낸다."""
     return {
@@ -29,8 +33,14 @@ def chat_envelope(
         "limits": wire_limits(catalog),
         "deadlineMs": catalog.deadline_ms,
         "readApiBaseUrl": read_api_base_url,
-        # 도구 호출을 이 사용자와 실행으로 묶는 서명 자격이 없으면 자기신고 헤더로만 식별된다.
-        "scopeToken": "",
+        # 서명 비밀을 배포가 주지 않으면 자격을 만들 수 없어 자기신고 헤더로만 식별된다.
+        "scopeToken": scope_token.issue(
+            user_id=user_id,
+            execution_id=execution_id,
+            ttl_ms=catalog.deadline_ms + scope_token.margin_ms(),
+            now_ms=now_ms,
+        )
+        or "",
         "toolDescriptions": chat_tool_descriptions(),
         "draft": {
             "url": f"{agent_api_base_url.rstrip('/')}{DRAFT_PATH.format(execution_id=execution_id)}",
