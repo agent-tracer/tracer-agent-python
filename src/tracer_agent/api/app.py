@@ -13,43 +13,15 @@ from ..shared.agents.chat.intake.router import (
     ACCEPTED_STATUS,
     CHAT_CANCEL_PATH,
     CHAT_MESSAGES_PATH,
-    CHAT_THREADS_PATH,
     cancel_chat_turn,
     enqueue_chat_turn,
 )
-from ..shared.agents.chat.surface.confirmations import (
-    CHAT_CONFIRMATION_PATH,
-    CHAT_CONFIRMATIONS_PATH,
-    decide_chat_tool,
-    propose_chat_tool,
-)
-from ..shared.agents.chat.surface.drafts import CHAT_DRAFTS_PATH, checkpoint_chat_draft
-from ..shared.agents.chat.surface.envelope import CREATED_STATUS as CHAT_CREATED_STATUS
-from ..shared.agents.chat.surface.executions import (
-    CHAT_EXECUTION_REPLAY_PATH,
-    CHAT_EXECUTION_STEPS_PATH,
-    CHAT_EXECUTIONS_PATH,
-    get_chat_replay,
-    list_chat_execution_steps,
-    list_chat_executions,
-)
-from ..shared.agents.chat.surface.memories import (
-    CHAT_MEMORIES_PATH,
-    CHAT_MEMORY_PATH,
-    recall_chat_facts,
-    remember_chat_fact,
-)
+from ..shared.agents.chat.surface.confirmations import router as chat_confirmation_router
+from ..shared.agents.chat.surface.drafts import router as chat_draft_router
+from ..shared.agents.chat.surface.executions import router as chat_execution_router
+from ..shared.agents.chat.surface.memories import router as chat_memory_router
 from ..shared.agents.chat.surface.stream import CHAT_EXECUTION_EVENTS_PATH, watch_chat_execution
-from ..shared.agents.chat.surface.threads import (
-    CHAT_THREAD_MESSAGES_PATH,
-    CHAT_THREAD_PATH,
-    create_chat_thread,
-    delete_chat_thread,
-    get_chat_thread,
-    list_chat_messages,
-    list_chat_threads,
-    rename_chat_thread,
-)
+from ..shared.agents.chat.surface.threads import router as chat_thread_router
 from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
 from ..shared.agents.envelope.router import router as envelope_router
@@ -147,23 +119,14 @@ def create_app() -> FastAPI:
     application.get("/health/ready")(readiness)
     application.get(SURFACE_PATH)(get_served_surface)
     # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
-    application.get(CHAT_THREADS_PATH)(list_chat_threads)
-    application.post(CHAT_THREADS_PATH, status_code=CHAT_CREATED_STATUS)(create_chat_thread)
-    application.get(CHAT_THREAD_PATH)(get_chat_thread)
-    application.patch(CHAT_THREAD_PATH)(rename_chat_thread)
-    application.delete(CHAT_THREAD_PATH)(delete_chat_thread)
-    application.get(CHAT_THREAD_MESSAGES_PATH)(list_chat_messages)
     application.post(CHAT_MESSAGES_PATH, status_code=ACCEPTED_STATUS)(enqueue_chat_turn)
-    application.post(CHAT_CONFIRMATIONS_PATH, status_code=CHAT_CREATED_STATUS)(propose_chat_tool)
-    application.post(CHAT_CONFIRMATION_PATH)(decide_chat_tool)
-    application.get(CHAT_EXECUTIONS_PATH)(list_chat_executions)
     application.get(CHAT_EXECUTION_EVENTS_PATH, response_model=None)(watch_chat_execution)
-    application.get(CHAT_EXECUTION_STEPS_PATH)(list_chat_execution_steps)
-    application.get(CHAT_EXECUTION_REPLAY_PATH)(get_chat_replay)
     application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
-    application.post(CHAT_DRAFTS_PATH)(checkpoint_chat_draft)
-    application.get(CHAT_MEMORIES_PATH)(recall_chat_facts)
-    application.put(CHAT_MEMORY_PATH)(remember_chat_fact)
+    application.include_router(chat_thread_router)
+    application.include_router(chat_confirmation_router)
+    application.include_router(chat_execution_router)
+    application.include_router(chat_draft_router)
+    application.include_router(chat_memory_router)
     application.include_router(job_query_router)
     application.include_router(job_intake_router)
     application.include_router(settings_router)

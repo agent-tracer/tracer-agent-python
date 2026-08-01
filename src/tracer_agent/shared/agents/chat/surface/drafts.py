@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 
-from fastapi import Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from ...runtime.ledger import SqlSource
+from ...runtime.dependencies import ExecutionSql
+from ..dependencies import Updates
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.cancel import UpdateSignal
 from ..intake.router import error_envelope
@@ -21,14 +22,18 @@ CHAT_DRAFTS_PATH = "/api/agent/chat/executions/{execution_id}/drafts"
 EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
 TOKEN_REJECTED = (403, "forbidden", "Chat draft callback is not authorized")
 
+router = APIRouter()
 
-async def checkpoint_chat_draft(execution_id: str, request: Request) -> JSONResponse:
+
+@router.post(CHAT_DRAFTS_PATH)
+async def checkpoint_chat_draft(
+    execution_id: str, request: Request, source: ExecutionSql, updates: Updates
+) -> JSONResponse:
     """지금까지 만든 누적 답변을 통지받아 살아 있는 시도의 것일 때만 원장에 적는다."""
     body = await read_payload(request, DraftCheckpointBody)
     if isinstance(body, JSONResponse):
         return body
 
-    source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
         ledger = ChatExecutionLedger(sql)
         execution = await ledger.find_by_id(execution_id)
@@ -43,7 +48,7 @@ async def checkpoint_chat_draft(execution_id: str, request: Request) -> JSONResp
         )
 
     if stored:
-        await _wake(request, execution_id)
+        await _wake(updates, execution_id)
     # 취소 등록이 다른 인스턴스에 닿지 않으므로 이 응답이 종결을 대신 알린다.
     return ok({"stored": stored, "terminal": execution["status"] in TERMINAL_CHAT_EXECUTION_STATUSES})
 
@@ -54,7 +59,6 @@ def _accepts(token_hash: object, token: str) -> bool:
     return str(token_hash) == hashlib.sha256(token.encode()).hexdigest()
 
 
-async def _wake(request: Request, execution_id: str) -> None:
-    updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
+async def _wake(updates: UpdateSignal | None, execution_id: str) -> None:
     if updates is not None:
         await updates.publish(execution_id, {"executionId": execution_id})

@@ -6,13 +6,13 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from ...runtime.ledger import SqlSource
+from ...runtime.dependencies import ExecutionSql, UserId
+from ..dependencies import ToolExecutor, Updates
 from ..intake.cancel import UpdateSignal
 from ..intake.ids import generate_ulid
-from ..intake.router import MONITOR_USER_HEADER, resolve_user_id
 from ..intake.turn import ChatIntakeRejected
 from .access import CONFIRMATION_NOT_FOUND, CONFIRMATION_RESOLVED, owned_thread
 from .envelope import CREATED_STATUS, invalid_request, ok, read_payload, rejection
@@ -36,8 +36,13 @@ PROPOSAL_NOTE = (
 
 _SUMMARY_VALUE_LIMIT = 80
 
+router = APIRouter()
 
-async def propose_chat_tool(thread_id: str, request: Request) -> JSONResponse:
+
+@router.post(CHAT_CONFIRMATIONS_PATH, status_code=CREATED_STATUS)
+async def propose_chat_tool(
+    thread_id: str, request: Request, source: ExecutionSql, user_id: UserId, updates: Updates
+) -> JSONResponse:
     """확인이 필요한 도구 호출 하나를 실행하지 않고 대기 행에 세운다."""
     body = await read_payload(request, ProposeToolBody)
     if isinstance(body, JSONResponse):
@@ -51,17 +56,16 @@ async def propose_chat_tool(thread_id: str, request: Request) -> JSONResponse:
     except ChatToolArgsInvalid:
         return invalid_request()
 
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     now = datetime.now(UTC)
     try:
-        async with _source(request).connect() as sql:
+        async with source.connect() as sql:
             ledger = ChatSurfaceLedger(sql)
             await owned_thread(ledger, user_id, thread_id)
             # 이 턴의 어시스턴트 메시지는 아직 적재 전이라 어느 메시지에 매인지 확정할 수 없다.
             pending = await ledger.insert_pending_tool(
                 generate_ulid(now), thread_id, body.toolName, args, now
             )
-            await _announce(request, ledger, thread_id)
+            await _announce(updates, ledger, thread_id)
     except ChatIntakeRejected as rejected:
         return rejection(rejected)
     return ok(
@@ -76,15 +80,25 @@ async def propose_chat_tool(thread_id: str, request: Request) -> JSONResponse:
     )
 
 
-async def decide_chat_tool(thread_id: str, confirmation_id: str, request: Request) -> JSONResponse:
+@router.post(CHAT_CONFIRMATION_PATH)
+async def decide_chat_tool(
+    thread_id: str,
+    confirmation_id: str,
+    request: Request,
+    source: ExecutionSql,
+    user_id: UserId,
+    updates: Updates,
+    executor: ToolExecutor,
+) -> JSONResponse:
     """대기 중인 도구 호출 하나를 승인이나 거절로 해소한다."""
     body = await read_payload(request, DecideToolBody)
     if isinstance(body, JSONResponse):
         return body
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     try:
-        async with _source(request).connect() as sql:
-            return await _resolve(ChatSurfaceLedger(sql), request, user_id, thread_id, confirmation_id, body)
+        async with source.connect() as sql:
+            return await _resolve(
+                ChatSurfaceLedger(sql), executor, updates, user_id, thread_id, confirmation_id, body
+            )
     except ChatIntakeRejected as rejected:
         return rejection(rejected)
     except ChatToolArgsInvalid:
@@ -95,13 +109,13 @@ async def decide_chat_tool(thread_id: str, confirmation_id: str, request: Reques
 
 async def _resolve(
     ledger: ChatSurfaceLedger,
-    request: Request,
+    executor: ChatToolExecutor,
+    updates: UpdateSignal | None,
     user_id: str,
     thread_id: str,
     confirmation_id: str,
     body: DecideToolBody,
 ) -> JSONResponse:
-    executor: ChatToolExecutor = request.app.state.chat_tool_executor
     now = datetime.now(UTC)
     await owned_thread(ledger, user_id, thread_id)
     pending = await _pending(ledger, thread_id, confirmation_id)
@@ -117,7 +131,7 @@ async def _resolve(
     if resolved is None:
         raise ChatIntakeRejected(*CONFIRMATION_RESOLVED)
     await ledger.insert_tool_message(generate_ulid(now), thread_id, content, confirmation_id, now)
-    await _announce(request, ledger, thread_id)
+    await _announce(updates, ledger, thread_id)
     return ok(
         {
             "confirmationId": confirmation_id,
@@ -138,9 +152,8 @@ async def _pending(ledger: ChatSurfaceLedger, thread_id: str, confirmation_id: s
     return pending
 
 
-async def _announce(request: Request, ledger: ChatSurfaceLedger, thread_id: str) -> None:
+async def _announce(updates: UpdateSignal | None, ledger: ChatSurfaceLedger, thread_id: str) -> None:
     """확인 대기는 스레드 것이므로 지금 열려 있는 실행 채널에 실어 다른 연결이 그것을 본다."""
-    updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
     if updates is None:
         return
     active = await ledger.latest_active_execution(thread_id)
@@ -158,8 +171,3 @@ def _formatted(value: Any) -> str:
     if isinstance(value, str):
         return f"{value[: _SUMMARY_VALUE_LIMIT - 3]}..." if len(value) > _SUMMARY_VALUE_LIMIT else value
     return json.dumps(value, ensure_ascii=False)
-
-
-def _source(request: Request) -> SqlSource:
-    source: SqlSource = request.app.state.execution_sql
-    return source

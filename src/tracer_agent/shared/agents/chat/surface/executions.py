@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from ...runtime.ledger import SqlSource
-from ..intake.router import MONITOR_USER_HEADER, resolve_user_id
+from ...runtime.dependencies import ExecutionSql, UserId
 from ..intake.turn import ChatIntakeRejected
 from .access import owned_execution, owned_thread
 from .envelope import ok, rejection
@@ -22,12 +21,14 @@ CHAT_EXECUTION_REPLAY_PATH = f"{CHAT_EXECUTION_PATH}/replay"
 
 REPLAY_UNBUILDABLE = (404, "not_found", "Chat replay message not found")
 
+router = APIRouter()
 
-async def list_chat_executions(thread_id: str, request: Request) -> JSONResponse:
+
+@router.get(CHAT_EXECUTIONS_PATH)
+async def list_chat_executions(thread_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """스레드의 실행 이력과 지금 승인을 기다리는 도구를 함께 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     try:
-        async with _source(request).connect() as sql:
+        async with source.connect() as sql:
             ledger = ChatSurfaceLedger(sql)
             await owned_thread(ledger, user_id, thread_id)
             executions = await ledger.list_executions(thread_id)
@@ -42,11 +43,13 @@ async def list_chat_executions(thread_id: str, request: Request) -> JSONResponse
     )
 
 
-async def list_chat_execution_steps(thread_id: str, execution_id: str, request: Request) -> JSONResponse:
+@router.get(CHAT_EXECUTION_STEPS_PATH)
+async def list_chat_execution_steps(
+    thread_id: str, execution_id: str, source: ExecutionSql, user_id: UserId
+) -> JSONResponse:
     """대화 턴 하나가 남긴 궤적을 시도와 순번의 오름차순으로 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     try:
-        async with _source(request).connect() as sql:
+        async with source.connect() as sql:
             ledger = ChatSurfaceLedger(sql)
             await owned_execution(ledger, user_id, thread_id, execution_id)
             steps = await ledger.list_steps(execution_id, user_id)
@@ -55,11 +58,13 @@ async def list_chat_execution_steps(thread_id: str, execution_id: str, request: 
     return ok({"items": [step_dto(row) for row in steps]})
 
 
-async def get_chat_replay(thread_id: str, execution_id: str, request: Request) -> JSONResponse:
+@router.get(CHAT_EXECUTION_REPLAY_PATH)
+async def get_chat_replay(
+    thread_id: str, execution_id: str, source: ExecutionSql, user_id: UserId
+) -> JSONResponse:
     """이번 턴에 모델에게 되돌려 줄 대화 이력과 요약과 기억을 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     try:
-        async with _source(request).connect() as sql:
+        async with source.connect() as sql:
             ledger = ChatSurfaceLedger(sql)
             execution = await owned_execution(ledger, user_id, thread_id, execution_id)
             thread = await owned_thread(ledger, user_id, thread_id)
@@ -81,8 +86,3 @@ async def get_chat_replay(thread_id: str, execution_id: str, request: Request) -
             "facts": [{"key": row["key"], "content": row["content"]} for row in memories],
         }
     )
-
-
-def _source(request: Request) -> SqlSource:
-    source: SqlSource = request.app.state.execution_sql
-    return source
