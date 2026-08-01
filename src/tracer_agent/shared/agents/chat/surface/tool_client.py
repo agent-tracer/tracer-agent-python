@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from ..intake.router import MONITOR_USER_HEADER
+from ...runtime.dependencies import MONITOR_USER_HEADER
 from ..tools.bindings import TOOL_BINDINGS, fill_path
 from .tool_calls import plan_chat_tool_call
 

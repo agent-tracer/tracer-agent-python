@@ -10,9 +10,9 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from ...runtime.ledger import SqlSource
-from .cancel import ChatTurnCancellation, UpdateSignal
-from .dispatch import ExecutionDispatch
+from ...runtime.dependencies import ExecutionSql, UserId
+from ..dependencies import Dispatch, Updates
+from .cancel import ChatTurnCancellation
 from .models import PostMessagePayload, execution_dto, message_dto
 from .turn import ChatIntakeRejected, ChatTurnIntake
 
@@ -20,12 +20,12 @@ CHAT_THREADS_PATH = "/api/agent/chat/threads"
 CHAT_MESSAGES_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/messages"
 CHAT_CANCEL_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/executions/{{execution_id}}/cancel"
 ACCEPTED_STATUS = 202
-MONITOR_USER_HEADER = "x-monitor-user"
-DEFAULT_USER_ID = "local"
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 
 
-async def enqueue_chat_turn(thread_id: str, request: Request) -> JSONResponse:
+async def enqueue_chat_turn(
+    thread_id: str, request: Request, source: ExecutionSql, user_id: UserId, dispatch: Dispatch
+) -> JSONResponse:
     """대화 턴 하나를 접수하고 결과나 사유를 계약이 정한 봉투로 낸다."""
     body = await _read_body(request)
     if body is None:
@@ -35,12 +35,10 @@ async def enqueue_chat_turn(thread_id: str, request: Request) -> JSONResponse:
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
-    source: SqlSource = request.app.state.execution_sql
-    dispatch: ExecutionDispatch = request.app.state.execution_dispatch
     try:
         async with source.connect() as sql:
             accepted = await ChatTurnIntake(sql, dispatch).enqueue(
-                resolve_user_id(request.headers.get(MONITOR_USER_HEADER)),
+                user_id,
                 thread_id,
                 payload,
                 datetime.now(UTC),
@@ -60,15 +58,19 @@ async def enqueue_chat_turn(thread_id: str, request: Request) -> JSONResponse:
     )
 
 
-async def cancel_chat_turn(thread_id: str, execution_id: str, request: Request) -> JSONResponse:
+async def cancel_chat_turn(
+    thread_id: str,
+    execution_id: str,
+    source: ExecutionSql,
+    user_id: UserId,
+    dispatch: Dispatch,
+    updates: Updates,
+) -> JSONResponse:
     """도는 턴 하나를 끊고 결과나 사유를 계약이 정한 봉투로 낸다."""
-    source: SqlSource = request.app.state.execution_sql
-    dispatch: ExecutionDispatch = request.app.state.execution_dispatch
-    updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
     try:
         async with source.connect() as sql:
             canceled = await ChatTurnCancellation(sql, dispatch, updates).cancel(
-                resolve_user_id(request.headers.get(MONITOR_USER_HEADER)),
+                user_id,
                 thread_id,
                 execution_id,
                 datetime.now(UTC),
@@ -77,12 +79,6 @@ async def cancel_chat_turn(thread_id: str, execution_id: str, request: Request) 
         return error_envelope(rejected.status, rejected.code, rejected.message)
 
     return JSONResponse(status_code=200, content={"ok": True, "data": {"execution": execution_dto(canceled)}})
-
-
-def resolve_user_id(header: str | None) -> str:
-    """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
-    trimmed = (header or "").strip()
-    return trimmed if trimmed else DEFAULT_USER_ID
 
 
 def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:

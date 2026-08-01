@@ -11,8 +11,8 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ...runtime.dependencies import MONITOR_USER_HEADER, resolve_user_id
 from ...runtime.ledger import SqlSource
-from ..intake.router import MONITOR_USER_HEADER, resolve_user_id
 from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from .access import owned_execution, owned_thread

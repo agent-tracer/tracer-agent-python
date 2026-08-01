@@ -20,11 +20,10 @@ from tracer_agent.shared.agents.chat.intake.router import (
     ACCEPTED_STATUS,
     CHAT_CANCEL_PATH,
     CHAT_MESSAGES_PATH,
-    DEFAULT_USER_ID,
-    MONITOR_USER_HEADER,
     error_envelope,
 )
 from tracer_agent.shared.agents.chat.intake.turn import IDEMPOTENCY_CONFLICT, THREAD_NOT_FOUND
+from tracer_agent.shared.agents.runtime.dependencies import DEFAULT_USER_ID, MONITOR_USER_HEADER
 
 
 def _자리표시자를_구현체_표기로_바꾼다(path: str) -> str:

@@ -18,10 +18,15 @@ def get_execution_sql(request: Request) -> SqlSource:
     return source
 
 
-def get_user_id(monitor_user: Annotated[str | None, Header(alias=MONITOR_USER_HEADER)] = None) -> str:
+def resolve_user_id(header: str | None) -> str:
     """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
-    trimmed = (monitor_user or "").strip()
+    trimmed = (header or "").strip()
     return trimmed if trimmed else DEFAULT_USER_ID
+
+
+def get_user_id(monitor_user: Annotated[str | None, Header(alias=MONITOR_USER_HEADER)] = None) -> str:
+    """이 요청이 자기신고한 사용자를 낸다."""
+    return resolve_user_id(monitor_user)
 
 
 ExecutionSql = Annotated[SqlSource, Depends(get_execution_sql)]
