@@ -9,6 +9,7 @@ from collections.abc import Callable
 import httpx
 
 from tracer_agent.shared.agents.chat.models import DraftCallback
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
 _log = logging.getLogger(__name__)
 
@@ -69,7 +70,8 @@ class DraftPublisher:
             "token": self._callback.token,
             "attempt": self._callback.attempt,
             "draftSeq": self._seq,
-            "text": self._text,
+            # 누적 전문을 가리므로 자격이 조각 경계에 걸쳐 있어도 온전한 모양으로 걸린다.
+            "text": redact_text(self._text, stage=RedactionStage.OUTPUT),
         }
         try:
             response = await self._client.post(self._callback.url, json=body, timeout=DRAFT_TIMEOUT_S)
