@@ -36,7 +36,7 @@ class ResolvedPromptTemplateHashDTO(BaseModel):
 
 
 class ResolvedFragmentsIntegrityDTO(BaseModel):
-    """평가나 override 실행이 제공하는 프래그먼트와 완성 prompt hash 계약이다."""
+    """override 실행이 제공하는 프래그먼트와 완성 prompt hash 계약이다."""
 
     model_config = ConfigDict(extra="forbid")
     mode: Literal["resolved-fragments"]
