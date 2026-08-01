@@ -58,13 +58,6 @@ from ..shared.agents.envelope.router import (
     issue_chat_execution_envelope,
     issue_job_execution_envelope,
 )
-from ..shared.agents.prompt_registry.router import (
-    CREATED_STATUS,
-    PROMPT_FRAGMENTS_REGISTER_PATH,
-    PROMPT_REGISTER_PATH,
-    register_and_resolve_prompt_fragments,
-    register_prompt,
-)
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql, SqlSource
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
@@ -206,9 +199,6 @@ def create_app() -> FastAPI:
     application.get(SETTING_MODELS_PATH)(list_setting_models)
     application.put(SETTING_PATH)(put_setting)
     application.delete(SETTING_PATH)(delete_setting)
-    # 배포 단위 사이에서만 오가는 창구라 게이트웨이가 바깥에 열지 않는다.
-    application.post(PROMPT_FRAGMENTS_REGISTER_PATH)(register_and_resolve_prompt_fragments)
-    application.post(PROMPT_REGISTER_PATH, status_code=CREATED_STATUS)(register_prompt)
     application.post(CHAT_ENVELOPE_PATH)(issue_chat_execution_envelope)
     application.post(JOB_ENVELOPE_PATH)(issue_job_execution_envelope)
     return application
