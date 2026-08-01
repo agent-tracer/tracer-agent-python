@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..intake.ids import generate_ulid
 from .envelope import ok, read_payload
 from .ledger import ChatSurfaceLedger
@@ -22,7 +23,7 @@ REMEMBERED = "remembered"
 router = APIRouter()
 
 
-@router.get(CHAT_MEMORIES_PATH)
+@router.get(CHAT_MEMORIES_PATH, response_model=SuccessEnvelope)
 async def recall_chat_facts(source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """이 사용자의 장기기억 전체를 최근 갱신순으로 낸다."""
     async with source.connect() as sql:
@@ -30,7 +31,7 @@ async def recall_chat_facts(source: ExecutionSql, user_id: UserId) -> JSONRespon
     return ok({"facts": [memory_dto(row) for row in rows]})
 
 
-@router.put(CHAT_MEMORY_PATH)
+@router.put(CHAT_MEMORY_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
 async def remember_chat_fact(
     key: str, request: Request, source: ExecutionSql, user_id: UserId
 ) -> JSONResponse:

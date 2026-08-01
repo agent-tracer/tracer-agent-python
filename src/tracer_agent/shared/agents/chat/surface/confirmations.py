@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..dependencies import ToolExecutor, Updates
 from ..intake.cancel import UpdateSignal
 from ..intake.ids import generate_ulid
@@ -39,7 +40,12 @@ _SUMMARY_VALUE_LIMIT = 80
 router = APIRouter()
 
 
-@router.post(CHAT_CONFIRMATIONS_PATH, status_code=CREATED_STATUS)
+@router.post(
+    CHAT_CONFIRMATIONS_PATH,
+    status_code=CREATED_STATUS,
+    response_model=SuccessEnvelope,
+    responses=error_responses(400, 404),
+)
 async def propose_chat_tool(
     thread_id: str, request: Request, source: ExecutionSql, user_id: UserId, updates: Updates
 ) -> JSONResponse:
@@ -80,7 +86,11 @@ async def propose_chat_tool(
     )
 
 
-@router.post(CHAT_CONFIRMATION_PATH)
+@router.post(
+    CHAT_CONFIRMATION_PATH,
+    response_model=SuccessEnvelope,
+    responses=error_responses(400, 404, 409, 502),
+)
 async def decide_chat_tool(
     thread_id: str,
     confirmation_id: str,

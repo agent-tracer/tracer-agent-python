@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...runtime.ledger import LedgerSql
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..dependencies import Dispatch
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.ids import generate_ulid
@@ -27,7 +28,7 @@ CHAT_THREAD_MESSAGES_PATH = f"{CHAT_THREAD_PATH}/messages"
 router = APIRouter()
 
 
-@router.get(CHAT_THREADS_PATH)
+@router.get(CHAT_THREADS_PATH, response_model=SuccessEnvelope)
 async def list_chat_threads(source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """이 사용자의 대화 스레드를 최근 갱신순으로 낸다."""
     async with source.connect() as sql:
@@ -35,7 +36,12 @@ async def list_chat_threads(source: ExecutionSql, user_id: UserId) -> JSONRespon
     return ok({"items": [thread_dto(row) for row in rows]})
 
 
-@router.post(CHAT_THREADS_PATH, status_code=CREATED_STATUS)
+@router.post(
+    CHAT_THREADS_PATH,
+    status_code=CREATED_STATUS,
+    response_model=SuccessEnvelope,
+    responses=error_responses(400),
+)
 async def create_chat_thread(request: Request, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """새 대화 스레드를 연다."""
     body = await read_payload(request, ThreadTitleBody)
@@ -47,7 +53,7 @@ async def create_chat_thread(request: Request, source: ExecutionSql, user_id: Us
     return ok({"thread": thread_dto(row)}, status=CREATED_STATUS)
 
 
-@router.get(CHAT_THREAD_PATH)
+@router.get(CHAT_THREAD_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def get_chat_thread(thread_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """대화 스레드 하나를 낸다."""
     try:
@@ -58,7 +64,7 @@ async def get_chat_thread(thread_id: str, source: ExecutionSql, user_id: UserId)
     return ok({"thread": thread_dto(thread)})
 
 
-@router.patch(CHAT_THREAD_PATH)
+@router.patch(CHAT_THREAD_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
 async def rename_chat_thread(
     thread_id: str, request: Request, source: ExecutionSql, user_id: UserId
 ) -> JSONResponse:
@@ -76,7 +82,7 @@ async def rename_chat_thread(
     return ok({"thread": thread_dto(row)})
 
 
-@router.delete(CHAT_THREAD_PATH)
+@router.delete(CHAT_THREAD_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def delete_chat_thread(
     thread_id: str, source: ExecutionSql, user_id: UserId, dispatch: Dispatch
 ) -> JSONResponse:
@@ -95,7 +101,7 @@ async def delete_chat_thread(
     return ok({"deleted": True})
 
 
-@router.get(CHAT_THREAD_MESSAGES_PATH)
+@router.get(CHAT_THREAD_MESSAGES_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def list_chat_messages(thread_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """스레드에 쌓인 메시지를 쌓인 순서대로 낸다."""
     try:

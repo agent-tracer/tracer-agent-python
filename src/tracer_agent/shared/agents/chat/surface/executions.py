@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..intake.turn import ChatIntakeRejected
 from .access import owned_execution, owned_thread
 from .envelope import ok, rejection
@@ -24,7 +25,7 @@ REPLAY_UNBUILDABLE = (404, "not_found", "Chat replay message not found")
 router = APIRouter()
 
 
-@router.get(CHAT_EXECUTIONS_PATH)
+@router.get(CHAT_EXECUTIONS_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def list_chat_executions(thread_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """스레드의 실행 이력과 지금 승인을 기다리는 도구를 함께 낸다."""
     try:
@@ -43,7 +44,7 @@ async def list_chat_executions(thread_id: str, source: ExecutionSql, user_id: Us
     )
 
 
-@router.get(CHAT_EXECUTION_STEPS_PATH)
+@router.get(CHAT_EXECUTION_STEPS_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def list_chat_execution_steps(
     thread_id: str, execution_id: str, source: ExecutionSql, user_id: UserId
 ) -> JSONResponse:
@@ -58,7 +59,7 @@ async def list_chat_execution_steps(
     return ok({"items": [step_dto(row) for row in steps]})
 
 
-@router.get(CHAT_EXECUTION_REPLAY_PATH)
+@router.get(CHAT_EXECUTION_REPLAY_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def get_chat_replay(
     thread_id: str, execution_id: str, source: ExecutionSql, user_id: UserId
 ) -> JSONResponse:

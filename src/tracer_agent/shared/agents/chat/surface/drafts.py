@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..dependencies import Updates
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.cancel import UpdateSignal
@@ -25,7 +26,7 @@ TOKEN_REJECTED = (403, "forbidden", "Chat draft callback is not authorized")
 router = APIRouter()
 
 
-@router.post(CHAT_DRAFTS_PATH)
+@router.post(CHAT_DRAFTS_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 403, 404))
 async def checkpoint_chat_draft(
     execution_id: str, request: Request, source: ExecutionSql, updates: Updates
 ) -> JSONResponse:

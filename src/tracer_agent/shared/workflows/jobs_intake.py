@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
 from ..agents.runtime.dependencies import ExecutionSql, UserId
+from ..agents.shared.wire import SuccessEnvelope, error_responses
 from .jobs_anchor import RuleAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
 from .jobs_envelope import JobEnvelopeSource
@@ -81,7 +82,12 @@ JobEnvelopes = Annotated[JobEnvelopeSource, Depends(get_job_envelopes)]
 JobDispatch = Annotated[TemporalJobDispatch, Depends(get_job_dispatch)]
 
 
-@router.post(JOBS_PATH, status_code=ACCEPTED_STATUS)
+@router.post(
+    JOBS_PATH,
+    status_code=ACCEPTED_STATUS,
+    response_model=SuccessEnvelope,
+    responses=error_responses(400, 404, 409, 502),
+)
 async def enqueue_job(
     request: Request,
     source: ExecutionSql,
@@ -149,7 +155,7 @@ async def enqueue_job(
     return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
-@router.post(JOB_CANCEL_PATH)
+@router.post(JOB_CANCEL_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def cancel_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, dispatch: JobDispatch
 ) -> JSONResponse:

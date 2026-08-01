@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql
+from ..shared.wire import SuccessEnvelope, error_responses
 from .catalog import CATALOG, CHAT_KIND, JOB_KINDS
 from .grants import issue_draft_grant
 from .issue import chat_envelope, job_envelope
@@ -50,7 +51,7 @@ ReadApiBaseUrl = Annotated[str, Depends(get_read_api_base_url)]
 AgentApiBaseUrl = Annotated[str, Depends(get_agent_api_base_url)]
 
 
-@router.post(CHAT_ENVELOPE_PATH)
+@router.post(CHAT_ENVELOPE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
 async def issue_chat_execution_envelope(
     execution_id: str,
     source: ExecutionSql,
@@ -81,7 +82,7 @@ async def issue_chat_execution_envelope(
     return JSONResponse(status_code=200, content={"ok": True, "data": data})
 
 
-@router.post(JOB_ENVELOPE_PATH)
+@router.post(JOB_ENVELOPE_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
 async def issue_job_execution_envelope(
     kind: str, request: Request, credentials: ModelCredentials
 ) -> JSONResponse:

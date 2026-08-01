@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql, UserId
 from ..runtime.ledger import SqlSource
+from ..shared.wire import SuccessEnvelope, error_responses
 from .catalog import knows_model, model_options
 from .models import (
     MODEL_SETTING_KEY,
@@ -42,7 +43,7 @@ def get_setting_cipher(request: Request) -> SettingCipher:
 Cipher = Annotated[SettingCipher, Depends(get_setting_cipher)]
 
 
-@router.get(SETTINGS_PATH)
+@router.get(SETTINGS_PATH, response_model=SuccessEnvelope)
 async def list_settings(source: ExecutionSql, cipher: Cipher, user_id: UserId) -> JSONResponse:
     """그 사용자가 저장해 둔 설정을 키마다 하나씩 낸다."""
     async with _store(source, cipher) as store:
@@ -51,14 +52,14 @@ async def list_settings(source: ExecutionSql, cipher: Cipher, user_id: UserId) -
     return JSONResponse(status_code=200, content={"ok": True, "data": {"items": items}})
 
 
-@router.get(SETTING_MODELS_PATH)
+@router.get(SETTING_MODELS_PATH, response_model=SuccessEnvelope)
 async def list_setting_models() -> JSONResponse:
     """모델 설정에 고를 수 있는 값을 낸다."""
     items = [option.model_dump() for option in model_options()]
     return JSONResponse(status_code=200, content={"ok": True, "data": {"items": items}})
 
 
-@router.put(SETTING_PATH)
+@router.put(SETTING_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
 async def put_setting(
     key: str, request: Request, source: ExecutionSql, cipher: Cipher, user_id: UserId
 ) -> JSONResponse:
@@ -84,7 +85,7 @@ async def put_setting(
     )
 
 
-@router.delete(SETTING_PATH)
+@router.delete(SETTING_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
 async def delete_setting(key: str, source: ExecutionSql, cipher: Cipher, user_id: UserId) -> JSONResponse:
     """설정 하나를 지우고 지울 것이 있었는지 낸다."""
     if not is_setting_key(key):
