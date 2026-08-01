@@ -55,7 +55,7 @@ def _key_words() -> tuple[str, ...]:
 
 @lru_cache(maxsize=1)
 def _value_words() -> tuple[str, ...]:
-    return tuple(str(word).casefold() for word in _rules()[_VALUES]["words"])
+    return tuple(_lower_ascii(str(word)) for word in _rules()[_VALUES]["words"])
 
 
 @lru_cache(maxsize=1)
@@ -89,6 +89,11 @@ def inspects_values(stage: RedactionStage) -> bool:
     return _VALUES in _stage_rule(stage)[1]
 
 
+def _lower_ascii(text: str) -> str:
+    """ASCII 영문자만 내려 접은 문자열의 자리가 원문의 자리와 하나씩 맞물린다."""
+    return "".join(character.lower() if "A" <= character <= "Z" else character for character in text)
+
+
 def _folded_key(key: str) -> str:
     return "".join(character for character in key.casefold() if character.isalnum())
 
@@ -101,7 +106,7 @@ def is_suspect_key(key: str) -> bool:
 
 def is_suspect_text(text: str) -> bool:
     """구분자를 지키고 접은 문자열에서 계약의 값 낱말 뒤에 자격의 몸통이 이어지는지 견준다."""
-    folded = text.casefold()
+    folded = _lower_ascii(text)
     return any(_carries_body(folded, word) for word in _value_words())
 
 
@@ -148,13 +153,10 @@ def _suspect_spans(folded: str) -> list[tuple[int, int]]:
 
 def _covered_text(text: str) -> str:
     """걸린 구간만 표시로 바꾸고 낱말 앞과 몸통 뒤의 본문은 그대로 남긴다."""
-    folded = text.casefold()
+    folded = _lower_ascii(text)
     spans = _suspect_spans(folded)
     if not spans:
         return text
-    # 접어서 길이가 달라지는 글자가 있으면 자리가 밀려 자격의 앞머리가 남으므로 본문을 통째로 가린다.
-    if len(folded) != len(text):
-        return marker()
     kept: list[str] = []
     cursor = 0
     for start, end in spans:
