@@ -21,6 +21,7 @@ from tracer_agent.shared.agents.chat.models import (
     ConverseUpdate,
     ProposedWrite,
 )
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
 from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import ToolLoopBudget
@@ -86,7 +87,7 @@ class ConverseNode(GraphNode):
             else await self._invoke_with_drafts(prepared, self._drafts)
         )
         result = ChatResult(
-            assistantText=_final_text(messages),
+            assistantText=redact_text(_final_text(messages), stage=RedactionStage.OUTPUT),
             proposedWrites=prepared.proposals,
         )
         return {

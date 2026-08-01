@@ -10,6 +10,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 from tracer_agent.shared.agents.chat.memory_policy import memory_rejection
 from tracer_agent.shared.agents.chat.models import ProposedWrite
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.telemetry.spans import tool_span
 from ..reader import ChatReadClient
@@ -44,6 +45,15 @@ MEMORY_BACKEND_MISSING = "the memory backend is not available in this execution"
 
 def _clean(kwargs: dict[str, Any]) -> dict[str, object]:
     return {key: value for key, value in kwargs.items() if value is not None}
+
+
+def for_model(text: str) -> str:
+    """도구가 낸 결과를 모델의 다음 입력으로 넣기 전에 계약의 query 자리를 지난다."""
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return redact_text(text, stage=RedactionStage.QUERY)
+    return json.dumps(redact(payload, stage=RedactionStage.QUERY), ensure_ascii=False)
 
 
 class ChatToolRegistry:
@@ -103,7 +113,7 @@ def _read_tool(
             result = await read_client.read(name, args)
             if not result.ok:
                 return TOOL_FAILED.format(tool=name, reason=f"the read API answered {result.status_code}")
-            return result.text
+            return for_model(result.text)
 
     return _structured(name, descriptions, run)
 
@@ -128,7 +138,7 @@ def _proposal_tool(
                 reason = "the confirmation API answered without an id"
                 return TOOL_FAILED.format(tool=name, reason=reason)
             proposals.append(ProposedWrite(confirmationId=result.confirmation_id, toolName=name, args=args))
-            return result.text
+            return for_model(result.text)
 
     return _structured(name, descriptions, run)
 
@@ -144,7 +154,7 @@ def _recall_tool(descriptions: dict[str, str], agent_name: str) -> StructuredToo
             except ChatMemoryUnavailable as failure:
                 return TOOL_FAILED.format(tool="recall_facts", reason=str(failure))
             facts = [{KEY_FIELD: item.key, **item.value} for item in items]
-            return json.dumps({FACTS_FIELD: facts}, ensure_ascii=False)
+            return for_model(json.dumps({FACTS_FIELD: facts}, ensure_ascii=False))
 
     return _structured("recall_facts", descriptions, run)
 
@@ -167,7 +177,7 @@ def _remember_tool(descriptions: dict[str, str], agent_name: str) -> StructuredT
             except ChatMemoryUnavailable as failure:
                 return TOOL_FAILED.format(tool="remember_fact", reason=str(failure))
             remembered = {KEY_FIELD: key, CONTENT_FIELD: content, STATUS_FIELD: REMEMBERED_STATUS}
-            return json.dumps(remembered, ensure_ascii=False)
+            return for_model(json.dumps(remembered, ensure_ascii=False))
 
     return _structured("remember_fact", descriptions, run)
 
