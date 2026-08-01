@@ -46,12 +46,11 @@ class ChatExecutionSnapshot:
     confirmations: list[dict[str, Any]]
 
     def frame(self) -> str:
-        """프레임 하나를 사건 이름과 판 식별자와 함께 적는다."""
+        """프레임 하나를 사건 이름 줄과 본문 줄로 적는다."""
         body = json.dumps(
             {"execution": self.execution, "confirmations": self.confirmations}, ensure_ascii=False
         )
-        marker = f"{self.execution['draftSeq']}:{self.execution['updatedAt']}"
-        return f"id: {marker}\nevent: {SNAPSHOT_EVENT}\ndata: {body}\n\n"
+        return f"event: {SNAPSHOT_EVENT}\ndata: {body}\n\n"
 
     def is_terminal(self) -> bool:
         """이 스냅샷이 종결 상태를 실었는지 낸다."""
@@ -61,7 +60,7 @@ class ChatExecutionSnapshot:
 async def watch_chat_execution(
     thread_id: str, execution_id: str, request: Request
 ) -> StreamingResponse | JSONResponse:
-    """실행 하나의 스냅샷을 이어서 내고 종결에 닿은 스냅샷을 보낸 뒤 연결을 닫는다."""
+    """요청이 실어 보낸 Last-Event-ID 와 무관하게 그 순간의 정본부터 이어서 내고 종결에서 닫는다."""
     user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
     source: SqlSource = request.app.state.execution_sql
     try:

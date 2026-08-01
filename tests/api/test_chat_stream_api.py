@@ -39,7 +39,7 @@ class Test실행_스냅샷_스트림:
 
         frames = _frames(body)
         assert len(frames) == 1
-        assert body.startswith("id: 4:2026-07-30T00:00:02.000Z\nevent: snapshot\n")
+        assert body.splitlines()[0] == "event: snapshot"
         assert frames[0]["execution"]["status"] == "completed"  # type: ignore[index]
         assert frames[0]["confirmations"] == [
             {"id": "c1", "toolName": "archive_task", "args": {"taskId": "task-1"}}

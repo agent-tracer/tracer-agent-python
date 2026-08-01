@@ -311,14 +311,34 @@ class Test스트림:
     def test_사건_이름이_케이스가_적은_이름이다(self) -> None:
         assert CASE["stream"]["event"] == SNAPSHOT_EVENT
 
+    def test_프레임이_사건_줄과_본문_줄만_싣는다(self, client: TestClient) -> None:
+        with client.stream("GET", f"{THREADS}/t1/executions/e-done/events") as response:
+            body = "".join(response.iter_text())
+
+        lines = body.rstrip("\n").split("\n")
+        assert [line.split(": ", 1)[0] for line in lines] == ["event", "data"]
+
+    def test_실어_보낸_Last_Event_ID_와_무관하게_그_순간의_정본부터_낸다(self, client: TestClient) -> None:
+        assert CASE["stream"]["replay"]["mode"] == "none"
+
+        with client.stream(
+            "GET",
+            f"{THREADS}/t1/executions/e-done/events",
+            headers={"Last-Event-ID": "1:2026-07-30T00:00:00.000Z"},
+        ) as response:
+            body = "".join(response.iter_text())
+
+        frame = json.loads(body.split("data: ", 1)[1].strip())
+        assert frame["execution"]["draftSeq"] == 7
+        assert frame["execution"]["draftText"] == "끝난 답변"
+
     def test_종결_스냅샷_한_프레임을_보낸_뒤_연결을_닫는다(self, client: TestClient) -> None:
         with client.stream("GET", f"{THREADS}/t1/executions/e-done/events") as response:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith(CASE["stream"]["contentType"])
             body = "".join(response.iter_text())
 
-        assert body.count("event: snapshot") == 1
-        assert "id: 7:2026-07-30T00:00:02.000Z" in body
+        assert body.count(f"event: {SNAPSHOT_EVENT}") == 1
         frame = json.loads(body.split("data: ", 1)[1].strip())
         assert list(frame) == _shape_fields("snapshot")
         assert list(frame["execution"]) == _shape_fields("execution")
