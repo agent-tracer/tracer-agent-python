@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
+from tracer_agent.api.surface import served_routes
+
 PATH = "/internal/surface"
+PROBE_PATH = "/internal/probe"
 
 
 def test_등록된_창구를_메서드와_경로로_낸다(client: TestClient) -> None:
@@ -30,3 +34,12 @@ def test_표면은_메서드와_경로의_사전순이다(client: TestClient) ->
     routes = client.get(PATH).json()["data"]["routes"]
 
     assert routes == sorted(routes, key=lambda route: (route["method"], route["path"]))
+
+
+def test_라우터로_조립한_경로도_싣는다() -> None:
+    router = APIRouter()
+    router.get(PROBE_PATH)(lambda: {"status": "ok"})
+    application = FastAPI()
+    application.include_router(router)
+
+    assert {"method": "GET", "path": PROBE_PATH} in served_routes(application)
