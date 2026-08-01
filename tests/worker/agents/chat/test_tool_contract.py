@@ -79,6 +79,25 @@ def test_인자_설명이_모델이_보는_스키마에_실린다() -> None:
         assert shown == {arg: declared["description"] for arg, declared in tools[name]["args"].items()}
 
 
+def test_계약이_object라_적은_인자는_모델이_객체로_보낸다() -> None:
+    tools = _contract()["tools"]
+    declared = {
+        (name, arg)
+        for name, tool in tools.items()
+        for arg, field in tool["args"].items()
+        if field["type"] == "object"
+    }
+
+    assert declared == {
+        ("enqueue_job", "input"),
+        ("create_rule", "expectation"),
+        ("update_rule", "expectation"),
+    }
+    for name, arg in declared:
+        variant = _variants(_langchain_tools()[name].tool_call_schema["properties"][arg])[0]
+        assert variant["type"] == "object"
+
+
 def test_열거와_수치와_배열의_상한이_모델이_보는_스키마에_실린다() -> None:
     tools = _contract()["tools"]
 

@@ -48,14 +48,14 @@ def test_갱신은_바뀌는_자리만_실어_보내고_문장에_적는다() ->
     assert call.describe(None) == "Updated task task-1: status=completed."
 
 
-def test_규칙_기대는_JSON으로_읽어_계약이_적은_이름으로_싣는다() -> None:
+def test_규칙_기대는_객체_그대로_계약이_적은_이름으로_싣는다() -> None:
     call = plan_chat_tool_call(
         "create_rule",
         {
             "taskId": "task-1",
             "anchorEventId": "event-1",
             "name": "규칙",
-            "expectation": '{"kind":"absent"}',
+            "expectation": {"kind": "absent"},
         },
     )
 
@@ -63,7 +63,7 @@ def test_규칙_기대는_JSON으로_읽어_계약이_적은_이름으로_싣는
     assert call.describe(None) == 'Created rule "규칙" on task task-1.'
 
 
-def test_JSON이_아닌_기대는_계획을_세우지_않는다() -> None:
+def test_객체가_아닌_기대는_계획을_세우지_않는다() -> None:
     with pytest.raises(ChatToolArgsInvalid):
         plan_chat_tool_call(
             "create_rule",
@@ -84,12 +84,17 @@ def test_태그_목록이_배열이_아니면_계획을_세우지_않는다() ->
 
 
 def test_접수한_잡의_문장은_응답의_원장_행을_인용한다() -> None:
-    call = plan_chat_tool_call("enqueue_job", {"kind": "recipe.scan", "input": '{"taskId":"task-1"}'})
+    call = plan_chat_tool_call("enqueue_job", {"kind": "recipe.scan", "input": {"taskId": "task-1"}})
 
     assert call.args == {"kind": "recipe.scan", "input": {"taskId": "task-1"}}
     assert call.describe({"job": {"id": "j1", "status": "pending"}}) == (
         "Enqueued recipe.scan job j1 (status: pending)."
     )
+
+
+def test_객체가_아닌_잡_입력은_계획을_세우지_않는다() -> None:
+    with pytest.raises(ChatToolArgsInvalid):
+        plan_chat_tool_call("enqueue_job", {"kind": "recipe.scan", "input": '{"taskId":"task-1"}'})
 
 
 def test_재평가_문장은_응답이_센_사건_수를_인용한다() -> None:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -48,11 +47,11 @@ def _present(**values: str | None) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
 
 
-def _parse_json(raw: str, label: str) -> Any:
-    try:
-        return json.loads(raw)
-    except ValueError as invalid:
-        raise ChatToolArgsInvalid(f"{label} must be a JSON object") from invalid
+def _object(args: dict[str, Any], key: str) -> dict[str, Any]:
+    value = args.get(key)
+    if not isinstance(value, dict):
+        raise ChatToolArgsInvalid(f"{key} must be an object")
+    return value
 
 
 def _id_list(args: dict[str, Any], key: str) -> list[str]:
@@ -116,7 +115,7 @@ def _create_rule(args: dict[str, Any]) -> ChatToolCall:
             "taskId": task_id,
             "anchorEventId": _req(args, "anchorEventId"),
             "name": name,
-            "expect": _parse_json(_req(args, "expectation"), "expectation"),
+            "expect": _object(args, "expectation"),
             **_present(severity=_opt(args, "severity"), rationale=_opt(args, "rationale")),
         },
         f'Created rule "{name}" on task {task_id}.',
@@ -125,12 +124,12 @@ def _create_rule(args: dict[str, Any]) -> ChatToolCall:
 
 def _update_rule(args: dict[str, Any]) -> ChatToolCall:
     rule_id = _req(args, "ruleId")
-    expectation = _opt(args, "expectation")
+    expectation = args.get("expectation")
     body: dict[str, Any] = _present(
         name=_opt(args, "name"), severity=_opt(args, "severity"), rationale=_opt(args, "rationale")
     )
     if expectation is not None:
-        body["expect"] = _parse_json(expectation, "expectation")
+        body["expect"] = _object(args, "expectation")
     return _plain({"ruleId": rule_id, **body}, f"Updated rule {rule_id}.")
 
 
@@ -182,7 +181,7 @@ def _set_task_tags(args: dict[str, Any]) -> ChatToolCall:
 def _enqueue_job(args: dict[str, Any]) -> ChatToolCall:
     kind = _req(args, "kind")
     return ChatToolCall(
-        args={"kind": kind, "input": _parse_json(_req(args, "input"), "input")},
+        args={"kind": kind, "input": _object(args, "input")},
         describe=lambda data: (
             f"Enqueued {kind} job {_job_field(data, 'id')} (status: {_job_field(data, 'status')})."
         ),

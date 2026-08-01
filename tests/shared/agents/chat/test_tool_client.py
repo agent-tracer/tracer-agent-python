@@ -93,6 +93,6 @@ async def test_잡_접수는_에이전트_서비스_자신을_부른다() -> Non
 
     executor, client = _executor(handle)
     async with client:
-        await executor.execute("local", "enqueue_job", {"kind": "title.suggestion", "input": "{}"})
+        await executor.execute("local", "enqueue_job", {"kind": "title.suggestion", "input": {}})
 
     assert seen == [AGENT_BASE_URL]

@@ -95,7 +95,11 @@ def _field(declared: Mapping[str, Any], alias: str | None) -> tuple[Any, Any]:
         return annotation | None, Field(
             default=None, max_length=int(declared["maxItems"]), alias=alias, description=described
         )
-    # 모양을 계약이 정하지 않는 object 인자는 JSON 본문을 문자열로 받고 부르는 창구가 그 모양을 검증한다.
+    if kind == "object":
+        # 안쪽 키 구성은 계약이 정하지 않고 부르는 창구가 검증하므로 자유로운 객체로 받는다.
+        if required:
+            return dict[str, Any], Field(alias=alias, description=described)
+        return dict[str, Any] | None, Field(default=None, alias=alias, description=described)
     minimum = int(declared.get("minLength") or 1)
     if required:
         return TrimmedStr, Field(min_length=minimum, alias=alias, description=described)
