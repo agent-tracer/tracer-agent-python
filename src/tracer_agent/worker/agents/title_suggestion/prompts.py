@@ -2,57 +2,29 @@
 
 from __future__ import annotations
 
-from tracer_agent.shared.agents.shared.models import Language
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext
 
-from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
-from ..shared.prompt_fragments import render
-from .prompt_fragments import TITLE_SUGGESTION_FRAGMENT_REGISTRY
+from ..shared.prompt_source_port import AgentPrompt
 
 PROMPT_VERSION = "title-suggestion-native-v5"
 
-LANGUAGE_DIRECTIVES: dict[Language, str] = {
-    "auto": (
-        "Mirror the user's language: reuse the language of the current title and the user's messages "
-        "(Korean to Korean, English to English)."
-    ),
-    "ko": (
-        "Write every title and rationale in Korean (한국어). Translate source text written in another "
-        "language rather than echoing it, including names and keywords where a natural translation exists."
-    ),
-    "en": (
-        "Write every title and rationale in English. Translate source text written in another language "
-        "rather than echoing it, including names and keywords where a natural translation exists."
-    ),
-    "ja": (
-        "Write every title and rationale in Japanese (日本語). Translate source text written in another "
-        "language rather than echoing it, including names and keywords where a natural translation exists."
-    ),
-    "zh": (
-        "Write every title and rationale in Simplified Chinese (简体中文). Translate source text written "
-        "in another language rather than echoing it, including names and keywords where a natural "
-        "translation exists."
-    ),
+# 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
+TEMPLATE_KEYS: dict[str, str] = {
+    "investigatorSystemPrompt": "title-suggestion.investigator.system",
+    "repairDirective": "title-suggestion.investigator.repair",
 }
 
 
-_SYSTEM_TEMPLATE = "title-suggestion.investigator.system"
-_REPAIR_TEMPLATE = "title-suggestion.investigator.repair"
-
-
-def _fragment(key: str, template: str, snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    return render(resolved_fragment_content(TITLE_SUGGESTION_FRAGMENT_REGISTRY, key, template, snapshot))
-
-
 # 도구 예산을 무엇으로 세는지는 실행 기계가 소유하므로 근거를 더 캐라는 문단만 이 백엔드가 쓴다.
-def build_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = None) -> dict[str, str]:
-    """코드 scaffold에 title 프래그먼트 snapshot을 조립한다."""
+def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
+    """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 프롬프트 둘을 만든다."""
+    template = prompt.template("title-suggestion.investigator.system")
     investigator = "\n".join(
         [
             "You propose better titles for one recorded coding-agent task.",
             f"Prompt version: {PROMPT_VERSION}.",
             "",
-            _fragment("TITLE_SUGGESTION_CONTEXT_SHAPE", _SYSTEM_TEMPLATE, snapshot),
+            template.slot("contextShape"),
             "",
             "When the excerpt is enough to name the work, name it without calling any tool. When it is "
             "empty,",
@@ -60,9 +32,9 @@ def build_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = None) -> dic
             'sequence: you choose limit and cursor, and order="desc" reads the ending of a long task first.',
             "The tool budget is limited; stop pulling as soon as you can name the work.",
             "",
-            _fragment("TITLE_SUGGESTION_TITLE_SPEC", _SYSTEM_TEMPLATE, snapshot),
+            template.slot("titleSpec"),
             "",
-            _fragment("TITLE_SUGGESTION_ANSWER_SHAPE", _SYSTEM_TEMPLATE, snapshot),
+            template.slot("answerShape"),
         ]
     )
     repair = "\n".join(
@@ -70,22 +42,13 @@ def build_prompt_bundle(snapshot: ResolvedFragmentSnapshot | None = None) -> dic
             "Deterministic validation rejected your output:",
             "{errors}",
             "",
-            _fragment("TITLE_SUGGESTION_REPAIR_DIRECTIVE", _REPAIR_TEMPLATE, snapshot),
+            prompt.template("title-suggestion.investigator.repair").slot("repairDirective"),
         ]
     )
     return {"investigatorSystemPrompt": investigator, "repairDirective": repair}
 
 
-_DEFAULT_PROMPTS = build_prompt_bundle()
-INVESTIGATOR_SYSTEM_PROMPT = _DEFAULT_PROMPTS["investigatorSystemPrompt"]
-REPAIR_DIRECTIVE = _DEFAULT_PROMPTS["repairDirective"]
-
-
-# 실행 검증과 부팅 pin이 이 딕셔너리 하나로 번들 키와 내용을 함께 본다.
-PROMPT_BUNDLE: dict[str, str] = {"investigatorSystemPrompt": INVESTIGATOR_SYSTEM_PROMPT}
-
-
-def build_user_prompt(task_id: str, context: TitleSuggestionContext, language: Language) -> str:
+def build_user_prompt(task_id: str, context: TitleSuggestionContext, directive: str) -> str:
     """이름 붙일 대상 태스크와 대화 발췌와 출력 언어를 담은 최초 지시문이다."""
     lines = [
         f"Task ID: {task_id}",
@@ -94,7 +57,7 @@ def build_user_prompt(task_id: str, context: TitleSuggestionContext, language: L
     ]
     if context.workspacePath is not None:
         lines.append(f"Workspace: {context.workspacePath}")
-    lines.append(f"Output language: {LANGUAGE_DIRECTIVES[language]}")
+    lines.append(f"Output language: {directive}")
     lines.append("")
     lines.append(
         f"Activity: {context.totalEventCount} events across {context.totalTurnCount} conversation turns."

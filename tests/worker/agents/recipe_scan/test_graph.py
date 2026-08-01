@@ -10,6 +10,7 @@ from anthropic import AuthenticationError
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
+from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
@@ -127,7 +128,7 @@ async def _run(
         "recipe-scan",
         req.model,
         req.deadlineMs,
-        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage),
+        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage, RECIPE_SCAN_PROMPT),
     )
 
 

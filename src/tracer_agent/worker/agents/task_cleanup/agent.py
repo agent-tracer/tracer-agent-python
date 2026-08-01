@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
@@ -16,12 +15,13 @@ from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
+from ..shared.prompt_source_port import AgentPrompt
 from .graph import TASK_CLEANUP_GRAPH
 from .nodes.decision import InvestigateNode, RepairNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
 from .nodes.result import EmptyNode, FinalizeNode
 from .policy import build_routes
-from .prompts import PROMPT_VERSION, build_resolved_prompt_bundle
+from .prompts import PROMPT_VERSION, build_prompt_bundle
 from .reader import CleanupLedgerReader
 
 AGENT_NAME = "task-cleanup"
@@ -31,10 +31,10 @@ async def run_task_cleanup(
     req: TaskCleanupRequest,
     tracer: TracerApiClient,
     usage: ExecutionTrace,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+    prompt: AgentPrompt,
 ) -> dict[str, Any]:
     """task-cleanup 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    prompts = build_resolved_prompt_bundle(prompt_fragments)
+    prompts = build_prompt_bundle(prompt)
     chat = make_chat(
         req.model,
         req.apiKey,
@@ -84,6 +84,7 @@ async def run_task_cleanup(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 ValidateDecisionsNode(usage),
                 RepairNode(
@@ -96,6 +97,7 @@ async def run_task_cleanup(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 FinalizeNode(),
                 EmptyNode(),

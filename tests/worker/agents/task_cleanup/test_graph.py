@@ -9,6 +9,7 @@ import pytest
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
+from tests.support.prompts import TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.runtime.execution.runner import execute
@@ -87,7 +88,7 @@ async def _run(
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage),  # type: ignore[arg-type]
+        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT),  # type: ignore[arg-type]
     )
 
 

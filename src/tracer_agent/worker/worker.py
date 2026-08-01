@@ -52,6 +52,8 @@ JOB_HTTP_TIMEOUT_S = 30.0
 # 진행 중인 턴을 끊지 않고 마치도록 모델 호출 상한만큼 종료를 기다린다.
 SHUTDOWN_GRACE_S = 15 * 60.0
 
+JOB_AGENT_NAMES = ("title-suggestion", "recipe-scan", "task-cleanup")
+
 WorkerQueue = str
 JobActivity = Callable[..., Awaitable[None]]
 QUEUE_ARGS = (CHAT_QUEUE_KEY, JOBS_QUEUE_KEY, GENERATE_QUEUE_KEY)
@@ -141,10 +143,12 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
 
 def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobActivities:
     """잡 셋의 액티비티를 열린 연결에 물려 낸다."""
+    source = ContractPromptSource()
     return AgentJobActivities(
         settings.tracer_api_url,
         opened.http_client,
         PooledSql(opened.execution),
+        {name: source.resolve(name) for name in JOB_AGENT_NAMES},
         envelopes=JobEnvelopeClient(opened.http_client, settings.agent_api_url),
         notifier=JobStatusNotifier(opened.notifications, JOB_UPDATED_NOTIFICATION),
     )

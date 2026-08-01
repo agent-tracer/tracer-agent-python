@@ -22,7 +22,7 @@ from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_l
 from ...runtime.node import GraphNode
 from ..failures import WORKER_FAILED
 from ..langchain_agent import build_recipe_agent
-from ..prompts import PROBE_SYSTEM_PROMPT, build_probe_prompt
+from ..prompts import build_probe_prompt
 from ..reader import RecipeLedgerReader
 from ..search import RecipeSearchReader
 from ..tools import PROBE_TOOLS, build_recipe_registry
@@ -51,7 +51,7 @@ class ProbeNode(GraphNode):
         budget: ExecutionBudget,
         *,
         agent_name: str,
-        system_prompt: str = PROBE_SYSTEM_PROMPT,
+        system_prompt: str,
     ) -> None:
         self._req = req
         self._reader = reader

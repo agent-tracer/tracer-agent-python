@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, Excerpt, ProbeReport
 from tracer_agent.worker.agents.recipe_scan.prompts import (
-    INVESTIGATOR_SYSTEM_PROMPT,
-    PROBE_SYSTEM_PROMPT,
-    REPAIR_DIRECTIVE,
-    SURVEY_SYSTEM_PROMPT,
     build_probe_prompt,
+    build_prompt_bundle,
     build_survey_prompt,
     build_user_prompt,
 )
+
+_PROMPTS = build_prompt_bundle(RECIPE_SCAN_PROMPT)
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
+PROBE_SYSTEM_PROMPT = _PROMPTS["probeSystemPrompt"]
+SURVEY_SYSTEM_PROMPT = _PROMPTS["surveySystemPrompt"]
+REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
 
 
 def _show(role: str, system: str, user: str) -> None:
@@ -51,7 +55,7 @@ def test_조율자는_계획과_전문가_보고를_절로_받는다() -> None:
         ProbeReport(probe="rules", verdict="예산 안에서 다 못 봤다", exhausted=True),
     ]
 
-    user = build_user_prompt("t1", None, "ko", plan, reports)
+    user = build_user_prompt("t1", None, RECIPE_SCAN_PROMPT.directive("ko"), plan, reports)
 
     _show("investigate (조율자)", INVESTIGATOR_SYSTEM_PROMPT, user)
     assert "Your own plan for this investigation:" in user

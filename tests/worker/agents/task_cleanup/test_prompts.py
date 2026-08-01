@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from tests.support.prompts import TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.task_cleanup.models import InspectReport
 from tracer_agent.worker.agents.task_cleanup.prompts import (
-    INSPECT_SYSTEM_PROMPT,
-    INVESTIGATOR_SYSTEM_PROMPT,
-    REPAIR_DIRECTIVE,
-    TRIAGE_SYSTEM_PROMPT,
     build_inspect_prompt,
+    build_prompt_bundle,
     build_triage_prompt,
     build_user_prompt,
 )
+
+_PROMPTS = build_prompt_bundle(TASK_CLEANUP_PROMPT)
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
+TRIAGE_SYSTEM_PROMPT = _PROMPTS["triageSystemPrompt"]
+INSPECT_SYSTEM_PROMPT = _PROMPTS["inspectSystemPrompt"]
+REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
 
 
 def _flat(prompt: str) -> str:
@@ -58,7 +62,7 @@ def test_조사자는_맡은_후보만_받는다() -> None:
 def test_조율자는_스캔_시점과_상한과_조사_보고를_받는다() -> None:
     reports = [InspectReport(taskId="task-1", archivable=True, reason="빈 작업", citedEventIds=["event-1"])]
 
-    user = build_user_prompt("2026-07-14T00:00:00Z", 3, "ko", reports)
+    user = build_user_prompt("2026-07-14T00:00:00Z", 3, TASK_CLEANUP_PROMPT.directive("ko"), reports)
 
     _show("investigate (조율자)", INVESTIGATOR_SYSTEM_PROMPT, user)
     assert "Scan time: 2026-07-14T00:00:00Z" in user

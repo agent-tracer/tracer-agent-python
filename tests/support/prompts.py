@@ -8,3 +8,12 @@ from tracer_agent.worker.agents.shared.prompt_source_port import AgentPrompt
 _SOURCE = ContractPromptSource()
 
 CHAT_PROMPT: AgentPrompt = _SOURCE.resolve("chat")
+RECIPE_SCAN_PROMPT: AgentPrompt = _SOURCE.resolve("recipe-scan")
+TASK_CLEANUP_PROMPT: AgentPrompt = _SOURCE.resolve("task-cleanup")
+TITLE_SUGGESTION_PROMPT: AgentPrompt = _SOURCE.resolve("title-suggestion")
+
+JOB_PROMPTS: dict[str, AgentPrompt] = {
+    "recipe-scan": RECIPE_SCAN_PROMPT,
+    "task-cleanup": TASK_CLEANUP_PROMPT,
+    "title-suggestion": TITLE_SUGGESTION_PROMPT,
+}

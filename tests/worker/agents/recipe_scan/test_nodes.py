@@ -11,6 +11,7 @@ from tests.support.fakes import (
     FakeTracerApi,
     mk_rates,
 )
+from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import (
     ProbeAssignment,
     ProbeDispatch,
@@ -19,6 +20,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 from tracer_agent.worker.agents.recipe_scan.nodes.probe import ProbeNode
 from tracer_agent.worker.agents.recipe_scan.nodes.result import EmptyNode, FinalizeNode
+from tracer_agent.worker.agents.recipe_scan.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
@@ -57,6 +59,7 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
         None,
         ExecutionBudget(1.0, mk_rates()),
         agent_name="recipe-scan",
+        system_prompt=build_prompt_bundle(RECIPE_SCAN_PROMPT)["probeSystemPrompt"],
     )
 
     result = await node.run(

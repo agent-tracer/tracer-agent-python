@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanRequest
@@ -16,13 +15,14 @@ from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
+from ..shared.prompt_source_port import AgentPrompt
 from .graph import RECIPE_SCAN_GRAPH
 from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import EmptyNode, FinalizeNode, wire_provenance
 from .nodes.survey import SurveyNode
 from .policy import build_routes
-from .prompts import PROMPT_VERSION, build_resolved_prompt_bundle
+from .prompts import PROMPT_VERSION, build_prompt_bundle
 from .reader import RecipeLedgerReader
 from .search import RecipeSearchReader
 
@@ -33,10 +33,10 @@ async def run_recipe_scan(
     req: RecipeScanRequest,
     tracer: TracerApiClient,
     usage: ExecutionTrace,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+    prompt: AgentPrompt,
 ) -> dict[str, Any]:
     """recipe-scan 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    prompts = build_resolved_prompt_bundle(prompt_fragments)
+    prompts = build_prompt_bundle(prompt)
     chat = make_chat(
         req.model,
         req.apiKey,
@@ -80,6 +80,7 @@ async def run_recipe_scan(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 ValidateCandidateNode(usage),
                 RepairNode(
@@ -93,6 +94,7 @@ async def run_recipe_scan(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 FinalizeNode(),
                 EmptyNode(),

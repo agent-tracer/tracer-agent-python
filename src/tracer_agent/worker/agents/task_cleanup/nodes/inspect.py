@@ -26,12 +26,7 @@ from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_l
 from ...runtime.node import GraphNode
 from ..failures import WORKER_FAILED
 from ..langchain_agent import build_cleanup_agent
-from ..prompts import (
-    INSPECT_SYSTEM_PROMPT,
-    TRIAGE_SYSTEM_PROMPT,
-    build_inspect_prompt,
-    build_triage_prompt,
-)
+from ..prompts import build_inspect_prompt, build_triage_prompt
 from ..reader import CleanupLedgerReader
 from ..tools import INSPECT_TOOL_NAMES, TRIAGE_TOOL_NAMES, build_cleanup_registry
 
@@ -58,7 +53,7 @@ class TriageNode(GraphNode):
         budget: ExecutionBudget,
         *,
         agent_name: str,
-        system_prompt: str = TRIAGE_SYSTEM_PROMPT,
+        system_prompt: str,
     ) -> None:
         self._req = req
         self._reader = reader
@@ -135,7 +130,7 @@ class InspectNode(GraphNode):
         budget: ExecutionBudget,
         *,
         agent_name: str,
-        system_prompt: str = INSPECT_SYSTEM_PROMPT,
+        system_prompt: str,
     ) -> None:
         self._req = req
         self._reader = reader

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
@@ -16,6 +15,7 @@ from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
+from ..shared.prompt_source_port import AgentPrompt
 from .graph import TITLE_SUGGESTION_GRAPH
 from .nodes.candidate import (
     EmptyNode,
@@ -35,10 +35,10 @@ async def run_title_suggestion(
     req: TitleSuggestionRequest,
     tracer: TracerApiClient,
     usage: ExecutionTrace,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+    prompt: AgentPrompt,
 ) -> dict[str, Any]:
     """title-suggestion 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    prompts = build_prompt_bundle(prompt_fragments)
+    prompts = build_prompt_bundle(prompt)
     chat = make_chat(
         req.model,
         req.apiKey,
@@ -68,6 +68,7 @@ async def run_title_suggestion(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 ValidateCandidateNode(usage),
                 RepairNode(
@@ -80,6 +81,7 @@ async def run_title_suggestion(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
+                    language_directives=prompt.language_directives,
                 ),
                 FinalizeNode(),
                 EmptyNode(),

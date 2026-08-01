@@ -35,6 +35,8 @@ from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.outputs import deliver_job_outputs
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient
+from ..agents.shared.prompt_source_port import AgentPrompt
+from ..agents.shared.resolved_prompt_hash import template_hashes
 from ..agents.task_cleanup.agent import run_task_cleanup
 from ..agents.task_cleanup.prompts import PROMPT_VERSION as CLEANUP_PROMPT_VERSION
 from ..agents.task_cleanup.reader import load_cleanup_batch
@@ -42,6 +44,7 @@ from ..agents.title_suggestion.agent import run_title_suggestion
 from ..agents.title_suggestion.prompts import PROMPT_VERSION as TITLE_PROMPT_VERSION
 from ..agents.title_suggestion.reader import load_title_context
 from .jobs_outcome import job_usage, status_and_error
+from .jobs_prompts import resolved_prompts
 from .jobs_writer import JobExecutionWriter, JobOutcome
 
 JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
@@ -55,14 +58,15 @@ class AgentJobActivities:
         tracer_api_url: str,
         http_client: httpx.AsyncClient,
         execution_sql: SqlSource,
-        prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+        prompts: Mapping[str, AgentPrompt],
         envelopes: JobEnvelopeSource | None = None,
         notifier: JobStatusNotifier | None = None,
     ) -> None:
         self._tracer_api_url = tracer_api_url
         self._http = http_client
         self._execution_sql = execution_sql
-        self._prompt_fragments = prompt_fragments
+        self._prompts = prompts
+        self._resolved = resolved_prompts(prompts)
         self._envelopes = envelopes
         self._notifier = notifier
 
@@ -131,7 +135,7 @@ class AgentJobActivities:
             async def title_body(
                 trace: ExecutionTrace, req: TitleSuggestionRequest = title_req
             ) -> dict[str, object]:
-                return await run_title_suggestion(req, tracer, trace, self._prompt_fragments)
+                return await run_title_suggestion(req, tracer, trace, self._prompts["title-suggestion"])
 
             await self._run_and_deliver(kind, title_req, title_body, TITLE_PROMPT_VERSION)
             return
@@ -150,7 +154,7 @@ class AgentJobActivities:
             async def cleanup_body(
                 trace: ExecutionTrace, req: TaskCleanupRequest = cleanup_req
             ) -> dict[str, object]:
-                return await run_task_cleanup(req, tracer, trace, self._prompt_fragments)
+                return await run_task_cleanup(req, tracer, trace, self._prompts["task-cleanup"])
 
             await self._run_and_deliver(kind, cleanup_req, cleanup_body, CLEANUP_PROMPT_VERSION)
             return
@@ -159,7 +163,7 @@ class AgentJobActivities:
         async def recipe_body(
             trace: ExecutionTrace, req: RecipeScanRequest = recipe_req
         ) -> dict[str, object]:
-            return await run_recipe_scan(req, tracer, trace, self._prompt_fragments)
+            return await run_recipe_scan(req, tracer, trace, self._prompts["recipe-scan"])
 
         await self._run_and_deliver(kind, recipe_req, recipe_body, RECIPE_PROMPT_VERSION)
 
@@ -182,6 +186,8 @@ class AgentJobActivities:
         body: AgentBody,
         prompt_version: str,
     ) -> None:
+        resolved = self._resolved[kind]
+
         async def run_once() -> AgentResponse:
             return await execute(
                 kind,
@@ -196,6 +202,8 @@ class AgentJobActivities:
                 req.executionId,
                 req.attemptId,
                 prompt_version,
+                resolved_prompt_hash=resolved.resolved_prompt_hash,
+                resolved_prompt_hashes=template_hashes(resolved),
             )
 
         if req.executionId is not None:

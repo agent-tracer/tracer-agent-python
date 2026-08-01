@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -54,6 +55,7 @@ class _DecisionAgent(GraphNode, ABC):
         agent_name: str,
         system_prompt: str,
         repair_directive: str,
+        language_directives: Mapping[str, str],
     ) -> None:
         self._req = req
         self._reader = reader
@@ -64,6 +66,7 @@ class _DecisionAgent(GraphNode, ABC):
         self._agent_name = agent_name
         self._system_prompt = system_prompt
         self._repair_directive = repair_directive
+        self._language_directives = language_directives
 
     async def _invoke_agent(
         self, messages: list[Any], state: TaskCleanupState
@@ -116,7 +119,7 @@ class InvestigateNode(_DecisionAgent):
                     "content": build_user_prompt(
                         state["scanned_at"],
                         state["max_suggestions"],
-                        state["language"],
+                        self._language_directives[state["language"]],
                         state["reports"],
                     ),
                 }

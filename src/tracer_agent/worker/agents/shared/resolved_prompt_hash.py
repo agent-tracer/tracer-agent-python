@@ -6,7 +6,8 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .fragment_registry import fragment_content_hash
+from tracer_agent.shared.agents.shared.fragment_integrity import fragment_content_hash
+from tracer_agent.shared.agents.shared.models import ResolvedPromptTemplateHashDTO
 
 
 @dataclass(frozen=True)
@@ -40,3 +41,11 @@ def resolved_prompt_bundle_hash(templates: Mapping[str, str]) -> ResolvedPromptB
     )
     overall = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return ResolvedPromptBundleHash(hashes, overall)
+
+
+def template_hashes(bundle: ResolvedPromptBundleHash) -> list[ResolvedPromptTemplateHashDTO]:
+    """관측이 싣는 모양으로 template 별 해시를 옮긴다."""
+    return [
+        ResolvedPromptTemplateHashDTO(templateKey=item.template_key, contentHash=item.content_hash)
+        for item in bundle.resolved_prompt_hashes
+    ]

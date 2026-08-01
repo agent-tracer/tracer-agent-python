@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from tests.support.prompts import TITLE_SUGGESTION_PROMPT
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext
-from tracer_agent.worker.agents.title_suggestion.prompts import (
-    INVESTIGATOR_SYSTEM_PROMPT,
-    REPAIR_DIRECTIVE,
-    build_user_prompt,
-)
+from tracer_agent.worker.agents.title_suggestion.prompts import build_prompt_bundle, build_user_prompt
+
+_PROMPTS = build_prompt_bundle(TITLE_SUGGESTION_PROMPT)
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
+REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
 
 _CONTEXT = {
     "title": "Untitled",
@@ -27,7 +28,9 @@ _CONTEXT = {
 
 
 def test_조사자는_대화_발췌를_JSON_대신_산문으로_받는다() -> None:
-    user = build_user_prompt("task-1", TitleSuggestionContext.model_validate(_CONTEXT), "ko")
+    user = build_user_prompt(
+        "task-1", TitleSuggestionContext.model_validate(_CONTEXT), TITLE_SUGGESTION_PROMPT.directive("ko")
+    )
 
     print("\n───────── title-suggestion :: investigate (조사자) ─────────")
     print("[system]")
