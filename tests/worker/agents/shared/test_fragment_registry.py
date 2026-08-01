@@ -46,7 +46,7 @@ _REGISTRIES = {
 _PROMPT_HASHES = {
     "chat.system": (
         ASSISTANT_SYSTEM_PROMPT,
-        "7eb4f16e263c58e412a65651ecb3ab4afba84d1ae8cd16d65f2dd0664dbb0b04",
+        "15523ae2b91f3c1c8cf103f2c2d8fa43c56d771cebfa5c9b3bb5c2a3e31edea5",
     ),
     "recipe.investigator": (
         RECIPE_INVESTIGATOR_SYSTEM_PROMPT,

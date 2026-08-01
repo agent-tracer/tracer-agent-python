@@ -7,6 +7,7 @@ from tracer_agent.shared.agents.shared.models import Language
 
 from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
 from ..shared.prompt_fragments import render
+from ..shared.safety_policy import SAFETY_POLICY
 from .prompt_fragments import CHAT_FRAGMENT_REGISTRY
 
 PROMPT_VERSION = "chat-native-v3"
@@ -31,6 +32,8 @@ def build_system_prompt(snapshot: ResolvedFragmentSnapshot | None = None) -> str
     """코드 scaffold에 시작 시 고정된 chat 프래그먼트 snapshot을 조립한다."""
     return "\n".join(
         [
+            SAFETY_POLICY,
+            "",
             "You are the assistant of Agent Tracer, an observability tool that records coding-agent sessions",
             "(tasks), their timelines, verification rules, memos, recipes, tags, cleanup suggestions, "
             "and AI jobs.",
@@ -60,10 +63,12 @@ def build_context_prompt(summary: str | None, facts: list[ChatFact], language: L
     lines = [LANGUAGE_DIRECTIVES[language]]
     if facts:
         lines.append("")
-        lines.append("Durable facts you remember about this user:")
+        lines.append('<memory source="untrusted">')
         lines.extend(f"- {fact.key}: {fact.content}" for fact in facts)
+        lines.append("</memory>")
     if summary is not None and summary.strip():
         lines.append("")
-        lines.append("Summary of earlier conversation in this thread:")
+        lines.append('<summary source="untrusted">')
         lines.append(summary.strip())
+        lines.append("</summary>")
     return "\n".join(lines)

@@ -78,8 +78,12 @@ def _calls(message: ChatHistoryMessage) -> list[dict[str, object]]:
     ]
 
 
+ORPHAN_TOOL_RESULT_OPEN = '<orphan_tool_result source="untrusted">'
+ORPHAN_TOOL_RESULT_CLOSE = "</orphan_tool_result>"
+
+
 def _replay_tool(message: ChatHistoryMessage) -> BaseMessage:
     if message.toolCallId is not None:
         return ToolMessage(content=message.content, tool_call_id=message.toolCallId)
-    # 짝을 잃은 결과는 서버가 인용을 지워 주므로, 여기서는 평문 문맥으로만 싣는다.
-    return HumanMessage(content=f"Tool result: {message.content}")
+    # 사용자 발화로 옮기면 도구가 낸 문장이 지시문의 신뢰를 얻으므로 근거 구역으로 표시한다.
+    return HumanMessage(content=f"{ORPHAN_TOOL_RESULT_OPEN}\n{message.content}\n{ORPHAN_TOOL_RESULT_CLOSE}")
