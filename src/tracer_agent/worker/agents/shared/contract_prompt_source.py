@@ -49,7 +49,7 @@ class ContractPromptSource:
         }
         return AgentPrompt(
             templates=templates,
-            language_directives=_directives(fragments),
+            language_directives=_directives(fragments, values),
             tool_contract_version=str(tools["version"]),
         )
 
@@ -82,8 +82,8 @@ def _render(content: str, values: Mapping[str, str]) -> str:
         raise ContractPromptUnavailable(f"prompt placeholder has no value: {unknown.args[0]}") from unknown
 
 
-def _directives(fragments: Mapping[str, Any]) -> Mapping[str, str]:
+def _directives(fragments: Mapping[str, Any], values: Mapping[str, str]) -> Mapping[str, str]:
     declared = fragments.get(_LANGUAGE_DIRECTIVE)
     if declared is None:
         return {}
-    return {language: _joined(lines) for language, lines in declared["byLanguage"].items()}
+    return {language: _render(_joined(lines), values) for language, lines in declared["byLanguage"].items()}

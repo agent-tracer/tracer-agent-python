@@ -69,6 +69,23 @@ def test_다섯_언어의_지시문을_함께_낸다(agent: str) -> None:
     assert set(resolved.language_directives) == {"auto", "ko", "en", "ja", "zh"}
 
 
+def test_언어_지시문도_조각과_같은_상한으로_치환된다(tmp_path: Path) -> None:
+    declared = agent_prompt("task-cleanup")
+    declared["fragments"]["languageDirective"]["byLanguage"]["ko"] = [
+        "Write at most ${maxSuggestions} rationales in Korean."
+    ]
+    (tmp_path / "agent" / "task-cleanup").mkdir(parents=True)
+    (tmp_path / "agent" / "task-cleanup" / "prompt.json").write_text(json.dumps(declared), encoding="utf-8")
+    (tmp_path / "agent" / "task-cleanup" / "tool.json").write_text(
+        json.dumps(agent_tools("task-cleanup")), encoding="utf-8"
+    )
+
+    resolved = ContractPromptSource(tmp_path).resolve("task-cleanup")
+
+    limit = agent_tools("task-cleanup")["limits"]["maxSuggestions"]
+    assert resolved.directive("ko") == f"Write at most {limit} rationales in Korean."
+
+
 def test_상한이_계약의_limits_와_조율자_도구_이름에서_온다() -> None:
     resolved = ContractPromptSource().resolve("recipe-scan")
 
