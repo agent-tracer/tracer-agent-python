@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+from enum import StrEnum
 from functools import lru_cache
-from typing import Literal
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +18,13 @@ DEFAULT_TASK_QUEUE_PREFIX = "agent"
 CHECKPOINT_SCHEMA = "agent_langgraph"
 
 
+class MonitorProfile(StrEnum):
+    """TS 배포 단위와 같은 어휘를 쓰는 배포 프로파일이다."""
+
+    LOCAL = "local"
+    PRD = "prd"
+
+
 def task_queue(key: str) -> str:
     """계약이 정한 큐 키 앞에 배포가 준 접두사를 붙여 큐의 완전한 이름을 만든다."""
     prefix = os.environ.get(TASK_QUEUE_PREFIX_ENV, "").strip() or DEFAULT_TASK_QUEUE_PREFIX
@@ -27,8 +34,8 @@ def task_queue(key: str) -> str:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
-    # TS 배포 단위와 같은 어휘를 쓰며 local만 LangSmith에 프롬프트·응답 원문을 보낸다.
-    monitor_profile: Literal["local", "prd"] = "prd"
+    # local만 LangSmith에 프롬프트·응답 원문을 보낸다.
+    monitor_profile: MonitorProfile = MonitorProfile.PRD
     # 저장된 자격을 감추고 되돌리는 키를 이 값에서 유도하며 prd는 이것 없이 자격을 다루지 않는다.
     monitor_settings_encryption_key: SecretStr | None = None
 
@@ -80,7 +87,7 @@ class Settings(BaseSettings):
             project=self.langsmith_project,
             workspace_id=self.langsmith_workspace_id,
             api_key=api_key,
-            disclose_trace_payloads=self.monitor_profile == "local",
+            disclose_trace_payloads=self.monitor_profile is MonitorProfile.LOCAL,
         )
 
     async def connect_temporal(self) -> Client:

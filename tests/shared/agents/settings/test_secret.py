@@ -11,6 +11,7 @@ from tracer_agent.shared.agents.settings.secret import (
     SettingCipher,
     is_encrypted_secret,
 )
+from tracer_agent.shared.config import MonitorProfile
 
 # aes-256-gcm과 12바이트 초기벡터로 sha256("monitor-dev-key") 키가 "sk-ant-secret-9876"을 감춘 값이다.
 STORED = "enc:v1:AAECAwQFBgcICQoL:OHfmeNGeJOHTUug+do+pLA==:caa1WpXO3GvGz1+jdugIB/WK"
@@ -47,6 +48,13 @@ def test_암호_형식이_아닌_값은_풀지_않는다() -> None:
 def test_prd는_키를_주지_않으면_자격을_다루지_않는다() -> None:
     with pytest.raises(SecretKeyMissing):
         SettingCipher(None, "prd").decrypt(STORED)
+
+
+def test_설정이_주는_프로파일로도_같은_판정을_받는다() -> None:
+    with pytest.raises(SecretKeyMissing):
+        SettingCipher(None, MonitorProfile.PRD).decrypt(STORED)
+
+    assert SettingCipher(None, MonitorProfile.LOCAL).decrypt(STORED) == PLAINTEXT
 
 
 def test_암호_형식인지를_판_접두사로_가린다() -> None:
