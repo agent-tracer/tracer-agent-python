@@ -13,16 +13,9 @@ from langgraph.graph.state import CompiledStateGraph
 from langsmith.client import Client
 from pydantic import BaseModel
 
-from ..telemetry.disclosure import TraceSafeMetadata, redact_trace_payload
+from ..telemetry.disclosure import TraceSafeMetadata, disclosable_run_payload
 
 _LANGSMITH_RUN_NAMESPACE = UUID("90dd2ae3-e1b4-43bc-9538-f70898c147bd")
-
-
-def _redact_run_payload(payload: dict[Any, Any]) -> dict[Any, Any]:
-    """langsmith Client의 dict-in/dict-out 콜백 서명에 맞춰 공용 redaction으로 위임한다."""
-    redacted = redact_trace_payload(payload)
-    assert isinstance(redacted, dict)
-    return redacted
 
 
 @dataclass(frozen=True)
@@ -54,11 +47,11 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
         config["run_id"] = uuid5(_LANGSMITH_RUN_NAMESPACE, stable_identity)
 
     if os.environ.get("LANGSMITH_TRACING") == "true":
-        # 공개 프로파일도 비밀 패턴은 계속 지우고, 그 외 프로파일은 원문 자체를 보내지 않는다.
+        # 공개 프로파일도 계약의 trace 자리를 지나고, 그 외 프로파일은 원문 자체를 보내지 않는다.
         discloses_payloads = os.environ.get("LANGSMITH_HIDE_INPUTS") == "false"
         client = Client(
-            hide_inputs=_redact_run_payload if discloses_payloads else True,
-            hide_outputs=_redact_run_payload if discloses_payloads else True,
+            hide_inputs=disclosable_run_payload if discloses_payloads else True,
+            hide_outputs=disclosable_run_payload if discloses_payloads else True,
         )
         tracer = LangChainTracer(
             project_name=os.environ.get("LANGSMITH_PROJECT", "default"),

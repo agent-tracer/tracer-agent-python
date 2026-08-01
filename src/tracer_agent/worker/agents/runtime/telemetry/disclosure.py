@@ -1,19 +1,18 @@
-"""외부 trace로 내보낼 구조화 값의 최소 안전 경계."""
+"""외부 trace 창구로 내보내는 구조화 값이 계약의 trace 자리를 지나게 한다."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY, AgentAxis
-
-type TraceScalar = str | int | float | bool | None
-type TraceValue = TraceScalar | Mapping[str, TraceValue] | Sequence[TraceValue]
-
-
-class UnsafeTracePayloadError(ValueError):
-    """외부 전송 payload에서 비밀일 수 있는 필드를 발견했다."""
+from tracer_agent.shared.agents.shared.redaction import (
+    RedactableScalar,
+    RedactionStage,
+    SuspectPayloadError,
+    redact,
+)
 
 
 class TraceSafeMetadata(BaseModel):
@@ -30,9 +29,9 @@ class TraceSafeMetadata(BaseModel):
     execution_id: str | None = None
     attempt_id: str | None = None
 
-    def langsmith_metadata(self) -> dict[str, TraceScalar]:
+    def langsmith_metadata(self) -> dict[str, RedactableScalar]:
         """LangSmith 필터에서 backend 공통으로 쓸 이름으로 직렬화한다."""
-        values: dict[str, TraceScalar] = {
+        values: dict[str, RedactableScalar] = {
             "agent_tracer.agent.name": self.agent_name,
             AXIS_ATTRIBUTE_KEY: self.backend,
             "agent_tracer.model.requested": self.model_requested,
@@ -42,63 +41,17 @@ class TraceSafeMetadata(BaseModel):
             "agent_tracer.execution.id": self.execution_id,
             "agent_tracer.attempt.id": self.attempt_id,
         }
-        metadata: dict[str, TraceScalar] = {key: value for key, value in values.items() if value is not None}
-        assert_trace_safe(metadata)
+        metadata: dict[str, RedactableScalar] = {
+            key: value for key, value in values.items() if value is not None
+        }
+        redact(metadata, stage=RedactionStage.TRACE)
         return metadata
 
 
-_SECRET_KEY_PARTS = frozenset(
-    {
-        "apikey",
-        "authorization",
-        "callbacktoken",
-        "clientsecret",
-        "oauth",
-        "password",
-        "privatekey",
-        "scopetoken",
-        "secret",
-        "token",
-        "userid",
-    }
-)
-
-
-def _normalized_key(key: str) -> str:
-    return "".join(character for character in key.casefold() if character.isalnum())
-
-
-def assert_trace_safe(value: TraceValue, *, path: str = "$") -> None:
-    """중첩 payload 전체를 검사하고 의심스러운 key가 하나라도 있으면 폐기한다."""
-    if isinstance(value, Mapping):
-        for key, nested in value.items():
-            normalized = _normalized_key(key)
-            if any(part in normalized for part in _SECRET_KEY_PARTS):
-                raise UnsafeTracePayloadError(f"trace payload contains forbidden field at {path}.{key}")
-            assert_trace_safe(nested, path=f"{path}.{key}")
-        return
-    if isinstance(value, str | int | float | bool) or value is None:
-        return
-    if isinstance(value, Sequence):
-        for index, nested in enumerate(value):
-            assert_trace_safe(nested, path=f"{path}[{index}]")
-        return
-    raise UnsafeTracePayloadError(f"trace payload contains unsupported value at {path}")
-
-
-def redact_trace_payload(value: TraceValue, *, path: str = "$") -> TraceValue:
-    """의심스러운 key가 있으면 그 하위 값을 전부 <redacted>로 치환한다."""
-    if isinstance(value, Mapping):
-        redacted: dict[str, TraceValue] = {}
-        for key, nested in value.items():
-            normalized = _normalized_key(key)
-            if any(part in normalized for part in _SECRET_KEY_PARTS):
-                redacted[key] = "<redacted>"
-            else:
-                redacted[key] = redact_trace_payload(nested, path=f"{path}.{key}")
-        return redacted
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
-    if isinstance(value, Sequence):
-        return [redact_trace_payload(nested, path=f"{path}[{index}]") for index, nested in enumerate(value)]
-    return "<unsupported>"
+def disclosable_run_payload(payload: dict[Any, Any]) -> dict[Any, Any]:
+    """추적 창구로 내보낼 실행 payload 를 내고 걸리는 자리가 있으면 아무것도 내지 않는다."""
+    try:
+        redact(payload, stage=RedactionStage.TRACE)
+    except SuspectPayloadError:
+        return {}
+    return payload

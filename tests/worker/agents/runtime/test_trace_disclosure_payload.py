@@ -51,7 +51,7 @@ def test_비공개_프로파일은_hide_inputs_hide_outputs로_원문_전체를_
     assert _CapturingClient.captured[0]["hide_outputs"] is True
 
 
-def test_공개_프로파일에서도_API_key_OAuth_callback_scope_token과_raw_userId를_가린다(
+def test_공개_프로파일도_API_key_OAuth_callback_scope_token과_raw_userId가_담긴_실행을_버린다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LANGSMITH_HIDE_INPUTS", "false")
@@ -72,11 +72,18 @@ def test_공개_프로파일에서도_API_key_OAuth_callback_scope_token과_raw_
         "prompt": "평범한 프롬프트 본문",
     }
 
-    for redacted in (hide_inputs(secret_payload), hide_outputs(secret_payload)):
-        serialized = str(redacted)
-        assert "sk-ant-live-should-not-leak" not in serialized
-        assert "lsv2_should-not-leak" not in serialized
-        assert "callback-should-not-leak" not in serialized
-        assert "scope-should-not-leak" not in serialized
-        assert "user-should-not-leak" not in serialized
-        assert redacted["prompt"] == "평범한 프롬프트 본문"
+    for disclosed in (hide_inputs(secret_payload), hide_outputs(secret_payload)):
+        assert disclosed == {}
+
+
+def test_공개_프로파일은_걸릴_것이_없는_실행을_그대로_내보낸다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGSMITH_HIDE_INPUTS", "false")
+
+    recursion_config(5, _trace())
+
+    hide_inputs = _CapturingClient.captured[0]["hide_inputs"]
+    plain_payload = {"prompt": "평범한 프롬프트 본문", "language": "ko"}
+
+    assert hide_inputs(plain_payload) == plain_payload
