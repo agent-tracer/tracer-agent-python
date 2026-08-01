@@ -5,16 +5,17 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
-from ..agents.runtime.ledger import SqlSource
+from ..agents.runtime.dependencies import ExecutionSql, UserId
 from .jobs_anchor import RuleAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
+from .jobs_envelope import JobEnvelopeSource
 from .jobs_input import (
     INPUT_MODEL_BY_KIND,
     RuleGenerationJobInput,
@@ -29,8 +30,6 @@ from .jobs_view import job_dto
 JOBS_PATH = "/api/agent/jobs"
 JOB_CANCEL_PATH = f"{JOBS_PATH}/{{execution_id}}/cancel"
 ACCEPTED_STATUS = 202
-MONITOR_USER_HEADER = "x-monitor-user"
-DEFAULT_USER_ID = "local"
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 INVALID_RULE_ANCHOR = (
     400,
@@ -56,7 +55,41 @@ class JobEnqueueBody(BaseModel):
     idempotencyKey: str | None = Field(default=None, min_length=1, max_length=200)
 
 
-async def enqueue_job(request: Request) -> JSONResponse:
+router = APIRouter()
+
+
+def get_rule_anchors(request: Request) -> RuleAnchorSource:
+    """규칙 생성의 근거를 추적 창구에서 읽는 통로를 낸다."""
+    anchors: RuleAnchorSource = request.app.state.rule_anchors
+    return anchors
+
+
+def get_job_envelopes(request: Request) -> JobEnvelopeSource:
+    """잡 실행 시도가 쓸 봉투를 발급받는 통로를 낸다."""
+    envelopes: JobEnvelopeSource = request.app.state.job_envelopes
+    return envelopes
+
+
+def get_job_dispatch(request: Request) -> TemporalJobDispatch:
+    """잡 실행을 워커에게 맡기는 통로를 낸다."""
+    dispatch: TemporalJobDispatch = request.app.state.job_dispatch
+    return dispatch
+
+
+RuleAnchors = Annotated[RuleAnchorSource, Depends(get_rule_anchors)]
+JobEnvelopes = Annotated[JobEnvelopeSource, Depends(get_job_envelopes)]
+JobDispatch = Annotated[TemporalJobDispatch, Depends(get_job_dispatch)]
+
+
+@router.post(JOBS_PATH, status_code=ACCEPTED_STATUS)
+async def enqueue_job(
+    request: Request,
+    source: ExecutionSql,
+    user_id: UserId,
+    anchors: RuleAnchors,
+    envelopes: JobEnvelopes,
+    dispatch: JobDispatch,
+) -> JSONResponse:
     """잡 하나를 접수하고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
     body = await _read_body(request)
     if body is None:
@@ -71,24 +104,19 @@ async def enqueue_job(request: Request) -> JSONResponse:
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=_details(invalid))
 
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(
-        request.app.state.rule_anchors, user_id, job_input
-    ):
+    if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(anchors, user_id, job_input):
         return error_envelope(*INVALID_RULE_ANCHOR)
     idempotency_key = _idempotency_key(enqueue.idempotencyKey)
     request_hash = None if idempotency_key is None else input_hash(enqueue.kind, job_input)
     now = datetime.now(UTC)
 
     if not runs_locally(enqueue.kind):
-        envelopes = request.app.state.job_envelopes
         try:
             # 접수는 이 사용자의 자격과 카탈로그가 실제로 발급되는지를 봉투로 확인한다.
             await envelopes.issue(enqueue.kind, user_id)
         except ApplicationError as unavailable:
             return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     execution_id = str(uuid.uuid4())
-    source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
         ledger = JobLedger(sql)
         created = await ledger.claim(
@@ -115,17 +143,17 @@ async def enqueue_job(request: Request) -> JSONResponse:
 
     job_id = str(row["id"])
     if not runs_locally(enqueue.kind) and (created or row["status"] == "pending"):
-        dispatch: TemporalJobDispatch = request.app.state.job_dispatch
         payload = build_payload(job_input, user_id, job_id, idempotency_key)
         await dispatch.start(AGENT_KIND_BY_WIRE[enqueue.kind], job_id, payload)
 
     return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
-async def cancel_job(execution_id: str, request: Request) -> JSONResponse:
+@router.post(JOB_CANCEL_PATH)
+async def cancel_job(
+    execution_id: str, source: ExecutionSql, user_id: UserId, dispatch: JobDispatch
+) -> JSONResponse:
     """도는 잡 하나를 끊고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    source: SqlSource = request.app.state.execution_sql
     async with source.connect() as sql:
         ledger = JobLedger(sql)
         row = await ledger.find(execution_id)
@@ -137,15 +165,8 @@ async def cancel_job(execution_id: str, request: Request) -> JSONResponse:
     kind = str(row["kind"])
     # 전이를 먼저 하면 취소에 실패했을 때 취소됐다고 기록한 채 유료 실행이 이어진다.
     if not runs_locally(kind):
-        dispatch: TemporalJobDispatch = request.app.state.job_dispatch
         await dispatch.cancel(AGENT_KIND_BY_WIRE[kind], execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
-
-
-def resolve_user_id(header: str | None) -> str:
-    """자기신고 사용자 헤더가 비면 계약이 정한 기본 사용자로 읽는다."""
-    trimmed = (header or "").strip()
-    return trimmed if trimmed else DEFAULT_USER_ID
 
 
 async def _owns_anchor(anchors: RuleAnchorSource, user_id: str, job_input: RuleGenerationJobInput) -> bool:

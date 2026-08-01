@@ -64,18 +64,8 @@ from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutio
 from ..shared.workflows.jobs_anchor import RuleAnchorClient
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_envelope import JobEnvelopeClient
-from ..shared.workflows.jobs_intake import JOB_CANCEL_PATH, JOBS_PATH, cancel_job, enqueue_job
-from ..shared.workflows.jobs_query import (
-    JOB_HISTORY_PATH,
-    JOB_LATEST_PATH,
-    JOB_PATH,
-    JOB_STEPS_PATH,
-    get_job,
-    get_job_steps,
-    get_latest_job,
-    list_job_history,
-    list_pending_jobs,
-)
+from ..shared.workflows.jobs_intake import router as job_intake_router
+from ..shared.workflows.jobs_query import router as job_query_router
 from .credentials import SettingModelCredentials
 from .surface import SURFACE_PATH, get_served_surface
 
@@ -174,14 +164,8 @@ def create_app() -> FastAPI:
     application.post(CHAT_DRAFTS_PATH)(checkpoint_chat_draft)
     application.get(CHAT_MEMORIES_PATH)(recall_chat_facts)
     application.put(CHAT_MEMORY_PATH)(remember_chat_fact)
-    application.get(JOBS_PATH)(list_pending_jobs)
-    application.post(JOBS_PATH, status_code=ACCEPTED_STATUS)(enqueue_job)
-    # 고정 경로가 잡 식별자 경로보다 먼저 잡혀야 history와 latest가 식별자로 읽히지 않는다.
-    application.get(JOB_HISTORY_PATH)(list_job_history)
-    application.get(JOB_LATEST_PATH)(get_latest_job)
-    application.post(JOB_CANCEL_PATH)(cancel_job)
-    application.get(JOB_PATH)(get_job)
-    application.get(JOB_STEPS_PATH)(get_job_steps)
+    application.include_router(job_query_router)
+    application.include_router(job_intake_router)
     application.include_router(settings_router)
     application.include_router(envelope_router)
     return application

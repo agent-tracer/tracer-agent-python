@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from ..agents.runtime.ledger import SqlSource
-from .jobs_intake import (
-    INVALID_REQUEST,
-    JOBS_PATH,
-    MONITOR_USER_HEADER,
-    NOT_FOUND,
-    error_envelope,
-    resolve_user_id,
-)
+from ..agents.runtime.dependencies import ExecutionSql, UserId
+from .jobs_intake import INVALID_REQUEST, JOBS_PATH, NOT_FOUND, error_envelope
 from .jobs_ledger import JobLedger
 from .jobs_view import job_dto, job_step_dto
 
@@ -31,20 +24,23 @@ PENDING = "pending"
 HISTORY_LIMIT_DEFAULT = 50
 HISTORY_LIMIT_MAX = 100
 
+router = APIRouter()
 
-async def list_pending_jobs(request: Request) -> JSONResponse:
+
+@router.get(JOBS_PATH)
+async def list_pending_jobs(request: Request, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """종류별 대기 잡 중 이 사용자의 것을 접수 시각의 오름차순으로 낸다."""
     kind = request.query_params.get("kind")
     status = request.query_params.get("status")
     if kind not in JOB_LEDGER_KINDS or (status is not None and status != PENDING):
         return error_envelope(*INVALID_REQUEST)
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    async with _source(request).connect() as sql:
+    async with source.connect() as sql:
         rows = await JobLedger(sql).pending(kind)
     return _ok({"items": [job_dto(row) for row in rows if row["user_id"] == user_id]})
 
 
-async def list_job_history(request: Request) -> JSONResponse:
+@router.get(JOB_HISTORY_PATH)
+async def list_job_history(request: Request, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """이 사용자의 잡 이력을 접수 시각의 내림차순으로 한 페이지씩 낸다."""
     kind = request.query_params.get("kind")
     status = request.query_params.get("status")
@@ -55,38 +51,37 @@ async def list_job_history(request: Request) -> JSONResponse:
     page = _page(request.query_params.get("limit"), request.query_params.get("offset"))
     if page is None:
         return error_envelope(*INVALID_REQUEST)
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    async with _source(request).connect() as sql:
+    async with source.connect() as sql:
         rows, total = await JobLedger(sql).history(user_id, kind, status, *page)
     return _ok({"items": [job_dto(row) for row in rows], "total": total})
 
 
-async def get_latest_job(request: Request) -> JSONResponse:
+@router.get(JOB_LATEST_PATH)
+async def get_latest_job(request: Request, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """사용자와 종류와 태스크 조합의 가장 최근 잡을 내며 없으면 빈 자리를 낸다."""
     kind = request.query_params.get("kind")
     if kind not in JOB_LEDGER_KINDS:
         return error_envelope(*INVALID_REQUEST)
     task_id = request.query_params.get("taskId")
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    async with _source(request).connect() as sql:
+    async with source.connect() as sql:
         row = await JobLedger(sql).latest(user_id, kind, task_id or None)
     return _ok({"job": None if row is None else job_dto(row)})
 
 
-async def get_job(execution_id: str, request: Request) -> JSONResponse:
+@router.get(JOB_PATH)
+async def get_job(execution_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """잡 하나의 원장 행을 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    async with _source(request).connect() as sql:
+    async with source.connect() as sql:
         row = await JobLedger(sql).find(execution_id)
     if row is None or row["user_id"] != user_id:
         return error_envelope(*NOT_FOUND)
     return _ok({"job": job_dto(row)})
 
 
-async def get_job_steps(execution_id: str, request: Request) -> JSONResponse:
+@router.get(JOB_STEPS_PATH)
+async def get_job_steps(execution_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """잡 하나가 남긴 궤적을 시도와 순번의 오름차순으로 낸다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    async with _source(request).connect() as sql:
+    async with source.connect() as sql:
         ledger = JobLedger(sql)
         row = await ledger.find(execution_id)
         if row is None or row["user_id"] != user_id:
@@ -109,8 +104,3 @@ def _page(limit: str | None, offset: str | None) -> tuple[int, int] | None:
 
 def _ok(data: object) -> JSONResponse:
     return JSONResponse(status_code=200, content={"ok": True, "data": data})
-
-
-def _source(request: Request) -> SqlSource:
-    source: SqlSource = request.app.state.execution_sql
-    return source
