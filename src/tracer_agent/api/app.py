@@ -61,15 +61,7 @@ from ..shared.agents.envelope.router import (
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql, SqlSource
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
-from ..shared.agents.settings.router import (
-    SETTING_MODELS_PATH,
-    SETTING_PATH,
-    SETTINGS_PATH,
-    delete_setting,
-    list_setting_models,
-    list_settings,
-    put_setting,
-)
+from ..shared.agents.settings.router import router as settings_router
 from ..shared.agents.settings.secret import SettingCipher
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
@@ -195,10 +187,7 @@ def create_app() -> FastAPI:
     application.post(JOB_CANCEL_PATH)(cancel_job)
     application.get(JOB_PATH)(get_job)
     application.get(JOB_STEPS_PATH)(get_job_steps)
-    application.get(SETTINGS_PATH)(list_settings)
-    application.get(SETTING_MODELS_PATH)(list_setting_models)
-    application.put(SETTING_PATH)(put_setting)
-    application.delete(SETTING_PATH)(delete_setting)
+    application.include_router(settings_router)
     application.post(CHAT_ENVELOPE_PATH)(issue_chat_execution_envelope)
     application.post(JOB_ENVELOPE_PATH)(issue_job_execution_envelope)
     return application
