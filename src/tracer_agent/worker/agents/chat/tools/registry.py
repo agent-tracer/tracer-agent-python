@@ -8,6 +8,7 @@ from typing import Any
 from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool, StructuredTool
 
+from tracer_agent.shared.agents.chat.memory_policy import memory_rejection
 from tracer_agent.shared.agents.chat.models import ProposedWrite
 
 from ...runtime.telemetry.spans import tool_span
@@ -157,6 +158,9 @@ def _remember_tool(descriptions: dict[str, str], agent_name: str) -> StructuredT
             store = runtime.store
             if store is None:
                 return TOOL_FAILED.format(tool="remember_fact", reason=MEMORY_BACKEND_MISSING)
+            rejection = memory_rejection(content)
+            if rejection is not None:
+                return TOOL_FAILED.format(tool="remember_fact", reason=rejection)
             try:
                 # 턴이 중간에 끊겨도 남아야 하므로 산출물로 미루지 않고 부른 자리에서 즉시 적재한다.
                 await store.aput(MEMORY_NAMESPACE, key, {CONTENT_FIELD: content})
