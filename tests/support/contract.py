@@ -7,13 +7,16 @@ from typing import Any
 import yaml
 from contract.conformance.runner.contract import (
     contract_root,
-    read_agent_spec,
+    read_agent_cases,
+    read_agent_output,
+    read_agent_prompt,
+    read_agent_tools,
     read_case,
     read_json,
     read_version,
 )
 
-PINNED_VERSION = "0.19.0"
+PINNED_VERSION = "0.0.1"
 
 
 def contract_version() -> str:
@@ -21,10 +24,60 @@ def contract_version() -> str:
     return read_version()
 
 
-def agent_spec(agent_id: str) -> dict[str, Any]:
-    """에이전트 하나의 명세이며 프롬프트 조각과 도구와 출력과 케이스를 담는다."""
-    spec: dict[str, Any] = read_agent_spec(agent_id)
-    return spec
+def agent_prompt(agent_id: str) -> dict[str, Any]:
+    """에이전트 하나의 프롬프트 조각과 템플릿이다."""
+    payload: dict[str, Any] = read_agent_prompt(agent_id)
+    return payload
+
+
+def agent_tools(agent_id: str) -> dict[str, Any]:
+    """에이전트 하나의 도구와 인자와 상한이다."""
+    payload: dict[str, Any] = read_agent_tools(agent_id)
+    return payload
+
+
+def agent_tool(agent_id: str, tool_name: str) -> dict[str, Any]:
+    """도구 하나의 선언이며 설명과 인자를 갖는다."""
+    declared: dict[str, Any] = agent_tools(agent_id)["tools"][tool_name]
+    return declared
+
+
+def tool_arg(agent_id: str, tool_name: str, arg: str) -> dict[str, Any]:
+    """도구 인자 하나의 타입과 상한과 설명이다."""
+    declared: dict[str, Any] = agent_tool(agent_id, tool_name)["args"][arg]
+    return declared
+
+
+def tool_arg_partition(agent_id: str, tool_name: str) -> tuple[set[str], set[str]]:
+    """도구 하나의 인자 이름을 필수와 선택으로 나눈다."""
+    args: dict[str, Any] = agent_tool(agent_id, tool_name)["args"]
+    required = {name for name, declared in args.items() if declared["required"]}
+    return required, set(args) - required
+
+
+def tool_descriptions(agent_id: str) -> dict[str, str]:
+    """도구 이름마다 모델이 읽을 한 문장이다."""
+    return {name: str(tool["description"]) for name, tool in agent_tools(agent_id)["tools"].items()}
+
+
+def tool_arg_descriptions(agent_id: str) -> dict[str, dict[str, str]]:
+    """도구마다 인자 이름과 모델이 읽을 설명이다."""
+    return {
+        name: {arg: str(declared["description"]) for arg, declared in tool["args"].items()}
+        for name, tool in agent_tools(agent_id)["tools"].items()
+    }
+
+
+def agent_output(agent_id: str) -> dict[str, Any]:
+    """에이전트 하나의 구조화 출력 스키마다."""
+    payload: dict[str, Any] = read_agent_output(agent_id)
+    return payload
+
+
+def agent_cases(agent_id: str) -> dict[str, Any]:
+    """에이전트 하나의 판정 케이스다."""
+    payload: dict[str, Any] = read_agent_cases(agent_id)
+    return payload
 
 
 def shared_contract(file_name: str) -> dict[str, Any]:

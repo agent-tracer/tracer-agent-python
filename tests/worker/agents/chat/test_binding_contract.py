@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_tools
 from tracer_agent.shared.agents.chat.tools.bindings import (
     GATE_CONFIRM,
     GATE_NONE,
@@ -14,14 +14,14 @@ from tracer_agent.shared.agents.chat.tools.bindings import (
     ToolBinding,
     fill_path,
 )
-from tracer_agent.worker.agents.chat.tools import TOOL_SPECS
+from tracer_agent.worker.agents.chat.tools import chat_tool_declarations, tool_arg_names
 
 # 사용자 범위는 진입점을 만들 때 묶으므로 모델이 채우는 자리에는 이 이름이 설 수 없다.
 SCOPE_ARG = re.compile(r"^(user|owner|principal|account|scope|tenant)(_?id)?$", re.IGNORECASE)
 
 
 def _bindings() -> Any:
-    return agent_spec("chat")["bindings"]
+    return agent_tools("chat")["bindings"]
 
 
 def _expected(binding: ToolBinding) -> dict[str, Any]:
@@ -46,12 +46,12 @@ def test_바인딩_표가_계약과_바이트로_같다() -> None:
 
 
 def test_바인딩과_로컬_도구를_합치면_도구_표면_전체다() -> None:
-    assert set(TOOL_BINDINGS) | set(LOCAL_TOOL_NAMES) == set(TOOL_SPECS)
+    assert set(TOOL_BINDINGS) | set(LOCAL_TOOL_NAMES) == set(chat_tool_declarations())
     assert not set(TOOL_BINDINGS) & set(LOCAL_TOOL_NAMES)
 
 
 def test_게이트가_도구_계약의_mutation과_어긋나지_않는다() -> None:
-    tools = agent_spec("chat")["tools"]["tools"]
+    tools = agent_tools("chat")["tools"]
 
     for name, binding in TOOL_BINDINGS.items():
         assert binding.gate == (GATE_CONFIRM if tools[name]["mutation"] else GATE_NONE)
@@ -65,17 +65,17 @@ def test_게이트가_도구_계약의_mutation과_어긋나지_않는다() -> N
 
 def test_도구_인자마다_경로_쿼리_본문_중_한_자리가_있다() -> None:
     for name, binding in TOOL_BINDINGS.items():
-        spec = TOOL_SPECS[name]
+        required, optional = tool_arg_names(name)
         placed = [*binding.path_args, *binding.query, *binding.body]
 
         assert len(placed) == len(set(placed))
-        assert set(placed) == set(spec.required) | set(spec.optional)
+        assert set(placed) == set(required) | set(optional)
         assert binding.placeholders() == binding.path_args
 
 
 def test_사용자_범위를_사칭하는_인자가_어느_자리에도_없다() -> None:
-    for spec in TOOL_SPECS.values():
-        for arg in (*spec.required, *spec.optional):
+    for name in chat_tool_declarations():
+        for arg in (*tool_arg_names(name)[0], *tool_arg_names(name)[1]):
             assert not SCOPE_ARG.match(arg)
     for binding in TOOL_BINDINGS.values():
         wires = [

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_cases
 from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupCandidate,
     CleanupDraftSuggestion,
@@ -14,7 +14,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 )
 from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
 
-_CONTRACT = agent_spec("task-cleanup")["cases"]
+_CONTRACT = agent_cases("task-cleanup")["cases"]
 
 
 def _state(case: dict[str, Any]) -> TaskCleanupState:

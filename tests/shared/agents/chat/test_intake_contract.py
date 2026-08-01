@@ -82,7 +82,7 @@ def test_요청_스키마의_제약이_계약과_같다() -> None:
 
 def test_언어_선택지가_계약과_같다() -> None:
     constraints = conformance_case("chat.intake")["body"]["constraints"]
-    languages = shared_contract("language.directives.json")["languages"]
+    languages = shared_contract("languages.json")["languages"]
 
     assert constraints["language"]["enum"] == languages
 

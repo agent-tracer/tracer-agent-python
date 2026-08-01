@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_tools
 from tracer_agent.shared.agents.chat.surface.confirmations import PROPOSAL_NOTE
 from tracer_agent.shared.agents.chat.surface.tool_calls import (
     CONFIRMABLE_TOOLS,
@@ -15,11 +15,11 @@ from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BI
 
 
 def test_확인_대기_안내가_계약과_같다() -> None:
-    assert agent_spec("chat")["tools"]["proposalNote"] == PROPOSAL_NOTE
+    assert agent_tools("chat")["proposalNote"] == PROPOSAL_NOTE
 
 
 def test_계약이_mutation으로_적은_도구만_계획을_갖는다() -> None:
-    contract = agent_spec("chat")["tools"]["tools"]
+    contract = agent_tools("chat")["tools"]
     mutations = {name for name, spec in contract.items() if spec["mutation"]}
 
     assert mutations == CONFIRMABLE_TOOLS
@@ -71,15 +71,16 @@ def test_JSON이_아닌_기대는_계획을_세우지_않는다() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [("tag-1, tag-2", ["tag-1", "tag-2"]), ('["tag-1"]', ["tag-1"]), ("tag-1 tag-2", ["tag-1", "tag-2"])],
-)
-def test_태그_목록은_쉼표와_공백과_JSON_배열을_모두_읽는다(raw: str, expected: list[str]) -> None:
-    call = plan_chat_tool_call("set_task_tags", {"taskId": "task-1", "tagIds": raw})
+def test_태그_목록은_계약이_선언한_배열_그대로_간다() -> None:
+    call = plan_chat_tool_call("set_task_tags", {"taskId": "task-1", "tagIds": [" tag-1 ", "tag-2"]})
 
-    assert call.args["tagIds"] == expected
-    assert call.describe(None) == f"Set {len(expected)} tag(s) on task task-1."
+    assert call.args["tagIds"] == ["tag-1", "tag-2"]
+    assert call.describe(None) == "Set 2 tag(s) on task task-1."
+
+
+def test_태그_목록이_배열이_아니면_계획을_세우지_않는다() -> None:
+    with pytest.raises(ChatToolArgsInvalid):
+        plan_chat_tool_call("set_task_tags", {"taskId": "task-1", "tagIds": "tag-1"})
 
 
 def test_접수한_잡의_문장은_응답의_원장_행을_인용한다() -> None:

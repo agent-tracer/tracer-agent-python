@@ -7,7 +7,13 @@ from typing import Any, get_args
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from tests.support.contract import agent_spec
+from tests.support.contract import (
+    agent_tools,
+    tool_arg,
+    tool_arg_descriptions,
+    tool_arg_partition,
+    tool_descriptions,
+)
 from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.task_cleanup.models import (
     CLEANUP_REVIEWER_ROLE,
@@ -45,11 +51,7 @@ from tracer_agent.worker.agents.task_cleanup.tools import (
 
 
 def _contract() -> Any:
-    return agent_spec("task-cleanup")["tools"]
-
-
-def _tool(name: str) -> Any:
-    return _contract()["tools"][name]
+    return agent_tools("task-cleanup")
 
 
 def _langchain_tools() -> dict[str, Any]:
@@ -85,7 +87,7 @@ def test_조율자_도구와_재파견_상한이_계약과_같다() -> None:
     redispatch = orchestration["redispatchRequest"]
 
     assert orchestration["coordinatorTools"] == list(COORDINATOR_TOOL_NAMES)
-    assert orchestration["maxRedispatchRounds"] == MAX_REDISPATCH_ROUNDS
+    assert _contract()["limits"]["maxRedispatchRounds"] == MAX_REDISPATCH_ROUNDS
     assert orchestration["emptyAssignmentEndsEmpty"] is True
     assert redispatch["required"] == list(InspectAssignment.model_fields)
     assert redispatch["maxTasks"] == MAX_SUGGESTIONS
@@ -97,30 +99,26 @@ def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출�
     assert set(tools) == set(_contract()["tools"])
     for name, tool in tools.items():
         schema = tool.tool_call_schema.model_json_schema()
-        contract = _tool(name)
-        assert set(schema.get("required", [])) == set(contract["required"])
-        assert set(schema["properties"]) == set(contract["required"] + contract["optional"])
+        required, optional = tool_arg_partition("task-cleanup", name)
+        assert set(schema.get("required", [])) == required
+        assert set(schema["properties"]) == required | optional
         assert "runtime" not in schema["properties"]
 
 
 def test_list_candidate_tasks의_필수와_선택_인자가_계약과_같다() -> None:
-    contract = _tool(LIST_CANDIDATE_TASKS)
-    required, optional = _partition(ListCandidateTasksArgs)
+    declared = tool_arg_partition("task-cleanup", LIST_CANDIDATE_TASKS)
 
-    assert required == set(contract["required"])
-    assert optional == set(contract["optional"])
+    assert _partition(ListCandidateTasksArgs) == declared
 
 
 def test_get_task_events의_필수와_선택_인자가_계약과_같다() -> None:
-    contract = _tool(GET_TASK_EVENTS)
-    required, optional = _partition(GetTaskEventsArgs)
+    declared = tool_arg_partition("task-cleanup", GET_TASK_EVENTS)
 
-    assert required == set(contract["required"])
-    assert optional == set(contract["optional"])
+    assert _partition(GetTaskEventsArgs) == declared
 
 
 def test_list_candidate_tasks의_limit_기본값과_상하한이_계약과_같다() -> None:
-    limit = _tool(LIST_CANDIDATE_TASKS)["limit"]
+    limit = tool_arg("task-cleanup", LIST_CANDIDATE_TASKS, "limit")
 
     assert limit["default"] == DEFAULT_CANDIDATE_LIMIT
     assert ListCandidateTasksArgs().limit is None
@@ -133,7 +131,7 @@ def test_list_candidate_tasks의_limit_기본값과_상하한이_계약과_같�
 
 
 def test_get_task_events의_limit_기본값과_상하한이_계약과_같다() -> None:
-    limit = _tool(GET_TASK_EVENTS)["limit"]
+    limit = tool_arg("task-cleanup", GET_TASK_EVENTS, "limit")
 
     assert limit["default"] == DEFAULT_EVENT_LIMIT
     assert GetTaskEventsArgs(taskId="task-1").limit is None
@@ -146,7 +144,7 @@ def test_get_task_events의_limit_기본값과_상하한이_계약과_같다() -
 
 
 def test_get_task_events의_읽기_방향_기본값과_허용값이_계약과_같다() -> None:
-    order = _tool(GET_TASK_EVENTS)["order"]
+    order = tool_arg("task-cleanup", GET_TASK_EVENTS, "order")
 
     assert order["default"] == DEFAULT_EVENT_ORDER
     assert list(get_args(EventOrder)) == order["values"]
@@ -212,9 +210,7 @@ def test_워커가_응답에_필드를_늘려도_도구_루프가_깨지지_않�
 
 
 def test_도구_설명이_계약과_같다() -> None:
-    contract = _contract()["descriptions"]
-
-    assert contract == {
+    assert tool_descriptions("task-cleanup") == {
         LIST_CANDIDATE_TASKS: LIST_CANDIDATE_TASKS_DESCRIPTION,
         GET_TASK_EVENTS: GET_TASK_EVENTS_DESCRIPTION,
     }
@@ -228,7 +224,7 @@ def test_검토가_무너진_사유_문구가_계약과_같다() -> None:
 
 
 def test_인자_설명이_계약과_같다() -> None:
-    contract = _contract()["argDescriptions"]
+    contract = tool_arg_descriptions("task-cleanup")
     shown = {
         LIST_CANDIDATE_TASKS: {
             arg: field.description for arg, field in ListCandidateTasksArgs.model_fields.items()

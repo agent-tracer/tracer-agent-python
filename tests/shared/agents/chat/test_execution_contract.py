@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_cases
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger, ChatExecutionSpend
 
-CONTRACT = agent_spec("chat")["cases"]
+CONTRACT = agent_cases("chat")["cases"]
 
 DATE_KEYS = frozenset({"createdAt", "updatedAt", "startedAt", "completedAt"})
 

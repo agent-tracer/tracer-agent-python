@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_cases
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeCandidate
 from tracer_agent.worker.agents.recipe_scan.policy import validate_recipe_candidates
 
-_CONTRACT = agent_spec("recipe-scan")["cases"]
+_CONTRACT = agent_cases("recipe-scan")["cases"]
 
 
 def _candidates(case: dict[str, Any]) -> list[RecipeCandidate]:

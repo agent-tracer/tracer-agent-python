@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_cases
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionDraft
 from tracer_agent.worker.agents.title_suggestion.policy import validate_title_candidate
 
-_CONTRACT = agent_spec("title-suggestion")["cases"]
+_CONTRACT = agent_cases("title-suggestion")["cases"]
 
 
 @pytest.mark.parametrize("case", _CONTRACT["cases"], ids=lambda case: str(case["name"]))

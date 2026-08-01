@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-
-_ID_SEPARATOR = re.compile(r"[\s,]+")
 
 
 class ChatToolArgsInvalid(ValueError):
@@ -58,19 +55,16 @@ def _parse_json(raw: str, label: str) -> Any:
         raise ChatToolArgsInvalid(f"{label} must be a JSON object") from invalid
 
 
-def _parse_id_list(raw: str) -> list[str]:
-    trimmed = raw.strip()
-    if trimmed.startswith("["):
-        parsed = _parse_json(trimmed, "tagIds")
-        if not isinstance(parsed, list):
-            raise ChatToolArgsInvalid("tagIds must be a JSON array")
-        return [text for text in (_id_text(one) for one in parsed) if text]
-    return [one for one in _ID_SEPARATOR.split(trimmed) if one] if trimmed else []
+def _id_list(args: dict[str, Any], key: str) -> list[str]:
+    value = args.get(key)
+    if not isinstance(value, list):
+        raise ChatToolArgsInvalid(f"{key} must be a list")
+    return [text for text in (_id_text(one) for one in value) if text]
 
 
 def _id_text(value: Any) -> str:
     if isinstance(value, str):
-        return value
+        return value.strip()
     return str(value) if isinstance(value, int | float) and not isinstance(value, bool) else ""
 
 
@@ -181,7 +175,7 @@ def _update_tag(args: dict[str, Any]) -> ChatToolCall:
 
 def _set_task_tags(args: dict[str, Any]) -> ChatToolCall:
     task_id = _req(args, "taskId")
-    tag_ids = _parse_id_list(_req(args, "tagIds"))
+    tag_ids = _id_list(args, "tagIds")
     return _plain({"taskId": task_id, "tagIds": tag_ids}, f"Set {len(tag_ids)} tag(s) on task {task_id}.")
 
 

@@ -9,7 +9,13 @@ from typing import Any, get_args
 import pytest
 from pydantic import ValidationError
 
-from tests.support.contract import agent_spec
+from tests.support.contract import (
+    agent_tools,
+    tool_arg,
+    tool_arg_descriptions,
+    tool_arg_partition,
+    tool_descriptions,
+)
 from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_PROBE_TURNS,
@@ -65,7 +71,7 @@ def _row(event_id: str) -> dict[str, Any]:
 
 
 def _contract() -> Any:
-    return agent_spec("recipe-scan")["tools"]
+    return agent_tools("recipe-scan")
 
 
 def _tools() -> Any:
@@ -110,7 +116,7 @@ def _candidate(orders: list[int]) -> RecipeCandidate:
 def test_후보_상한이_계약과_같다() -> None:
     limits = _contract()["limits"]
 
-    assert limits["candidateLimit"] == MAX_RECIPE_CANDIDATES
+    assert limits["recipeCandidateLimit"] == MAX_RECIPE_CANDIDATES
 
 
 def test_모델에게_노출하는_도구_이름이_계약과_같다() -> None:
@@ -131,10 +137,12 @@ def test_조율자_도구와_재파견_상한이_계약과_같다() -> None:
     orchestration = _contract()["orchestration"]
     redispatch = orchestration["redispatchRequest"]
 
+    limits = _contract()["limits"]
+
     assert orchestration["coordinatorTools"] == list(COORDINATOR_TOOLS)
-    assert orchestration["maxRedispatchRounds"] == MAX_REDISPATCH_ROUNDS
+    assert limits["maxRedispatchRounds"] == MAX_REDISPATCH_ROUNDS
     assert redispatch["required"] == list(ProbeAssignment.model_fields)
-    assert redispatch["maxProbes"] == MAX_REDISPATCH_PROBES
+    assert limits["maxRedispatchProbes"] == MAX_REDISPATCH_PROBES
 
 
 def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출한다() -> None:
@@ -143,24 +151,25 @@ def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출�
     assert set(tools) == set(_tools())
     for name, tool in tools.items():
         schema = tool.tool_call_schema.model_json_schema()
-        contract = _tools()[name]
-        assert set(schema.get("required", [])) == set(contract["required"])
-        assert set(schema["properties"]) == set(contract["required"] + contract["optional"])
+        required, optional = tool_arg_partition("recipe-scan", name)
+        assert set(schema.get("required", [])) == required
+        assert set(schema["properties"]) == required | optional
         assert "runtime" not in schema["properties"]
 
 
 def test_도구마다_필수와_선택_인자가_계약과_같다() -> None:
-    for tool, contract in _tools().items():
+    for tool in _tools():
         fields = _fields(tool)
         required = {name for name, field in fields.items() if field.is_required()}
 
-        assert required == set(contract["required"])
-        assert set(fields) - required == set(contract["optional"])
+        assert (required, set(fields) - required) == tool_arg_partition("recipe-scan", tool)
 
 
 def test_도구마다_수치_인자의_기본값과_상하한이_계약과_같다() -> None:
     for tool, contract in _tools().items():
-        for field, bound in contract.get("numbers", {}).items():
+        for field, bound in contract["args"].items():
+            if bound["type"] != "integer":
+                continue
             assert _fields(tool)[field].default == bound["default"]
             assert _accepts(tool, field, bound["min"])
             assert _accepts(tool, field, bound["max"])
@@ -170,7 +179,9 @@ def test_도구마다_수치_인자의_기본값과_상하한이_계약과_같�
 
 def test_도구마다_열거_인자의_값과_기본값이_계약과_같다() -> None:
     for tool, contract in _tools().items():
-        for field, enumeration in contract.get("enums", {}).items():
+        for field, enumeration in contract["args"].items():
+            if enumeration["type"] != "enum":
+                continue
             assert all(_accepts(tool, field, value) for value in enumeration["values"])
             assert not _accepts(tool, field, "drifted.value")
             if "default" in enumeration:
@@ -178,7 +189,7 @@ def test_도구마다_열거_인자의_값과_기본값이_계약과_같다() ->
 
 
 def test_search_events가_거르는_이벤트_종류가_계약과_같다() -> None:
-    assert list(get_args(TimelineEventKind)) == _tools()["search_events"]["enums"]["kind"]["values"]
+    assert list(get_args(TimelineEventKind)) == tool_arg("recipe-scan", "search_events", "kind")["values"]
 
 
 def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_기록한다() -> None:
@@ -239,9 +250,7 @@ def test_verify_action의_도구_목록이_계약과_같다() -> None:
 
 
 def test_도구_설명이_계약과_같다() -> None:
-    contract = _contract()["descriptions"]
-
-    assert {cls.name: cls.description for cls in RECIPE_TOOL_CLASSES} == contract
+    assert {cls.name: cls.description for cls in RECIPE_TOOL_CLASSES} == tool_descriptions("recipe-scan")
 
 
 def test_전문가가_무너진_판정_문구가_계약과_같다() -> None:
@@ -252,7 +261,7 @@ def test_전문가가_무너진_판정_문구가_계약과_같다() -> None:
 
 
 def test_인자_설명이_계약과_같다() -> None:
-    contract = _contract()["argDescriptions"]
+    contract = tool_arg_descriptions("recipe-scan")
     shown = {
         cls.name: {arg: field.description for arg, field in cls.args_model.model_fields.items()}
         for cls in RECIPE_TOOL_CLASSES

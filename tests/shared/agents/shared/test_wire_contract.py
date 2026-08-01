@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import get_args
 
-from tests.support.contract import agent_spec, shared_contract
+from tests.support.contract import agent_cases, shared_contract
 from tracer_agent.shared.agents.recipe_scan.models import RecipeCandidate
 from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
 from tracer_agent.shared.agents.shared.prompt_integrity import (
@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionCo
 
 
 def test_워커가_보내는_title_컨텍스트를_그대로_받는다() -> None:
-    payload = agent_spec("title-suggestion")["contextExample"]
+    payload = agent_cases("title-suggestion")["contextExample"]
 
     context = TitleSuggestionContext.model_validate(payload)
 
@@ -23,7 +23,7 @@ def test_워커가_보내는_title_컨텍스트를_그대로_받는다() -> None
 
 
 def test_공유_최종_DTO_fixture를_그대로_직렬화한다() -> None:
-    payload = agent_spec("recipe-scan")["resultExample"]
+    payload = agent_cases("recipe-scan")["resultExample"]
 
     candidate = RecipeCandidate.model_validate(payload["recipes"][0])
     serialized = {"recipes": [candidate.model_dump(mode="json", exclude_none=True)]}

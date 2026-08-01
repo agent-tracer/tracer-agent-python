@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from tests.support.contract import agent_spec
+from tests.support.contract import agent_cases
 from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupCandidate,
     CleanupDraftSuggestion,
@@ -185,7 +185,7 @@ def _expected_task(raw: dict[str, Any]) -> CleanupTaskSnapshot:
 
 
 def test_TypeScript_구현체와_공유하는_후보_판정이_계약의_케이스와_같은_판정을_낸다() -> None:
-    golden = agent_spec("task-cleanup")["candidateCases"]
+    golden = agent_cases("task-cleanup")["candidateCases"]
     now = _parse_iso(golden["now"])
 
     for case in golden["cases"]:

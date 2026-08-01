@@ -8,7 +8,13 @@ from typing import Any, get_args
 import pytest
 from pydantic import ValidationError
 
-from tests.support.contract import agent_spec
+from tests.support.contract import (
+    agent_tools,
+    tool_arg,
+    tool_arg_descriptions,
+    tool_arg_partition,
+    tool_descriptions,
+)
 from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.title_suggestion.models import (
     MAX_CONTEXT_TURNS,
@@ -29,7 +35,7 @@ from tracer_agent.worker.agents.title_suggestion.tools import (
 
 
 def _contract() -> Any:
-    return agent_spec("title-suggestion")["tools"]
+    return agent_tools("title-suggestion")
 
 
 def _langchain_tool() -> Any:
@@ -81,28 +87,28 @@ def test_최근_턴_창과_컨텍스트가_싣는_턴_수의_상한이_계약과
 
 
 def test_get_task_events의_필수와_선택_인자가_계약과_같다() -> None:
-    contract = _contract()["getTaskEvents"]
+    declared_required, declared_optional = tool_arg_partition("title-suggestion", GET_TASK_EVENTS)
 
     required = {name for name, field in GetTaskEventsArgs.model_fields.items() if field.is_required()}
     optional = set(GetTaskEventsArgs.model_fields) - required
 
-    assert required == set(contract["required"])
-    assert optional == set(contract["optional"])
+    assert required == declared_required
+    assert optional == declared_optional
 
 
 def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출한다() -> None:
-    contract = _contract()["getTaskEvents"]
+    required, optional = tool_arg_partition("title-suggestion", GET_TASK_EVENTS)
     tool = _langchain_tool()
     schema = tool.tool_call_schema.model_json_schema()
 
     assert tool.name == "get_task_events"
-    assert set(schema["required"]) == set(contract["required"])
-    assert set(schema["properties"]) == set(contract["required"] + contract["optional"])
+    assert set(schema["required"]) == required
+    assert set(schema["properties"]) == required | optional
     assert "runtime" not in schema["properties"]
 
 
 def test_limit의_기본값과_최소와_최대가_계약과_같다() -> None:
-    limit = _contract()["getTaskEvents"]["limit"]
+    limit = tool_arg("title-suggestion", GET_TASK_EVENTS, "limit")
 
     assert limit["default"] == DEFAULT_EVENT_LIMIT
     assert limit["min"] == MIN_EVENT_LIMIT
@@ -114,7 +120,7 @@ def test_limit의_기본값과_최소와_최대가_계약과_같다() -> None:
 
 
 def test_읽기_방향의_기본값과_허용_값이_계약과_같다() -> None:
-    order = _contract()["getTaskEvents"]["order"]
+    order = tool_arg("title-suggestion", GET_TASK_EVENTS, "order")
     field = GetTaskEventsArgs.model_fields["order"]
 
     assert order["default"] == DEFAULT_EVENT_ORDER
@@ -134,13 +140,11 @@ async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
 
 
 def test_도구_설명이_계약과_같다() -> None:
-    contract = _contract()["descriptions"]
-
-    assert contract == {GET_TASK_EVENTS: GET_TASK_EVENTS_DESCRIPTION}
+    assert tool_descriptions("title-suggestion") == {GET_TASK_EVENTS: GET_TASK_EVENTS_DESCRIPTION}
 
 
 def test_인자_설명이_계약과_같다() -> None:
-    contract = _contract()["argDescriptions"][GET_TASK_EVENTS]
+    contract = tool_arg_descriptions("title-suggestion")[GET_TASK_EVENTS]
     fields = GetTaskEventsArgs.model_fields
 
     assert {arg: field.description for arg, field in fields.items()} == contract

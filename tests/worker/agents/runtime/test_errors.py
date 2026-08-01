@@ -63,9 +63,7 @@ class TestErrorSubtypeContract:
     def test_계약이_선언한_python_어휘와_같다(self) -> None:
         contract = shared_contract("error.subtypes.json")
 
-        declared = {
-            subtype for subtype, verdict in contract["emitted"].items() if "python" in verdict["emittedBy"]
-        }
+        declared = {subtype for subtype, axes in contract["emittedBy"].items() if "python" in axes}
 
         assert declared == EMITTED_SUBTYPES
 
