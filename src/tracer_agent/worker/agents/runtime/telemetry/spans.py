@@ -16,7 +16,7 @@ from .attributes import (
     build_tool_attributes,
     build_tool_span_attributes,
 )
-from .metrics import record_tool_duration
+from .metrics import record_invoke_agent_duration, record_tool_duration
 
 _TRACER_NAME = "agents.ai-jobs"
 
@@ -32,13 +32,22 @@ async def invoke_agent_span(
     """에이전트 호출을 부모 문맥과 연결된 스팬으로 감싼다."""
     attrs = build_invoke_agent_attributes(job_id=job_id, agent_name=agent_name, model=model)
     tracer = trace.get_tracer(_TRACER_NAME)
+    started = time.monotonic()
+    error_type: str | None = None
     with tracer.start_as_current_span(
         f"{GEN_AI_OPERATION['invoke_agent']} {agent_name}",
         context=parent_context,
         kind=SpanKind.INTERNAL,
         attributes=attrs,
     ) as span:
-        yield span
+        try:
+            yield span
+        except Exception as error:
+            error_type = type(error).__name__
+            raise
+        finally:
+            measured = attrs if error_type is None else {**attrs, "error.type": error_type}
+            record_invoke_agent_duration(time.monotonic() - started, measured)
 
 
 @asynccontextmanager
