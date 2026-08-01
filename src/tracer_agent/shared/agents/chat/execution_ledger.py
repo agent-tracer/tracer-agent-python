@@ -71,12 +71,15 @@ UPDATE chat_executions
        completed_at = $8,
        updated_at = $8
  WHERE id = $1 AND status = 'running'
-   AND EXISTS (
+   AND (EXISTS (
        SELECT 1 FROM agent_run_observations observation
         WHERE observation.execution_id = chat_executions.id
           AND observation.user_id = chat_executions.user_id
           AND observation.status = 'succeeded'
-   )
+   ) OR NOT EXISTS (
+       SELECT 1 FROM agent_run_observations observation
+        WHERE observation.execution_id = chat_executions.id
+   ))
 RETURNING id
 """
 
@@ -108,12 +111,15 @@ UPDATE chat_executions
    SET status = 'failed', error = $2, completed_at = $3, updated_at = $3
  WHERE id = $1 AND (
        status = 'queued'
-       OR (status = 'running' AND EXISTS (
+       OR (status = 'running' AND (EXISTS (
            SELECT 1 FROM agent_run_observations observation
             WHERE observation.execution_id = chat_executions.id
               AND observation.user_id = chat_executions.user_id
               AND observation.status = 'failed'
-       ))
+       ) OR NOT EXISTS (
+           SELECT 1 FROM agent_run_observations observation
+            WHERE observation.execution_id = chat_executions.id
+       )))
  )
 RETURNING id
 """
@@ -123,12 +129,15 @@ UPDATE chat_executions
    SET status = 'canceled', completed_at = $2, updated_at = $2
  WHERE id = $1 AND (
        status = 'queued'
-       OR (status = 'running' AND EXISTS (
+       OR (status = 'running' AND (EXISTS (
            SELECT 1 FROM agent_run_observations observation
             WHERE observation.execution_id = chat_executions.id
               AND observation.user_id = chat_executions.user_id
               AND observation.status = 'cancelled'
-       ))
+       ) OR NOT EXISTS (
+           SELECT 1 FROM agent_run_observations observation
+            WHERE observation.execution_id = chat_executions.id
+       )))
  )
 RETURNING id
 """
