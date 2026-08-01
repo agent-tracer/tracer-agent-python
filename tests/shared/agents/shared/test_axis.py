@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from typing import get_args
 
 from tests.support.contract import workflow_contract
 from tracer_agent.shared.agents.shared.axis import (
     AGENT_AXIS,
-    AXIS_LABEL_KEY,
+    AXIS_ATTRIBUTE_KEY,
+    AXIS_LABEL_NAME,
     AgentAxis,
     declared_axes,
 )
@@ -27,5 +29,13 @@ class Test축의_이름:
 
 
 class Test축의_라벨:
-    def test_계약이_정한_라벨_이름을_쓴다(self) -> None:
-        assert workflow_contract("metrics.yaml")["labels"]["axis"]["key"] == AXIS_LABEL_KEY
+    def test_계측이_계약이_정한_속성_이름을_쓴다(self) -> None:
+        declared = workflow_contract("metrics.yaml")["labels"]["axis"]
+        assert declared["attributeKey"] == AXIS_ATTRIBUTE_KEY
+
+    def test_지표_창구가_계약이_정한_라벨_이름을_쓴다(self) -> None:
+        declared = workflow_contract("metrics.yaml")["labels"]["axis"]
+        assert declared["labelName"] == AXIS_LABEL_NAME
+
+    def test_창구가_싣는_이름을_Prometheus_가_그대로_읽는다(self) -> None:
+        assert re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", AXIS_LABEL_NAME) is not None

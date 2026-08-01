@@ -29,10 +29,20 @@ def declared_axes() -> frozenset[str]:
 
 
 @lru_cache(maxsize=1)
-def axis_label_key() -> str:
-    """지표와 trace 가 축을 싣는 라벨의 이름이다."""
+def _axis_label() -> dict[str, Any]:
     document: dict[str, Any] = yaml.safe_load(METRICS_PATH.read_text(encoding="utf-8"))
-    return str(document["labels"]["axis"]["key"])
+    label: dict[str, Any] = document["labels"]["axis"]
+    return label
+
+
+def axis_attribute_key() -> str:
+    """OTLP 로 내보내는 계측이 축을 싣는 속성의 이름이며 수집기가 점을 밑줄로 바꾼다."""
+    return str(_axis_label()["attributeKey"])
+
+
+def axis_label_name() -> str:
+    """워커가 여는 지표 창구에 직접 싣는 라벨의 이름이며 수집기를 지나지 않는다."""
+    return str(_axis_label()["labelName"])
 
 
 def _grounded(axis: AgentAxis) -> AgentAxis:
@@ -42,4 +52,5 @@ def _grounded(axis: AgentAxis) -> AgentAxis:
 
 
 AGENT_AXIS: AgentAxis = _grounded("python")
-AXIS_LABEL_KEY = axis_label_key()
+AXIS_ATTRIBUTE_KEY = axis_attribute_key()
+AXIS_LABEL_NAME = axis_label_name()

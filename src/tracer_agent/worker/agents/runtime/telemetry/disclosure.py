@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_LABEL_KEY, AgentAxis
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY, AgentAxis
 
 type TraceScalar = str | int | float | bool | None
 type TraceValue = TraceScalar | Mapping[str, TraceValue] | Sequence[TraceValue]
@@ -34,7 +34,7 @@ class TraceSafeMetadata(BaseModel):
         """LangSmith 필터에서 backend 공통으로 쓸 이름으로 직렬화한다."""
         values: dict[str, TraceScalar] = {
             "agent_tracer.agent.name": self.agent_name,
-            AXIS_LABEL_KEY: self.backend,
+            AXIS_ATTRIBUTE_KEY: self.backend,
             "agent_tracer.model.requested": self.model_requested,
             "agent_tracer.prompt.version": self.prompt_version,
             "agent_tracer.tool.contract.version": self.tool_contract_version,

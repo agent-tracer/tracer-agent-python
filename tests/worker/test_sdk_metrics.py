@@ -8,7 +8,7 @@ from tracer_agent.worker.sdk_metrics import sdk_metrics_telemetry
 
 _DECLARED = workflow_contract("metrics.yaml")
 _WINDOW = _DECLARED["workerSdkMetrics"]
-_AXIS_LABEL = _DECLARED["labels"]["axis"]["key"]
+_AXIS_LABEL = _DECLARED["labels"]["axis"]["labelName"]
 
 
 class TestSDK_지표_창구:
@@ -23,6 +23,13 @@ class TestSDK_지표_창구:
 
         assert metrics is not None
         assert metrics.durations_as_seconds is (_WINDOW["durationUnit"] == "seconds")
+
+    def test_이름을_빚는_값을_계약에서_받아_넘긴다(self) -> None:
+        metrics = sdk_metrics_telemetry().metrics
+
+        assert metrics is not None
+        assert metrics.counters_total_suffix is _WINDOW["countersTotalSuffix"]
+        assert metrics.unit_suffix is _WINDOW["unitSuffix"]
 
     def test_모든_지표에_축의_라벨을_싣는다(self) -> None:
         tags = sdk_metrics_telemetry().global_tags

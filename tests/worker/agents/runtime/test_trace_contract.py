@@ -1,4 +1,4 @@
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_LABEL_KEY, declared_axes
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY, declared_axes
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_config
 from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceSafeMetadata
 
@@ -17,7 +17,7 @@ def test_추적_뿌리_메타데이터가_langsmith_설정을_이룬다():
 
     ls_meta = metadata.langsmith_metadata()
     assert ls_meta["agent_tracer.agent.name"] == "test_agent"
-    assert ls_meta[AXIS_LABEL_KEY] in declared_axes()
+    assert ls_meta[AXIS_ATTRIBUTE_KEY] in declared_axes()
     assert ls_meta["agent_tracer.model.requested"] == "claude-3-5-sonnet"
     assert ls_meta["agent_tracer.execution.id"] == "e1"
 
