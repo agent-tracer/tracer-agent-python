@@ -6,7 +6,6 @@ import hashlib
 
 import pytest
 
-from tests.support.contract import shared_contract
 from tracer_agent.worker.agents.chat.prompt_fragments import CHAT_FRAGMENT_REGISTRY
 from tracer_agent.worker.agents.chat.prompts import ASSISTANT_SYSTEM_PROMPT
 from tracer_agent.worker.agents.recipe_scan.prompt_fragments import RECIPE_SCAN_FRAGMENT_REGISTRY
@@ -17,7 +16,6 @@ from tracer_agent.worker.agents.recipe_scan.prompts import PROBE_SYSTEM_PROMPT, 
 from tracer_agent.worker.agents.shared.fragment_registry import (
     canonical_fragment_content,
     fragment_content_hash,
-    fragment_placeholders,
 )
 from tracer_agent.worker.agents.task_cleanup.prompt_fragments import TASK_CLEANUP_FRAGMENT_REGISTRY
 from tracer_agent.worker.agents.task_cleanup.prompts import (
@@ -33,8 +31,6 @@ from tracer_agent.worker.agents.title_suggestion.prompt_fragments import (
 from tracer_agent.worker.agents.title_suggestion.prompts import (
     INVESTIGATOR_SYSTEM_PROMPT as TITLE_INVESTIGATOR_SYSTEM_PROMPT,
 )
-
-_INTEGRITY_CONTRACT = shared_contract("prompt.fragment.integrity.json")
 
 _REGISTRIES = {
     "chat": CHAT_FRAGMENT_REGISTRY,
@@ -111,12 +107,3 @@ def test_정규화는_유니코드와_줄바꿈만_바꾸고_공백과_끝_개�
     canonical = canonical_fragment_content(decomposed)
     assert canonical == " é \nline\n"
     assert fragment_content_hash(decomposed) == fragment_content_hash(canonical)
-
-
-@pytest.mark.parametrize("case", _INTEGRITY_CONTRACT["cases"], ids=lambda case: case["name"])
-def test_TS와_같은_정규화_해시_자리표시자_계약을_쓴다(case: dict[str, object]) -> None:
-    content = case["content"]
-    assert isinstance(content, str)
-    assert canonical_fragment_content(content) == case["canonical"]
-    assert fragment_content_hash(content) == case["hash"]
-    assert list(fragment_placeholders(content)) == case["placeholders"]

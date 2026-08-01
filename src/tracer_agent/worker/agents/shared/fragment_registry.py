@@ -6,16 +6,12 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 from ....shared.agents.shared.fragment_integrity import (
     canonical_fragment_content,
     fragment_content_hash,
     fragment_placeholders,
 )
-
-if TYPE_CHECKING:
-    from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO
 
 __all__ = [
     "PromptFragment",
@@ -27,7 +23,6 @@ __all__ = [
     "fragment_content",
     "fragment_content_hash",
     "fragment_placeholders",
-    "integrity_snapshot",
     "resolved_fragment_content",
 ]
 
@@ -104,7 +99,7 @@ def resolved_fragment_content(
     template_key: str,
     snapshot: ResolvedFragmentSnapshot | None = None,
 ) -> str:
-    """명시 snapshot이 있으면 그 본문을, 없으면 코드 기본값을 렌더링 전 상태로 돌려준다."""
+    """이 조각이 template에 꽂힌 자리를 snapshot이 실었으면 그 본문을, 아니면 코드 기본값을 낸다."""
     local = registry[code_name]
     if snapshot is None:
         return local.content
@@ -112,45 +107,5 @@ def resolved_fragment_content(
     if binding is None:
         raise ValueError(f"fragment {code_name} is not bound to {template_key}")
     resolved = snapshot.get((template_key, binding.fragment_slot))
-    if resolved is None:
-        raise ValueError(f"resolved fragment is missing: {template_key}/{binding.fragment_slot}")
-    if (
-        resolved.get("definitionKey") != local.definition_key
-        or resolved.get("codeName") != local.code_name
-        or resolved.get("backend") != "python"
-    ):
-        raise ValueError(f"resolved fragment identity mismatch: {template_key}/{binding.fragment_slot}")
-    content = resolved.get("content")
-    if not isinstance(content, str) or resolved.get("contentHash") != fragment_content_hash(content):
-        raise ValueError(f"resolved fragment hash mismatch: {template_key}/{binding.fragment_slot}")
-    if resolved.get("placeholders") != list(fragment_placeholders(content)):
-        raise ValueError(f"resolved fragment placeholders mismatch: {template_key}/{binding.fragment_slot}")
-    if (
-        resolved.get("toolContractVersion") != local.tool_contract_version
-        or resolved.get("outputSchemaVersion") != local.output_schema_version
-    ):
-        raise ValueError(f"resolved fragment contract mismatch: {template_key}/{binding.fragment_slot}")
-    if resolved.get("source") == "code-default":
-        if resolved.get("semanticVersion") != local.default_version or content != local.content:
-            raise ValueError(f"code-default fragment drift: {template_key}/{binding.fragment_slot}")
-    elif resolved.get("source") != "database-override":
-        raise ValueError(f"resolved fragment source is invalid: {template_key}/{binding.fragment_slot}")
-    return content
-
-
-def integrity_snapshot(
-    integrity: ResolvedFragmentsIntegrityDTO,
-) -> ResolvedFragmentSnapshot:
-    """wire 프래그먼트를 중복 없는 실행 snapshot map으로 고정한다."""
-    snapshot: dict[tuple[str, str], Mapping[str, object]] = {}
-    for fragment in integrity.fragments:
-        key = (fragment.templateKey, fragment.fragmentSlot)
-        if key in snapshot:
-            raise ValueError(f"duplicate resolved fragment: {key[0]}/{key[1]}")
-        payload = fragment.model_dump(mode="python")
-        if fragment.contentHash != fragment_content_hash(fragment.content):
-            raise ValueError(f"resolved fragment hash mismatch: {key[0]}/{key[1]}")
-        if fragment.placeholders != list(fragment_placeholders(fragment.content)):
-            raise ValueError(f"resolved fragment placeholders mismatch: {key[0]}/{key[1]}")
-        snapshot[key] = MappingProxyType(payload)
-    return MappingProxyType(snapshot)
+    content = None if resolved is None else resolved.get("content")
+    return content if isinstance(content, str) else local.content

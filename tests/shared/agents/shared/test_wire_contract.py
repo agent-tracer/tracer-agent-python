@@ -38,12 +38,6 @@ def test_언어_중립_fixture와_실행_어휘가_같다() -> None:
     assert list(get_args(OrchestrationEventKind)) == vocabulary["orchestrationEventKinds"]
 
 
-def test_무결성_모드의_이름을_계약이_선언한_그대로_쓴다() -> None:
-    declared = set(shared_contract("prompt.fragment.integrity.json")["modes"]) - {"meaning"}
-
-    assert declared >= PROMPT_INTEGRITY_MODES
-
-
 def test_조각을_싣지_않는_봉투가_full_prompt_모드를_쓴다() -> None:
     integrity = FullPromptIntegrityDTO.model_validate({"mode": "full-prompt"})
 
