@@ -14,12 +14,11 @@ from tracer_agent.shared.agents.shared.models import (
     ModelCallObservationDTO,
     ObservationUsageDTO,
     OrchestrationEventKind,
-    PromptFragmentSnapshotDTO,
+    ResolvedPromptTemplateHashDTO,
     ToolCallObservationDTO,
     UsageDTO,
     ValidationObservationDTO,
 )
-from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedPromptTemplateHashDTO
 
 from ..llm.trajectory import (
     cap_step_content,
@@ -126,7 +125,6 @@ class ExecutionTrace:
         prompt_version: str,
         duration_ms: int,
         error_subtype: str | None,
-        fragment_snapshots: list[PromptFragmentSnapshotDTO] | None = None,
         resolved_prompt_hash: str | None = None,
         resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
     ) -> AgentRunObservationDTO:
@@ -178,7 +176,6 @@ class ExecutionTrace:
             ),
             modelCalls=[model_call],
             toolCalls=_tool_observations(self.steps, execution_id, attempt_id, status),
-            fragmentSnapshots=fragment_snapshots,
             resolvedPromptHash=resolved_prompt_hash,
             resolvedPromptHashes=resolved_prompt_hashes,
         )

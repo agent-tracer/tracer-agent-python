@@ -40,14 +40,3 @@ def resolved_prompt_bundle_hash(templates: Mapping[str, str]) -> ResolvedPromptB
     )
     overall = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return ResolvedPromptBundleHash(hashes, overall)
-
-
-def verify_resolved_prompt_bundle_hash(
-    templates: Mapping[str, str], expected_hash: str, expected_hashes: Mapping[str, str]
-) -> ResolvedPromptBundleHash:
-    """전체 hash와 template별 hash가 모두 같지 않으면 실행을 거부한다."""
-    actual = resolved_prompt_bundle_hash(templates)
-    actual_hashes = {item.template_key: item.content_hash for item in actual.resolved_prompt_hashes}
-    if actual.resolved_prompt_hash != expected_hash or actual_hashes != dict(expected_hashes):
-        raise ValueError("resolved-prompt-bundle.hash-mismatch")
-    return actual

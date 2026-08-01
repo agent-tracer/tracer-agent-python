@@ -16,7 +16,6 @@ from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
-from ..shared.prompt_runtime import resolve_execution_prompt_bundle
 from .graph import TITLE_SUGGESTION_GRAPH
 from .nodes.candidate import (
     EmptyNode,
@@ -39,15 +38,7 @@ async def run_title_suggestion(
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
 ) -> dict[str, Any]:
     """title-suggestion 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    prompts, _ = resolve_execution_prompt_bundle(
-        req,
-        prompt_fragments,
-        build_prompt_bundle,
-        {
-            "investigatorSystemPrompt": "title-suggestion.investigator.system",
-            "repairDirective": "title-suggestion.investigator.repair",
-        },
-    )
+    prompts = build_prompt_bundle(prompt_fragments)
     chat = make_chat(
         req.model,
         req.apiKey,

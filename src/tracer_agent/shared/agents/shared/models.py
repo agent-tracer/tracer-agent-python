@@ -8,8 +8,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from .prompt_integrity import PromptIntegrityDTO, ResolvedPromptTemplateHashDTO
-
 
 def _strip(value: object) -> object:
     return value.strip() if isinstance(value, str) else value
@@ -66,7 +64,6 @@ class AgentExecutionEnvelope(BaseModel):
     limits: ExecutionLimitsDTO = Field(
         description="이 실행이 지킬 예산과 턴과 출력 상한이며 서버 카탈로그가 소유한다.",
     )
-    promptIntegrity: PromptIntegrityDTO | None = Field(default=None, discriminator="mode")
     jobId: str | None = None
     executionId: str | None = Field(
         default=None, description="백엔드 사이에서 같은 논리 실행을 잇는 식별자다."
@@ -215,20 +212,12 @@ class ValidationObservationDTO(BaseModel):
     citationRecall: float | None = Field(default=None, ge=0, le=1)
 
 
-class PromptFragmentSnapshotDTO(BaseModel):
-    """본문을 제외하고 실제 사용한 프래그먼트 version과 무결성만 남긴다."""
+class ResolvedPromptTemplateHashDTO(BaseModel):
+    """완성된 prompt template 하나의 본문 hash다."""
 
     model_config = ConfigDict(extra="forbid")
-    templateKey: TrimmedStr
-    fragmentSlot: TrimmedStr
-    definitionKey: TrimmedStr
-    versionId: TrimmedStr
-    semanticVersion: TrimmedStr
-    source: Literal["code-default", "database-override"]
+    templateKey: str = Field(min_length=1)
     contentHash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    placeholders: list[str]
-    toolContractVersion: TrimmedStr
-    outputSchemaVersion: TrimmedStr
 
 
 class AgentRunObservationDTO(BaseModel):
@@ -254,20 +243,14 @@ class AgentRunObservationDTO(BaseModel):
     validation: ValidationObservationDTO
     modelCalls: list[ModelCallObservationDTO]
     toolCalls: list[ToolCallObservationDTO]
-    fragmentSnapshots: list[PromptFragmentSnapshotDTO] | None = None
     resolvedPromptHash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     resolvedPromptHashes: list[ResolvedPromptTemplateHashDTO] | None = None
 
     @model_validator(mode="after")
-    def fragment_integrity_is_atomic(self) -> AgentRunObservationDTO:
-        """프래그먼트 snapshot과 최종 hash가 한쪽만 남는 관측을 거부한다."""
-        present = (
-            self.fragmentSnapshots is not None,
-            self.resolvedPromptHash is not None,
-            self.resolvedPromptHashes is not None,
-        )
-        if len(set(present)) != 1:
-            raise ValueError("fragment snapshots and resolved prompt hashes must appear together")
+    def resolved_prompt_hashes_are_atomic(self) -> AgentRunObservationDTO:
+        """조립 결과의 전체 hash와 template별 hash가 한쪽만 남는 관측을 거부한다."""
+        if (self.resolvedPromptHash is None) != (self.resolvedPromptHashes is None):
+            raise ValueError("resolved prompt hashes must appear together")
         return self
 
 

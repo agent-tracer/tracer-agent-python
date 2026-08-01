@@ -10,10 +10,9 @@ from typing import Any
 from tracer_agent.shared.agents.shared.models import (
     AgentErrorDTO,
     AgentResponse,
-    PromptFragmentSnapshotDTO,
+    ResolvedPromptTemplateHashDTO,
     UsageDTO,
 )
-from tracer_agent.shared.agents.shared.prompt_integrity import ResolvedPromptTemplateHashDTO
 
 from ..errors import CANCELLED, INVALID_REQUEST_ERROR, DeadlineExceeded, classify_exception
 from ..telemetry.attributes import apply_usage_attributes
@@ -38,7 +37,6 @@ async def execute(
     execution_id: str | None = None,
     attempt_id: str | None = None,
     prompt_version: str = "runtime-v1",
-    fragment_snapshots: list[PromptFragmentSnapshotDTO] | None = None,
     resolved_prompt_hash: str | None = None,
     resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
 ) -> AgentResponse:
@@ -56,7 +54,6 @@ async def execute(
                 execution_id,
                 attempt_id or "1",
                 prompt_version,
-                fragment_snapshots,
                 resolved_prompt_hash,
                 resolved_prompt_hashes,
             ),
@@ -85,7 +82,6 @@ async def _execute(
     execution_id: str | None = None,
     attempt_id: str = "1",
     prompt_version: str = "runtime-v1",
-    fragment_snapshots: list[PromptFragmentSnapshotDTO] | None = None,
     resolved_prompt_hash: str | None = None,
     resolved_prompt_hashes: list[ResolvedPromptTemplateHashDTO] | None = None,
 ) -> AgentResponse:
@@ -134,7 +130,6 @@ async def _execute(
             prompt_version=prompt_version,
             duration_ms=duration_ms,
             error_subtype=error_subtype,
-            fragment_snapshots=fragment_snapshots,
             resolved_prompt_hash=resolved_prompt_hash,
             resolved_prompt_hashes=resolved_prompt_hashes,
         )

@@ -14,8 +14,7 @@ from temporalio.exceptions import is_cancelled_exception
 from ...shared.agents.recipe_scan.models import RecipeScanRequest
 from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.runtime.notification import JobStatusNotifier
-from ...shared.agents.shared.models import AgentResponse, PromptFragmentSnapshotDTO
-from ...shared.agents.shared.prompt_integrity import ResolvedFragmentsIntegrityDTO, ResolvedPromptFragmentDTO
+from ...shared.agents.shared.models import AgentResponse
 from ...shared.agents.task_cleanup.models import TaskCleanupRequest
 from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
@@ -183,8 +182,6 @@ class AgentJobActivities:
         body: AgentBody,
         prompt_version: str,
     ) -> None:
-        integrity = req.promptIntegrity
-
         async def run_once() -> AgentResponse:
             return await execute(
                 kind,
@@ -199,21 +196,6 @@ class AgentJobActivities:
                 req.executionId,
                 req.attemptId,
                 prompt_version,
-                fragment_snapshots=(
-                    [_fragment_snapshot(item) for item in integrity.fragments]
-                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
-                    else None
-                ),
-                resolved_prompt_hash=(
-                    integrity.resolvedPromptHash
-                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
-                    else None
-                ),
-                resolved_prompt_hashes=(
-                    integrity.resolvedPromptHashes
-                    if isinstance(integrity, ResolvedFragmentsIntegrityDTO)
-                    else None
-                ),
             )
 
         if req.executionId is not None:
@@ -288,8 +270,3 @@ async def _heartbeat() -> None:
     while True:
         await asyncio.sleep(JOB_HEARTBEAT_INTERVAL_S)
         activity.heartbeat()
-
-
-def _fragment_snapshot(fragment: ResolvedPromptFragmentDTO) -> PromptFragmentSnapshotDTO:
-    payload = fragment.model_dump(mode="python", exclude={"content", "codeName", "backend", "language"})
-    return PromptFragmentSnapshotDTO.model_validate(payload)

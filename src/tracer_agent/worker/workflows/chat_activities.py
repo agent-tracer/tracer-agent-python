@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 import httpx
 from temporalio import activity
@@ -15,8 +15,6 @@ from ...shared.agents.chat.execution_ledger import CLAIMED, THREAD_BUSY, ChatExe
 from ...shared.agents.chat.models import ChatRequest
 from ...shared.agents.runtime.ledger import LedgerSql, SqlSource
 from ...shared.agents.runtime.wakeup import UpdatePublisher
-from ...shared.agents.shared.models import PromptFragmentSnapshotDTO
-from ...shared.agents.shared.prompt_integrity import ResolvedPromptTemplateHashDTO
 from ...shared.workflows.chat_spec import (
     FAIL_ACTIVITY,
     FINALIZE_ACTIVITY,
@@ -33,10 +31,9 @@ from ...shared.workflows.chat_spec import (
 from ..agents.chat.agent import AGENT_NAME, run_chat
 from ..agents.chat.checkpoint import ChatCheckpointProvider
 from ..agents.chat.execution_writer import ChatExecutionWriter
-from ..agents.chat.prompts import PROMPT_VERSION, build_system_prompt
+from ..agents.chat.prompts import PROMPT_VERSION
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
-from ..agents.shared.fragment_registry import fragment_content_hash
 from .chat_turn import (
     canceled_turn,
     completed_turn,
@@ -105,22 +102,6 @@ class ChatExecutionActivities:
                 execution_id=prepared.execution_id,
                 attempt_id=str(attempt),
                 prompt_version=PROMPT_VERSION,
-                fragment_snapshots=_prompt_observation(self._prompt_fragments),
-                resolved_prompt_hash=(
-                    fragment_content_hash(build_system_prompt(self._prompt_fragments))
-                    if self._prompt_fragments is not None
-                    else None
-                ),
-                resolved_prompt_hashes=(
-                    [
-                        ResolvedPromptTemplateHashDTO(
-                            templateKey="chat.assistant.system",
-                            contentHash=fragment_content_hash(build_system_prompt(self._prompt_fragments)),
-                        )
-                    ]
-                    if self._prompt_fragments is not None
-                    else None
-                ),
             )
         except asyncio.CancelledError:
             # 취소된 턴도 그때까지 모델이 쓴 답변과 궤적을 남겨야 화면에 보인 것이 사라지지 않는다.
@@ -225,29 +206,3 @@ def _body(
         return await run_chat(request, http_client, trace, checkpoints, prompt_fragments)
 
     return run
-
-
-def _prompt_observation(
-    fragments: Mapping[tuple[str, str], Mapping[str, object]] | None,
-) -> list[PromptFragmentSnapshotDTO] | None:
-    if fragments is None:
-        return None
-    result: list[PromptFragmentSnapshotDTO] = []
-    for (template_key, fragment_slot), fragment in fragments.items():
-        if template_key != "chat.assistant.system":
-            continue
-        result.append(
-            PromptFragmentSnapshotDTO(
-                templateKey=template_key,
-                fragmentSlot=fragment_slot,
-                definitionKey=str(fragment["definitionKey"]),
-                versionId=str(fragment["versionId"]),
-                semanticVersion=str(fragment["semanticVersion"]),
-                source=cast(Any, fragment["source"]),
-                contentHash=str(fragment["contentHash"]),
-                placeholders=[str(value) for value in cast(list[object], fragment["placeholders"])],
-                toolContractVersion=str(fragment["toolContractVersion"]),
-                outputSchemaVersion=str(fragment["outputSchemaVersion"]),
-            )
-        )
-    return sorted(result, key=lambda item: item.fragmentSlot)

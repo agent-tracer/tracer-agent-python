@@ -16,7 +16,6 @@ from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
-from ..shared.prompt_runtime import resolve_execution_prompt_bundle
 from .graph import RECIPE_SCAN_GRAPH
 from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
@@ -37,17 +36,7 @@ async def run_recipe_scan(
     prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
 ) -> dict[str, Any]:
     """recipe-scan 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    prompts, _ = resolve_execution_prompt_bundle(
-        req,
-        prompt_fragments,
-        build_resolved_prompt_bundle,
-        {
-            "investigatorSystemPrompt": "recipe-scan.investigator.system",
-            "probeSystemPrompt": "recipe-scan.probe.system",
-            "surveySystemPrompt": "recipe-scan.survey.system",
-            "repairDirective": "recipe-scan.investigator.repair",
-        },
-    )
+    prompts = build_resolved_prompt_bundle(prompt_fragments)
     chat = make_chat(
         req.model,
         req.apiKey,
