@@ -148,9 +148,13 @@ def _suspect_spans(folded: str) -> list[tuple[int, int]]:
 
 def _covered_text(text: str) -> str:
     """걸린 구간만 표시로 바꾸고 낱말 앞과 몸통 뒤의 본문은 그대로 남긴다."""
-    spans = _suspect_spans(text.casefold())
+    folded = text.casefold()
+    spans = _suspect_spans(folded)
     if not spans:
         return text
+    # 접어서 길이가 달라지는 글자가 있으면 자리가 밀려 자격의 앞머리가 남으므로 본문을 통째로 가린다.
+    if len(folded) != len(text):
+        return marker()
     kept: list[str] = []
     cursor = 0
     for start, end in spans:

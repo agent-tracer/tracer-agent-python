@@ -90,6 +90,13 @@ class Test자리마다의_판단:
 
         assert covered == f"토큰은 {marker()} 입니다"
 
+    def test_접으면_길이가_달라지는_글자가_앞에_있어도_온전히_가린다(self) -> None:
+        covered = redact_text(f"Straße 에서 sk-ant-{_BODY} 를 받았다", stage=RedactionStage.OUTPUT)
+
+        assert _BODY not in covered
+        assert "sk-ant" not in covered
+        assert covered == marker()
+
     def test_낱말만_있고_몸통이_없는_본문은_그대로_나간다(self) -> None:
         본문 = "The bearer of this token is the worker."
 
