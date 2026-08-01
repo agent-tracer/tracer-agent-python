@@ -52,12 +52,7 @@ from ..shared.agents.chat.surface.threads import (
 )
 from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
-from ..shared.agents.envelope.router import (
-    CHAT_ENVELOPE_PATH,
-    JOB_ENVELOPE_PATH,
-    issue_chat_execution_envelope,
-    issue_job_execution_envelope,
-)
+from ..shared.agents.envelope.router import router as envelope_router
 from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql, SqlSource
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
@@ -188,8 +183,7 @@ def create_app() -> FastAPI:
     application.get(JOB_PATH)(get_job)
     application.get(JOB_STEPS_PATH)(get_job_steps)
     application.include_router(settings_router)
-    application.post(CHAT_ENVELOPE_PATH)(issue_chat_execution_envelope)
-    application.post(JOB_ENVELOPE_PATH)(issue_job_execution_envelope)
+    application.include_router(envelope_router)
     return application
 
 
