@@ -4,8 +4,9 @@ from typing import Any, ClassVar
 
 import pytest
 
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_config
-from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceBackend, TraceSafeMetadata
+from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceSafeMetadata
 
 
 class _CapturingClient:
@@ -23,7 +24,7 @@ class _NoopTracer:
 def _trace() -> TraceSafeMetadata:
     return TraceSafeMetadata(
         agent_name="test_agent",
-        backend=TraceBackend.PYTHON,
+        backend=AGENT_AXIS,
         model_requested="claude-3-5-sonnet",
         prompt_version="v1.0",
     )

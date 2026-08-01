@@ -46,7 +46,7 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
         return config
 
     config["run_name"] = trace.agent_name
-    config["tags"] = [trace.agent_name, trace.backend.value, trace.prompt_version]
+    config["tags"] = [trace.agent_name, trace.backend, trace.prompt_version]
     config["metadata"] = trace.langsmith_metadata()
     logical_execution = trace.execution_id or trace.job_id
     if logical_execution is not None and trace.attempt_id is not None:

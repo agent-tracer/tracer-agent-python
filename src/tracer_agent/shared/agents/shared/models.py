@@ -8,6 +8,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from .axis import AGENT_AXIS, AgentAxis
+
 
 def _strip(value: object) -> object:
     return value.strip() if isinstance(value, str) else value
@@ -220,7 +222,7 @@ class AgentRunObservationDTO(BaseModel):
     attemptId: TrimmedStr
     jobId: str | None
     agentName: TrimmedStr
-    backend: Literal["python"] = "python"
+    backend: AgentAxis = AGENT_AXIS
     modelRequested: TrimmedStr
     modelActual: str | None
     promptVersion: TrimmedStr

@@ -27,9 +27,6 @@ CHAT_STOP_REASONS: tuple[str, ...] = get_args(ChatStopReason)
 ChatConfirmationStatus = Literal["pending", "approved", "rejected"]
 CHAT_CONFIRMATION_STATUSES: tuple[str, ...] = get_args(ChatConfirmationStatus)
 
-# 실행 원장이 이 서비스가 도는 턴을 부르는 이름이며 게이트웨이의 backend 파라미터 값과 같다.
-EXECUTION_BACKEND = "python"
-
 
 class ChatHistoryToolCall(BaseModel):
     """저장된 어시스턴트 도구 호출을 LangChain 메시지로 되살리는 최소 계약이다."""

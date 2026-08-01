@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
+
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_LABEL_KEY, AgentAxis
 
 type TraceScalar = str | int | float | bool | None
 type TraceValue = TraceScalar | Mapping[str, TraceValue] | Sequence[TraceValue]
@@ -15,17 +16,13 @@ class UnsafeTracePayloadError(ValueError):
     """외부 전송 payload에서 비밀일 수 있는 필드를 발견했다."""
 
 
-class TraceBackend(StrEnum):
-    PYTHON = "python"
-
-
 class TraceSafeMetadata(BaseModel):
     """LangGraph root trace에 허용하는 비민감 실행 식별자만 소유한다."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     agent_name: str
-    backend: TraceBackend = TraceBackend.PYTHON
+    backend: AgentAxis = AGENT_AXIS
     model_requested: str
     prompt_version: str
     tool_contract_version: str | None = None
@@ -37,7 +34,7 @@ class TraceSafeMetadata(BaseModel):
         """LangSmith 필터에서 backend 공통으로 쓸 이름으로 직렬화한다."""
         values: dict[str, TraceScalar] = {
             "agent_tracer.agent.name": self.agent_name,
-            "agent_tracer.backend": self.backend.value,
+            AXIS_LABEL_KEY: self.backend,
             "agent_tracer.model.requested": self.model_requested,
             "agent_tracer.prompt.version": self.prompt_version,
             "agent_tracer.tool.contract.version": self.tool_contract_version,

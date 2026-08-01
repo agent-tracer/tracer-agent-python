@@ -7,19 +7,19 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_LABEL_KEY
 from tracer_agent.shared.agents.shared.models import UsageDTO
 
 JOB_ID_ATTRIBUTE = "agent_tracer.job.id"
 TOOL_PARAMETERS_FINGERPRINT_ATTRIBUTE = "agent_tracer.tool.parameters.fingerprint"
 JOB_KIND_ATTRIBUTE = "agent_tracer.job.kind"
-BACKEND_ATTRIBUTE = "agent_tracer.backend"
+BACKEND_ATTRIBUTE = AXIS_LABEL_KEY
 INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.input_tokens"
 OUTPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.output_tokens"
 CACHE_READ_INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.cache_read.input_tokens"
 CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.cache_creation.input_tokens"
 BILLABLE_BASE_INPUT_TOKENS_ATTRIBUTE = "agent_tracer.usage.billable_base_input_tokens"
 
-BACKEND = "python"
 AGENT_JOB_KIND = {
     "recipe-scan": "recipe.scan",
     "title-suggestion": "title.suggestion",
@@ -44,7 +44,7 @@ def build_invoke_agent_attributes(
         "gen_ai.agent.name": agent_name,
         "gen_ai.request.model": model,
         JOB_KIND_ATTRIBUTE: AGENT_JOB_KIND.get(agent_name),
-        BACKEND_ATTRIBUTE: BACKEND,
+        BACKEND_ATTRIBUTE: AGENT_AXIS,
     }
     return {key: value for key, value in attrs.items() if value is not None}
 
