@@ -35,7 +35,6 @@ uv run tracer-agent-worker generate
 - `src/tracer_agent/shared`는 설정·HTTP 표면·공통 워크플로와 에이전트를 제공합니다.
 - `src/tracer_agent/worker/agents`는 대화·레시피·정리·제목 에이전트를 제공합니다.
 - `src/tracer_agent/worker/workflows`는 Temporal 워크플로와 액티비티를 제공합니다.
-- `src/tracer_agent/worker/prompt_registry`는 프롬프트 조각 부트스트랩을 제공합니다.
 - API 필드와 응답 봉투는 계약의 camelCase 규칙을 유지합니다.
 - `shared`·`agents`·`workflows` 경계와 금지된 상대 import 규칙을 지킵니다.
 - LangGraph 체크포인트와 계약 원장을 직접 결합하지 않습니다.

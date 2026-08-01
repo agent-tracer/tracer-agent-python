@@ -145,7 +145,6 @@ tracer-agent-python/
 │   ├── shared/                   설정·HTTP 표면·공통 워크플로와 에이전트
 │   └── worker/
 │       ├── agents/               대화·레시피·정리·제목 구현
-│       ├── prompt_registry/      프롬프트 조각 부트스트랩
 │       └── workflows/            Temporal 워크플로와 액티비티
 ├── tests/{api,worker,shared,support}
 ├── scripts/                      주석·내부 의존 검사
