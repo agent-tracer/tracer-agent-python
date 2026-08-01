@@ -22,7 +22,6 @@ def build_system_prompt(prompt: AgentPrompt) -> str:
             "You are the assistant of Agent Tracer, an observability tool that records coding-agent sessions",
             "(tasks), their timelines, verification rules, memos, recipes, tags, cleanup suggestions, "
             "and AI jobs.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             "Your job is to work out what the user is actually asking for, reach for the tools that "
             "answer it,",

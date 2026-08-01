@@ -22,7 +22,6 @@ def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
     investigator = "\n".join(
         [
             "You propose better titles for one recorded coding-agent task.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             template.slot("contextShape"),
             "",

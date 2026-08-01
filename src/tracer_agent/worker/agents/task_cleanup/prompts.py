@@ -35,7 +35,6 @@ def _investigator(prompt: AgentPrompt) -> str:
         [
             "You are the coordinator of a task-cleanup scan for Agent Tracer, an observability tool that",
             "records coding-agent sessions.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             "Your job is to decide which cleanup candidates should be archived, and to write one short",
             "rationale for each.",
@@ -72,7 +71,6 @@ def _triage(prompt: AgentPrompt) -> str:
     return "\n".join(
         [
             "You open the cleanup scan by choosing which candidates to hand to reviewers.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             template.slot("candidateFields"),
             "",
@@ -87,7 +85,6 @@ def _inspect(prompt: AgentPrompt) -> str:
     return "\n".join(
         [
             "You judge one cleanup candidate by reading what actually happened in it.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             prompt.template("task-cleanup.inspect.system").slot("reviewerCharter"),
         ]

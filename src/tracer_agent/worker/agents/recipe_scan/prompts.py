@@ -36,7 +36,6 @@ def _investigator(prompt: AgentPrompt) -> str:
         [
             "You are the coordinator of a recipe-scan investigation. You mine the specialists' reports for",
             'reusable "recipes".',
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             template.slot("recipeDefinition"),
             "",
@@ -77,7 +76,6 @@ def _survey(prompt: AgentPrompt) -> str:
     return "\n".join(
         [
             "You plan one recipe-scan investigation before it starts.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             template.slot("specialistCatalog"),
             "",
@@ -94,7 +92,6 @@ def _probe(prompt: AgentPrompt) -> str:
     return "\n".join(
         [
             "You are one specialist in a recipe-scan investigation.",
-            f"Prompt version: {PROMPT_VERSION}.",
             "",
             template.slot("specialistCharter"),
             "",
