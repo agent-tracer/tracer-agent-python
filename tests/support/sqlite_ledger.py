@@ -16,9 +16,7 @@ from tracer_agent.shared.agents.runtime.ledger import SqlRow, UniqueViolation
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 
 TIMESTAMP_COLUMNS = frozenset({"created_at", "updated_at", "started_at", "completed_at", "resolved_at"})
-JSON_COLUMNS = frozenset(
-    {"usage", "tool_calls", "validation", "model_calls", "input", "result", "placeholders", "args"}
-)
+JSON_COLUMNS = frozenset({"usage", "tool_calls", "validation", "model_calls", "input", "result", "args"})
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
 
@@ -183,107 +181,6 @@ CREATE TABLE ai_job_steps (
 
 CREATE UNIQUE INDEX ai_job_steps_job_attempt_seq
     ON ai_job_steps (job_id, attempt, seq);
-
-CREATE TABLE prompt_fragment_definitions (
-    id TEXT PRIMARY KEY,
-    definition_key TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    backend TEXT NOT NULL,
-    language TEXT NOT NULL,
-    fragment_name TEXT NOT NULL,
-    code_name TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_fragment_definitions_scope
-    ON prompt_fragment_definitions (backend, agent_name, fragment_name, language);
-
-CREATE UNIQUE INDEX prompt_fragment_definitions_backend_key
-    ON prompt_fragment_definitions (backend, definition_key);
-
-CREATE TABLE prompt_fragment_versions (
-    id TEXT PRIMARY KEY,
-    definition_id TEXT NOT NULL,
-    semantic_version TEXT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    placeholders TEXT NOT NULL DEFAULT '[]',
-    tool_contract_version TEXT NOT NULL,
-    output_schema_version TEXT NOT NULL,
-    origin TEXT NOT NULL,
-    previous_version_id TEXT,
-    change_summary TEXT,
-    created_by TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_fragment_versions_scope
-    ON prompt_fragment_versions (definition_id, semantic_version);
-
-CREATE TABLE prompt_fragment_bindings (
-    id TEXT PRIMARY KEY,
-    backend TEXT NOT NULL,
-    template_key TEXT NOT NULL,
-    fragment_slot TEXT NOT NULL,
-    definition_id TEXT NOT NULL,
-    code_default_version TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_fragment_bindings_backend_slot
-    ON prompt_fragment_bindings (backend, template_key, fragment_slot);
-
-CREATE TABLE prompt_fragment_channels (
-    id TEXT PRIMARY KEY,
-    definition_id TEXT NOT NULL,
-    channel TEXT NOT NULL,
-    version_id TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_fragment_channels_scope
-    ON prompt_fragment_channels (definition_id, channel);
-
-CREATE TABLE prompt_definitions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    backend TEXT NOT NULL,
-    language TEXT NOT NULL,
-    name TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_definitions_scope
-    ON prompt_definitions (user_id, agent_name, backend, language, name);
-
-CREATE TABLE prompt_versions (
-    id TEXT PRIMARY KEY,
-    definition_id TEXT NOT NULL,
-    semantic_version TEXT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    tool_contract_version TEXT NOT NULL,
-    output_schema_version TEXT NOT NULL,
-    content_origin TEXT NOT NULL,
-    created_by TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_versions_definition_semver
-    ON prompt_versions (definition_id, semantic_version);
-
-CREATE TABLE prompt_channels (
-    id TEXT PRIMARY KEY,
-    definition_id TEXT NOT NULL,
-    channel TEXT NOT NULL,
-    version_id TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE UNIQUE INDEX prompt_channels_definition_channel
-    ON prompt_channels (definition_id, channel);
 
 CREATE TABLE agent_run_observations (
     execution_id TEXT NOT NULL, attempt_id TEXT NOT NULL, user_id TEXT NOT NULL,
