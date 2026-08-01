@@ -238,9 +238,6 @@ class AgentRunObservationDTO(BaseModel):
     executionId: TrimmedStr
     attemptId: TrimmedStr
     jobId: str | None
-    experimentId: str | None = None
-    exampleId: str | None = None
-    variantId: str | None = None
     agentName: TrimmedStr
     backend: Literal["python"] = "python"
     modelRequested: TrimmedStr
@@ -248,7 +245,6 @@ class AgentRunObservationDTO(BaseModel):
     promptVersion: TrimmedStr
     promptContentHash: TrimmedStr
     toolContractVersion: TrimmedStr
-    evaluatorSetVersion: str | None = None
     status: Literal["succeeded", "failed", "cancelled"]
     durationMs: int = Field(ge=0)
     usage: ObservationUsageDTO

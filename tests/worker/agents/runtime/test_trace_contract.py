@@ -13,9 +13,6 @@ def test_추적_뿌리_메타데이터가_langsmith_설정을_이룬다():
         job_id="j1",
         prompt_content_hash="abcd",
         tool_contract_version="v2",
-        experiment_id="exp1",
-        example_id="ex1",
-        variant_id="v1",
     )
 
     ls_meta = metadata.langsmith_metadata()

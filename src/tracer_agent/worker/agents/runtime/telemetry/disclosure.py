@@ -33,9 +33,6 @@ class TraceSafeMetadata(BaseModel):
     job_id: str | None = None
     execution_id: str | None = None
     attempt_id: str | None = None
-    experiment_id: str | None = None
-    example_id: str | None = None
-    variant_id: str | None = None
 
     def langsmith_metadata(self) -> dict[str, TraceScalar]:
         """LangSmith 필터에서 backend 공통으로 쓸 이름으로 직렬화한다."""
@@ -49,9 +46,6 @@ class TraceSafeMetadata(BaseModel):
             "agent_tracer.job.id": self.job_id,
             "agent_tracer.execution.id": self.execution_id,
             "agent_tracer.attempt.id": self.attempt_id,
-            "agent_tracer.experiment.id": self.experiment_id,
-            "agent_tracer.example.id": self.example_id,
-            "agent_tracer.variant.id": self.variant_id,
         }
         metadata: dict[str, TraceScalar] = {key: value for key, value in values.items() if value is not None}
         assert_trace_safe(metadata)

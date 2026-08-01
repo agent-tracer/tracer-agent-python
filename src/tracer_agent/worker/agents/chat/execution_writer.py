@@ -40,17 +40,16 @@ RETURNING id
 
 _INSERT_OBSERVATION = """
 INSERT INTO agent_run_observations (
-    execution_id, attempt_id, user_id, job_id, experiment_id, example_id, variant_id,
+    execution_id, attempt_id, user_id, job_id,
     agent_name, backend, model_requested, model_actual, prompt_version, prompt_content_hash,
-    tool_contract_version, evaluator_set_version, status, duration_ms, usage, cost_usd,
+    tool_contract_version, status, duration_ms, usage, cost_usd,
     landed, repair_attempted, validation, model_calls, tool_calls, created_at
 )
 SELECT
     payload->>'executionId', payload->>'attemptId', $1, payload->>'jobId',
-    payload->>'experimentId', payload->>'exampleId', payload->>'variantId',
     payload->>'agentName', payload->>'backend', payload->>'modelRequested', payload->>'modelActual',
     payload->>'promptVersion', payload->>'promptContentHash', payload->>'toolContractVersion',
-    payload->>'evaluatorSetVersion', payload->>'status', (payload->>'durationMs')::integer,
+    payload->>'status', (payload->>'durationMs')::integer,
     payload->'usage', (payload->>'costUsd')::double precision, (payload->>'landed')::boolean,
     (payload->>'repairAttempted')::boolean, payload->'validation', payload->'modelCalls',
     payload->'toolCalls', $3
@@ -212,9 +211,6 @@ def _observation_payload(row: dict[str, Any]) -> dict[str, Any]:
         "executionId": row["execution_id"],
         "attemptId": row["attempt_id"],
         "jobId": row["job_id"],
-        "experimentId": row["experiment_id"],
-        "exampleId": row["example_id"],
-        "variantId": row["variant_id"],
         "agentName": row["agent_name"],
         "backend": row["backend"],
         "modelRequested": row["model_requested"],
@@ -222,7 +218,6 @@ def _observation_payload(row: dict[str, Any]) -> dict[str, Any]:
         "promptVersion": row["prompt_version"],
         "promptContentHash": row["prompt_content_hash"],
         "toolContractVersion": row["tool_contract_version"],
-        "evaluatorSetVersion": row["evaluator_set_version"],
         "status": row["status"],
         "durationMs": row["duration_ms"],
         "usage": row["usage"],
