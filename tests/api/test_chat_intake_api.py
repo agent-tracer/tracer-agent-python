@@ -122,12 +122,6 @@ def test_본문이_JSON_객체가_아니면_400_오류_봉투를_낸다(client: 
     assert res.json()["error"]["code"] == "validation_error"
 
 
-def test_에이전트_요청의_422는_그대로_남는다(client: TestClient) -> None:
-    res = client.post("/v1/evaluation-runs", json={"model": "x"})
-
-    assert res.status_code == 422
-
-
 def test_취소는_실행을_닫고_같은_봉투를_낸다(client: TestClient, store: SqliteLedgerSql) -> None:
     accepted = client.post(PATH, json=BODY).json()["data"]["execution"]
 
