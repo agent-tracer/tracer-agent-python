@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -15,6 +14,7 @@ from ..runtime.llm.structured_agent import recursion_config, recursion_limit_for
 from ..runtime.node import node_registry
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.validation_graph import FINALIZE, ValidationGraphContext
+from ..shared.prompt_source_port import AgentPrompt
 from .checkpoint import ChatCheckpointProvider
 from .drafts import DraftPublisher
 from .graph import CHAT_GRAPH
@@ -37,7 +37,7 @@ def _build_node(
     streaming: bool,
     checkpoints: ChatCheckpointProvider | None = None,
     drafts: DraftPublisher | None = None,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
+    prompt: AgentPrompt,
 ) -> ConverseNode:
     tokens = req.limits.maxOutputTokens
     chat = make_chat(req.model, req.apiKey, req.deadlineMs, max_output_tokens=tokens, streaming=streaming)
@@ -56,7 +56,8 @@ def _build_node(
         fallback_chat,
         agent_name=AGENT_NAME,
         drafts=drafts,
-        system_prompt=build_system_prompt(prompt_fragments),
+        system_prompt=build_system_prompt(prompt),
+        language_directives=prompt.language_directives,
     )
 
 
@@ -75,8 +76,8 @@ async def run_chat(
     req: ChatRequest,
     http_client: httpx.AsyncClient,
     usage: ExecutionTrace,
+    prompt: AgentPrompt,
     checkpoints: ChatCheckpointProvider | None = None,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
 ) -> dict[str, Any]:
     """chat 노드를 실행 의존성과 결합해 대화 그래프를 수행한다."""
     # 창구가 있으면 진행 중인 답변을 보내야 하므로 토큰이 흐르는 모델로 조립한다.
@@ -88,7 +89,7 @@ async def run_chat(
         streaming=drafts is not None,
         checkpoints=checkpoints,
         drafts=drafts,
-        prompt_fragments=prompt_fragments,
+        prompt=prompt,
     )
     context = ValidationGraphContext(AGENT_NAME, usage, node_registry([node]), _no_validation)
     final = await CHAT_GRAPH.ainvoke(

@@ -8,6 +8,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeTracerApi, mk_ai
+from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
@@ -282,7 +283,7 @@ async def test_대화는_예산이_바닥나도_자유_텍스트로_끝내라는
         }
     )
 
-    result = await chat_mod.run_chat(request, None, ExecutionTrace())  # type: ignore[arg-type]
+    result = await chat_mod.run_chat(request, None, ExecutionTrace(), CHAT_PROMPT)  # type: ignore[arg-type]
 
     assert FINALIZE_TEXT_DIRECTIVE in conversation.notices[-1]
     assert FINALIZE_STRUCTURED_DIRECTIVE not in conversation.notices[-1]

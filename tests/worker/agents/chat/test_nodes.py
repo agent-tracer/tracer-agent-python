@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from tests.support.chat_api import chat_confirmation_response
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
+from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest, DraftCallback
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
@@ -55,7 +56,7 @@ async def _run(
 
     req = _request(**overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        result = await chat_mod.run_chat(req, client, ExecutionTrace())
+        result = await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
     return result, posted
 
 
@@ -83,7 +84,7 @@ async def test_서버가_종결을_알리면_실행을_더_끌지_않는다(monk
     req = _request()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         with pytest.raises(ChatExecutionClosed):
-            await chat_mod.run_chat(req, client, ExecutionTrace())
+            await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
 
 
 async def test_창구가_없으면_draft를_보내지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,7 +159,7 @@ async def _system_content(
     monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
     req = _request(draftCallback=None, **overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
-        await chat_mod.run_chat(req, client, ExecutionTrace())
+        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
     return chat, list(chat.requests[0][0].content)
 
 

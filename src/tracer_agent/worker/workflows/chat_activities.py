@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -15,6 +14,7 @@ from ...shared.agents.chat.execution_ledger import CLAIMED, THREAD_BUSY, ChatExe
 from ...shared.agents.chat.models import ChatRequest
 from ...shared.agents.runtime.ledger import LedgerSql, SqlSource
 from ...shared.agents.runtime.wakeup import UpdatePublisher
+from ...shared.agents.shared.models import ResolvedPromptTemplateHashDTO
 from ...shared.workflows.chat_spec import (
     FAIL_ACTIVITY,
     FINALIZE_ACTIVITY,
@@ -31,9 +31,11 @@ from ...shared.workflows.chat_spec import (
 from ..agents.chat.agent import AGENT_NAME, run_chat
 from ..agents.chat.checkpoint import ChatCheckpointProvider
 from ..agents.chat.execution_writer import ChatExecutionWriter
-from ..agents.chat.prompts import PROMPT_VERSION
+from ..agents.chat.prompts import PROMPT_VERSION, SYSTEM_TEMPLATE, build_system_prompt
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
+from ..agents.shared.prompt_source_port import AgentPrompt
+from ..agents.shared.resolved_prompt_hash import ResolvedPromptBundleHash, resolved_prompt_bundle_hash
 from .chat_turn import (
     canceled_turn,
     completed_turn,
@@ -56,15 +58,20 @@ class ChatExecutionActivities:
         http_client: httpx.AsyncClient,
         checkpoints: ChatCheckpointProvider,
         envelopes: ChatEnvelopeSource,
+        prompt: AgentPrompt,
         wakeup: UpdatePublisher | None = None,
-        prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None = None,
     ) -> None:
         self._sql = sql
         self._http = http_client
         self._checkpoints = checkpoints
         self._envelopes = envelopes
         self._wakeup = wakeup
-        self._prompt_fragments = prompt_fragments
+        self._prompt = prompt
+        self._system_prompt = build_system_prompt(prompt)
+
+    def _resolved_prompt(self) -> ResolvedPromptBundleHash:
+        """이번 실행이 조립한 시스템 프롬프트의 해시이며 관측이 그것을 싣는다."""
+        return resolved_prompt_bundle_hash({SYSTEM_TEMPLATE: self._system_prompt})
 
     @activity.defn(name=PREPARE_ACTIVITY)
     async def prepare(self, request: ChatExecutionRequest) -> PreparedChatExecution:
@@ -89,19 +96,27 @@ class ChatExecutionActivities:
         request = turn_request(prepared, envelope.fields)
         await self._begin_attempt(prepared, attempt, envelope.draft_token_hash)
         traces: list[ExecutionTrace] = []
+        resolved = self._resolved_prompt()
         heartbeat = asyncio.ensure_future(_heartbeat())
         try:
             response = await execute(
                 AGENT_NAME,
                 request.model,
                 request.deadlineMs,
-                _body(traces, request, self._http, self._checkpoints, self._prompt_fragments),
+                _body(traces, request, self._http, self._checkpoints, self._prompt),
                 None,
                 None,
                 f"{prepared.execution_id}:{attempt}",
                 execution_id=prepared.execution_id,
                 attempt_id=str(attempt),
                 prompt_version=PROMPT_VERSION,
+                resolved_prompt_hash=resolved.resolved_prompt_hash,
+                resolved_prompt_hashes=[
+                    ResolvedPromptTemplateHashDTO(
+                        templateKey=item.template_key, contentHash=item.content_hash
+                    )
+                    for item in resolved.resolved_prompt_hashes
+                ],
             )
         except asyncio.CancelledError:
             # 취소된 턴도 그때까지 모델이 쓴 답변과 궤적을 남겨야 화면에 보인 것이 사라지지 않는다.
@@ -198,11 +213,11 @@ def _body(
     request: ChatRequest,
     http_client: httpx.AsyncClient,
     checkpoints: ChatCheckpointProvider,
-    prompt_fragments: Mapping[tuple[str, str], Mapping[str, object]] | None,
+    prompt: AgentPrompt,
 ) -> AgentBody:
     async def run(trace: ExecutionTrace) -> dict[str, object]:
         # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 붙잡아 둔다.
         traces.append(trace)
-        return await run_chat(request, http_client, trace, checkpoints, prompt_fragments)
+        return await run_chat(request, http_client, trace, prompt, checkpoints)
 
     return run

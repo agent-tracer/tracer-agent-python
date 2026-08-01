@@ -35,6 +35,7 @@ from ..shared.workflows.jobs_spec import (
     NOTIFICATIONS_TOPIC,
 )
 from .agents.chat.checkpoint import ChatCheckpointProvider
+from .agents.shared.contract_prompt_source import ContractPromptSource
 from .workflows.chat_activities import ChatExecutionActivities
 from .workflows.chat_workflows import ChatExecutionWorkflow, ChatThreadWorkflow
 from .workflows.envelope import ChatEnvelopeClient
@@ -126,6 +127,7 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
         opened.http_client,
         opened.checkpoints,
         ChatEnvelopeClient(opened.http_client, settings.agent_api_url),
+        ContractPromptSource().resolve("chat"),
         opened.wakeup,
     )
     return Worker(

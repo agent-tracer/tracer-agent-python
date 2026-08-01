@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -64,6 +65,7 @@ class ConverseNode(GraphNode):
         agent_name: str,
         drafts: DraftPublisher | None = None,
         system_prompt: str,
+        language_directives: Mapping[str, str],
     ) -> None:
         self._req = req
         self._http_client = http_client
@@ -74,6 +76,7 @@ class ConverseNode(GraphNode):
         self._agent_name = agent_name
         self._drafts = drafts
         self._system_prompt = system_prompt
+        self._language_directives = language_directives
 
     async def run(self, state: ChatState) -> ConverseUpdate:
         prepared = await self._prepare(state)
@@ -134,7 +137,7 @@ class ConverseNode(GraphNode):
         agent = build_chat_agent(
             self._chat,
             self._system_prompt,
-            build_context_prompt(summary, facts, state["language"]),
+            build_context_prompt(self._language_directives[state["language"]], summary, facts),
             registry.langchain_tools(),
             TRANSIENT_ERRORS,
             fallback_chat=self._fallback_chat,

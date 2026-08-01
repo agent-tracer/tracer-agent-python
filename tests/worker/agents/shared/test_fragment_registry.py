@@ -6,8 +6,6 @@ import hashlib
 
 import pytest
 
-from tracer_agent.worker.agents.chat.prompt_fragments import CHAT_FRAGMENT_REGISTRY
-from tracer_agent.worker.agents.chat.prompts import ASSISTANT_SYSTEM_PROMPT
 from tracer_agent.worker.agents.recipe_scan.prompt_fragments import RECIPE_SCAN_FRAGMENT_REGISTRY
 from tracer_agent.worker.agents.recipe_scan.prompts import (
     INVESTIGATOR_SYSTEM_PROMPT as RECIPE_INVESTIGATOR_SYSTEM_PROMPT,
@@ -33,17 +31,12 @@ from tracer_agent.worker.agents.title_suggestion.prompts import (
 )
 
 _REGISTRIES = {
-    "chat": CHAT_FRAGMENT_REGISTRY,
     "recipe-scan": RECIPE_SCAN_FRAGMENT_REGISTRY,
     "task-cleanup": TASK_CLEANUP_FRAGMENT_REGISTRY,
     "title-suggestion": TITLE_SUGGESTION_FRAGMENT_REGISTRY,
 }
 
 _PROMPT_HASHES = {
-    "chat.system": (
-        ASSISTANT_SYSTEM_PROMPT,
-        "15523ae2b91f3c1c8cf103f2c2d8fa43c56d771cebfa5c9b3bb5c2a3e31edea5",
-    ),
     "recipe.investigator": (
         RECIPE_INVESTIGATOR_SYSTEM_PROMPT,
         "598fb27022244161c013cc1d65a0846b68be75aef2c6d8d5d138a04c176ff7cd",

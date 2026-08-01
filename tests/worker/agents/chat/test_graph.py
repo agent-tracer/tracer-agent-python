@@ -10,6 +10,7 @@ import pytest
 from tests.support.chat_api import FakeChatMemoryApi
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
+from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.chat import agent as chat_mod
@@ -51,7 +52,7 @@ async def _run(
             "chat",
             req.model,
             req.deadlineMs,
-            lambda usage: chat_mod.run_chat(req, client, usage),
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
         )
 
 
@@ -126,7 +127,10 @@ async def _run_replay(
     transport = httpx.MockTransport(_replay_handler(replay, memory or FakeChatMemoryApi()))
     async with httpx.AsyncClient(transport=transport) as client:
         response = await execute(
-            "chat", req.model, req.deadlineMs, lambda usage: chat_mod.run_chat(req, client, usage)
+            "chat",
+            req.model,
+            req.deadlineMs,
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
         )
     return response, chat
 
@@ -222,7 +226,12 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
 
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[])
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        await execute("chat", req.model, req.deadlineMs, lambda usage: chat_mod.run_chat(req, client, usage))
+        await execute(
+            "chat",
+            req.model,
+            req.deadlineMs,
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+        )
 
     hosts = dict(reversed([(path, host) for host, path in seen]))
     assert hosts["/api/agent/chat/threads/thread-1/executions/execution-1/replay"] == "agent-api.test"

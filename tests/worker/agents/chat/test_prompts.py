@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tracer_agent.shared.agents.chat.models import ChatFact
-from tracer_agent.worker.agents.chat.prompt_fragments import CHAT_FRAGMENT_REGISTRY
-from tracer_agent.worker.agents.chat.prompts import SYSTEM_PROMPT, build_context_prompt, build_system_prompt
-from tracer_agent.worker.agents.shared.fragment_registry import fragment_content_hash, fragment_placeholders
+from tracer_agent.worker.agents.chat.prompts import build_context_prompt, build_system_prompt
+from tracer_agent.worker.agents.shared.contract_prompt_source import ContractPromptSource
+from tracer_agent.worker.agents.shared.prompt_source_port import (
+    AgentPrompt,
+    PromptSlot,
+    PromptSlotMissing,
+    PromptTemplate,
+)
+
+PROMPT = ContractPromptSource().resolve("chat")
+SYSTEM_PROMPT = build_system_prompt(PROMPT)
 
 
 def test_시스템_프롬프트는_정체성과_도구_전반_정책만_말한다() -> None:
@@ -35,37 +45,20 @@ def test_도구_하나의_사용법은_도구_설명에_두고_프롬프트에_�
         assert name not in SYSTEM_PROMPT
 
 
-def test_DB_override는_지정한_fragment_slot만_바꾼다() -> None:
-    snapshot: dict[tuple[str, str], dict[str, object]] = {}
-    for fragment in CHAT_FRAGMENT_REGISTRY.values():
-        binding = fragment.bindings[0]
-        content = fragment.content
-        source = "code-default"
-        semantic_version = fragment.default_version
-        if binding.fragment_slot == "groundingRules":
-            content = "Use the evaluated grounding policy."
-            source = "database-override"
-            semantic_version = "v2"
-        snapshot[(binding.template_key, binding.fragment_slot)] = {
-            "definitionKey": fragment.definition_key,
-            "codeName": fragment.code_name,
-            "backend": "python",
-            "content": content,
-            "contentHash": fragment_content_hash(content),
-            "placeholders": list(fragment_placeholders(content)),
-            "source": source,
-            "semanticVersion": semantic_version,
-            "toolContractVersion": fragment.tool_contract_version,
-            "outputSchemaVersion": fragment.output_schema_version,
-        }
-    resolved = build_system_prompt(snapshot)
-    assert "Use the evaluated grounding policy." in resolved
-    assert CHAT_FRAGMENT_REGISTRY["CHAT_MEMORY_RULE"].content in resolved
-    assert CHAT_FRAGMENT_REGISTRY["CHAT_GROUNDING_RULES"].content not in resolved
+def test_slot이_없으면_코드_기본값으로_물러서지_않고_던진다() -> None:
+    template = PromptTemplate(
+        version="v0.0.1", slots={"memoryRule": PromptSlot(content="", version="v0.0.1")}
+    )
+    incomplete = AgentPrompt(templates={"chat.assistant.system": template}, language_directives={})
+
+    with pytest.raises(PromptSlotMissing):
+        build_system_prompt(incomplete)
 
 
 def test_턴별로_바뀌는_값은_선행_컨텍스트_메시지가_싣는다() -> None:
-    context = build_context_prompt("앞선 대화 요약", [ChatFact(key="tone", content="간결하게")], "ko")
+    context = build_context_prompt(
+        PROMPT.directive("ko"), "앞선 대화 요약", [ChatFact(key="tone", content="간결하게")]
+    )
 
     print("\n───────── chat :: converse (턴 컨텍스트) ─────────")
     print(context)

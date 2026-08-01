@@ -3,33 +3,18 @@
 from __future__ import annotations
 
 from tracer_agent.shared.agents.chat.models import ChatFact
-from tracer_agent.shared.agents.shared.models import Language
 
-from ..shared.fragment_registry import ResolvedFragmentSnapshot, resolved_fragment_content
-from ..shared.prompt_fragments import render
+from ..shared.prompt_source_port import AgentPrompt
 from ..shared.safety_policy import SAFETY_POLICY
-from .prompt_fragments import CHAT_FRAGMENT_REGISTRY
 
 PROMPT_VERSION = "chat-native-v3"
 
-LANGUAGE_DIRECTIVES: dict[Language, str] = {
-    "auto": "Reply in the language the user is writing in.",
-    "ko": "Reply in Korean (한국어). Translate technical terms naturally.",
-    "en": "Reply in English. Translate technical terms naturally.",
-    "ja": "Reply in Japanese (日本語). Translate technical terms naturally.",
-    "zh": "Reply in Simplified Chinese (简体中文). Translate technical terms naturally.",
-}
+SYSTEM_TEMPLATE = "chat.assistant.system"
 
 
-_TEMPLATE = "chat.assistant.system"
-
-
-def _fragment(key: str, snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    return render(resolved_fragment_content(CHAT_FRAGMENT_REGISTRY, key, _TEMPLATE, snapshot))
-
-
-def build_system_prompt(snapshot: ResolvedFragmentSnapshot | None = None) -> str:
-    """코드 scaffold에 시작 시 고정된 chat 프래그먼트 snapshot을 조립한다."""
+def build_system_prompt(prompt: AgentPrompt) -> str:
+    """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 시스템 프롬프트를 만든다."""
+    template = prompt.template(SYSTEM_TEMPLATE)
     return "\n".join(
         [
             SAFETY_POLICY,
@@ -42,25 +27,20 @@ def build_system_prompt(snapshot: ResolvedFragmentSnapshot | None = None) -> str
             "Your job is to work out what the user is actually asking for, reach for the tools that "
             "answer it,",
             "ground your reply in what they return, and propose the changes their work needs.",
-            _fragment("CHAT_TOOL_EXECUTION_SEMANTICS", snapshot),
+            template.slot("toolExecutionSemantics"),
             "",
             "How to work:",
-            _fragment("CHAT_GROUNDING_RULES", snapshot),
+            template.slot("groundingRules"),
             "",
             "Memory:",
-            _fragment("CHAT_MEMORY_RULE", snapshot),
+            template.slot("memoryRule"),
         ]
     )
 
 
-ASSISTANT_SYSTEM_PROMPT = build_system_prompt()
-
-SYSTEM_PROMPT = ASSISTANT_SYSTEM_PROMPT
-
-
-def build_context_prompt(summary: str | None, facts: list[ChatFact], language: Language) -> str:
+def build_context_prompt(directive: str, summary: str | None, facts: list[ChatFact]) -> str:
     """이번 턴의 요약과 사용자 사실과 출력 언어를 담은 선행 컨텍스트 메시지다."""
-    lines = [LANGUAGE_DIRECTIVES[language]]
+    lines = [directive]
     if facts:
         lines.append("")
         lines.append('<memory source="untrusted">')

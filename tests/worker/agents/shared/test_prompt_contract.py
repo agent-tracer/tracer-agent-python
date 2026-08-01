@@ -15,8 +15,6 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 from tracer_agent.shared.agents.shared.models import Language
 from tracer_agent.shared.agents.task_cleanup.models import MAX_EVIDENCE_EVENT_IDS, MAX_INSPECT_WEIGHT
-from tracer_agent.worker.agents.chat import prompts as chat_prompts
-from tracer_agent.worker.agents.chat.prompt_fragments import FRAGMENTS as CHAT_FRAGMENTS
 from tracer_agent.worker.agents.recipe_scan import prompts as recipe_prompts
 from tracer_agent.worker.agents.recipe_scan.prompt_fragments import FRAGMENTS as RECIPE_FRAGMENTS
 from tracer_agent.worker.agents.recipe_scan.tools import COORDINATOR_TOOLS
@@ -32,7 +30,6 @@ _AGENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "recipe-scan": (recipe_prompts.LANGUAGE_DIRECTIVES, RECIPE_FRAGMENTS),
     "task-cleanup": (cleanup_prompts.LANGUAGE_DIRECTIVES, CLEANUP_FRAGMENTS),
     "title-suggestion": (title_prompts.LANGUAGE_DIRECTIVES, TITLE_FRAGMENTS),
-    "chat": (chat_prompts.LANGUAGE_DIRECTIVES, CHAT_FRAGMENTS),
 }
 
 
@@ -51,7 +48,7 @@ def test_지원_언어_목록이_계약과_같다() -> None:
     languages = shared_contract("languages.json")
 
     assert sorted(get_args(Language)) == sorted(languages["languages"])
-    assert sorted(languages["scope"]) == sorted(_AGENTS)
+    assert sorted(languages["scope"]) == sorted([*_AGENTS, "chat"])
 
 
 @pytest.mark.parametrize("agent", sorted(_AGENTS))
