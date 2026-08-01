@@ -8,11 +8,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ...runtime.dependencies import MONITOR_USER_HEADER, resolve_user_id
+from ...runtime.dependencies import ExecutionSql, UserId
 from ...runtime.ledger import SqlSource
+from ..dependencies import Watch
 from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from .access import owned_execution, owned_thread
@@ -27,6 +28,8 @@ CHAT_EXECUTION_EVENTS_PATH = f"{CHAT_EXECUTION_PATH}/events"
 
 EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
 SNAPSHOT_EVENT = "snapshot"
+
+router = APIRouter()
 
 
 @dataclass(frozen=True)
@@ -48,33 +51,33 @@ class ChatExecutionSnapshot:
         return self.execution["status"] in TERMINAL_CHAT_EXECUTION_STATUSES
 
 
+@router.get(CHAT_EXECUTION_EVENTS_PATH, response_model=None)
 async def watch_chat_execution(
-    thread_id: str, execution_id: str, request: Request
+    thread_id: str, execution_id: str, source: ExecutionSql, user_id: UserId, watch: Watch
 ) -> StreamingResponse | JSONResponse:
     """요청이 실어 보낸 Last-Event-ID 와 무관하게 그 순간의 정본부터 이어서 내고 종결에서 닫는다."""
-    user_id = resolve_user_id(request.headers.get(MONITOR_USER_HEADER))
-    source: SqlSource = request.app.state.execution_sql
     try:
         first = await _snapshot(source, user_id, thread_id, execution_id)
     except ChatIntakeRejected as rejected:
         return rejection(rejected)
     return StreamingResponse(
-        _frames(request, source, user_id, thread_id, execution_id, first),
+        frames(watch, source, user_id, thread_id, execution_id, first),
         media_type=EVENT_STREAM_MEDIA_TYPE,
         headers=dict(chat_stream_rules().headers),
     )
 
 
-async def _frames(
-    request: Request,
+async def frames(
+    watch: ChatExecutionUpdates | None,
     source: SqlSource,
     user_id: str,
     thread_id: str,
     execution_id: str,
     first: ChatExecutionSnapshot,
 ) -> AsyncIterator[str]:
+    """연결이 살아 있는 동안 정본 스냅샷을 이어 내고 종결이나 끊김에서 구독을 놓는다."""
     signal = asyncio.Event()
-    unsubscribe = _listen(request, execution_id, signal)
+    unsubscribe = _listen(watch, execution_id, signal)
     snapshot = first
     try:
         while True:
@@ -90,11 +93,10 @@ async def _frames(
         unsubscribe()
 
 
-def _listen(request: Request, execution_id: str, signal: asyncio.Event) -> Any:
-    updates: ChatExecutionUpdates | None = getattr(request.app.state, "execution_watch", None)
-    if updates is None:
+def _listen(watch: ChatExecutionUpdates | None, execution_id: str, signal: asyncio.Event) -> Any:
+    if watch is None:
         return lambda: None
-    return updates.subscribe(execution_id, signal.set)
+    return watch.subscribe(execution_id, signal.set)
 
 
 async def _await_change(signal: asyncio.Event) -> None:

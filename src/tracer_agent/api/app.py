@@ -9,18 +9,12 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ..shared.agents.chat.intake.router import (
-    ACCEPTED_STATUS,
-    CHAT_CANCEL_PATH,
-    CHAT_MESSAGES_PATH,
-    cancel_chat_turn,
-    enqueue_chat_turn,
-)
+from ..shared.agents.chat.intake.router import router as chat_intake_router
 from ..shared.agents.chat.surface.confirmations import router as chat_confirmation_router
 from ..shared.agents.chat.surface.drafts import router as chat_draft_router
 from ..shared.agents.chat.surface.executions import router as chat_execution_router
 from ..shared.agents.chat.surface.memories import router as chat_memory_router
-from ..shared.agents.chat.surface.stream import CHAT_EXECUTION_EVENTS_PATH, watch_chat_execution
+from ..shared.agents.chat.surface.stream import router as chat_stream_router
 from ..shared.agents.chat.surface.threads import router as chat_thread_router
 from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
@@ -119,9 +113,8 @@ def create_app() -> FastAPI:
     application.get("/health/ready")(readiness)
     application.get(SURFACE_PATH)(get_served_surface)
     # 브라우저가 백엔드마다 다른 경로를 치지 않도록 계약이 정한 경로로 연다.
-    application.post(CHAT_MESSAGES_PATH, status_code=ACCEPTED_STATUS)(enqueue_chat_turn)
-    application.get(CHAT_EXECUTION_EVENTS_PATH, response_model=None)(watch_chat_execution)
-    application.post(CHAT_CANCEL_PATH)(cancel_chat_turn)
+    application.include_router(chat_intake_router)
+    application.include_router(chat_stream_router)
     application.include_router(chat_thread_router)
     application.include_router(chat_confirmation_router)
     application.include_router(chat_execution_router)

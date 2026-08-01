@@ -6,11 +6,12 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...shared.wire import SuccessEnvelope, error_responses
 from ..dependencies import Dispatch, Updates
 from .cancel import ChatTurnCancellation
 from .models import PostMessagePayload, execution_dto, message_dto
@@ -22,7 +23,15 @@ CHAT_CANCEL_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/executions/{{execution_id
 ACCEPTED_STATUS = 202
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 
+router = APIRouter()
 
+
+@router.post(
+    CHAT_MESSAGES_PATH,
+    status_code=ACCEPTED_STATUS,
+    response_model=SuccessEnvelope,
+    responses=error_responses(400, 404, 409),
+)
 async def enqueue_chat_turn(
     thread_id: str, request: Request, source: ExecutionSql, user_id: UserId, dispatch: Dispatch
 ) -> JSONResponse:
@@ -58,6 +67,7 @@ async def enqueue_chat_turn(
     )
 
 
+@router.post(CHAT_CANCEL_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def cancel_chat_turn(
     thread_id: str,
     execution_id: str,

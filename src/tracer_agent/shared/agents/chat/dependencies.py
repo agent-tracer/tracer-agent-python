@@ -9,6 +9,7 @@ from fastapi import Depends, Request
 from .intake.cancel import UpdateSignal
 from .intake.dispatch import ExecutionDispatch
 from .surface.tool_client import ChatToolExecutor
+from .surface.updates import ChatExecutionUpdates
 
 
 def get_execution_dispatch(request: Request) -> ExecutionDispatch:
@@ -23,6 +24,12 @@ def get_execution_updates(request: Request) -> UpdateSignal | None:
     return updates
 
 
+def get_execution_watch(request: Request) -> ChatExecutionUpdates | None:
+    """다른 replica 가 흘린 갱신을 듣는 창구를 내며 배선이 없으면 비운다."""
+    watch: ChatExecutionUpdates | None = getattr(request.app.state, "execution_watch", None)
+    return watch
+
+
 def get_chat_tool_executor(request: Request) -> ChatToolExecutor:
     """승인된 쓰기 도구를 실제로 부르는 창구를 낸다."""
     executor: ChatToolExecutor = request.app.state.chat_tool_executor
@@ -31,4 +38,5 @@ def get_chat_tool_executor(request: Request) -> ChatToolExecutor:
 
 Dispatch = Annotated[ExecutionDispatch, Depends(get_execution_dispatch)]
 Updates = Annotated[UpdateSignal | None, Depends(get_execution_updates)]
+Watch = Annotated[ChatExecutionUpdates | None, Depends(get_execution_watch)]
 ToolExecutor = Annotated[ChatToolExecutor, Depends(get_chat_tool_executor)]
