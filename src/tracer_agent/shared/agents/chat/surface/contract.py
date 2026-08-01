@@ -1,0 +1,35 @@
+"""열린 연결이 지킬 스트림 규칙을 두 구현체가 함께 읽는 계약에서 가져온다."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from types import MappingProxyType
+
+# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
+CHAT_QUERY_CASE_PATH = (
+    Path(__file__).resolve().parents[6] / "contract" / "conformance" / "cases" / "chat.query.json"
+)
+
+_MILLIS_PER_SECOND = 1000.0
+
+
+@dataclass(frozen=True)
+class ChatStreamRules:
+    """계약이 정한 재전송 주기와 스트림 응답 헤더다."""
+
+    resend_interval_s: float
+    headers: Mapping[str, str]
+
+
+@lru_cache(maxsize=1)
+def chat_stream_rules() -> ChatStreamRules:
+    """계약의 밀리초 주기를 초로 바꾸고 응답 헤더를 함께 낸다."""
+    declared = json.loads(CHAT_QUERY_CASE_PATH.read_text(encoding="utf-8"))["stream"]
+    return ChatStreamRules(
+        resend_interval_s=float(declared["resendIntervalMs"]) / _MILLIS_PER_SECOND,
+        headers=MappingProxyType({str(name): str(value) for name, value in declared["headers"].items()}),
+    )

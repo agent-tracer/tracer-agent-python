@@ -29,7 +29,8 @@ from tracer_agent.shared.agents.chat.models import (
     CHAT_STOP_REASONS,
     TERMINAL_CHAT_EXECUTION_STATUSES,
 )
-from tracer_agent.shared.agents.chat.surface.stream import HEARTBEAT_S, SNAPSHOT_EVENT
+from tracer_agent.shared.agents.chat.surface.contract import chat_stream_rules
+from tracer_agent.shared.agents.chat.surface.stream import SNAPSHOT_EVENT
 from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
 
 THREADS = "/api/agent/chat/threads"
@@ -306,10 +307,18 @@ class Test스트림:
         )
 
     def test_주기_다시_읽기가_케이스가_적은_간격이다(self) -> None:
-        assert int(HEARTBEAT_S * 1000) == CASE["stream"]["resendIntervalMs"]
+        milliseconds = chat_stream_rules().resend_interval_s * 1000
+        assert milliseconds == CASE["stream"]["resendIntervalMs"]
 
     def test_사건_이름이_케이스가_적은_이름이다(self) -> None:
         assert CASE["stream"]["event"] == SNAPSHOT_EVENT
+
+    def test_응답_헤더가_케이스가_적은_값이다(self, client: TestClient) -> None:
+        with client.stream("GET", f"{THREADS}/t1/executions/e-done/events") as response:
+            headers = {name: response.headers[name] for name in CASE["stream"]["headers"]}
+            response.read()
+
+        assert headers == CASE["stream"]["headers"]
 
     def test_프레임이_사건_줄과_본문_줄만_싣는다(self, client: TestClient) -> None:
         with client.stream("GET", f"{THREADS}/t1/executions/e-done/events") as response:

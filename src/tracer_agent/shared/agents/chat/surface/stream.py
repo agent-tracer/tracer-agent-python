@@ -16,6 +16,7 @@ from ..intake.router import MONITOR_USER_HEADER, resolve_user_id
 from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from .access import owned_execution, owned_thread
+from .contract import chat_stream_rules
 from .envelope import rejection
 from .executions import CHAT_EXECUTION_PATH
 from .ledger import PENDING, ChatSurfaceLedger
@@ -24,18 +25,8 @@ from .views import confirmation_dto, execution_dto
 
 CHAT_EXECUTION_EVENTS_PATH = f"{CHAT_EXECUTION_PATH}/events"
 
-# 깨우기 신호가 유실되어도 이 주기 조회가 정본을 다시 읽어 실어 보낸다.
-HEARTBEAT_S = 20.0
-
 EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
 SNAPSHOT_EVENT = "snapshot"
-
-
-_STREAM_HEADERS = {
-    "Cache-Control": "no-cache, no-transform",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-}
 
 
 @dataclass(frozen=True)
@@ -70,7 +61,7 @@ async def watch_chat_execution(
     return StreamingResponse(
         _frames(request, source, user_id, thread_id, execution_id, first),
         media_type=EVENT_STREAM_MEDIA_TYPE,
-        headers=_STREAM_HEADERS,
+        headers=dict(chat_stream_rules().headers),
     )
 
 
@@ -108,7 +99,7 @@ def _listen(request: Request, execution_id: str, signal: asyncio.Event) -> Any:
 
 async def _await_change(signal: asyncio.Event) -> None:
     try:
-        await asyncio.wait_for(signal.wait(), HEARTBEAT_S)
+        await asyncio.wait_for(signal.wait(), chat_stream_rules().resend_interval_s)
     except TimeoutError:
         return
     signal.clear()
