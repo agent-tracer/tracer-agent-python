@@ -40,18 +40,13 @@ def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddl
     )
 
 
-def build_recipe_agent(
-    chat: BaseChatModel,
-    system_prompt: str,
-    tools: list[BaseTool],
+def recipe_middleware(
     transient_errors: tuple[type[Exception], ...],
     *,
     max_turns: int,
-    output: type[BaseModel] = RecipeDraft,
     fallback_chat: BaseChatModel | None = None,
-) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """표준 도구 실행과 구조화 출력을 갖춘 recipe-scan agent를 컴파일한다."""
-    system = SystemMessage(content=system_prompt)
+) -> list[AgentMiddleware[Any, Any, Any]]:
+    """recipe-scan agent의 미들웨어를 안쪽부터 바깥쪽 순서로 세운다."""
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         # 시스템 프롬프트와 도구 선언이 턴마다 같으므로 그 둘이 캐시 접두사가 된다.
         AnthropicPromptCachingMiddleware(ttl="1h"),
@@ -65,6 +60,22 @@ def build_recipe_agent(
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
     middleware.append(model_retry_middleware())
+    return middleware
+
+
+def build_recipe_agent(
+    chat: BaseChatModel,
+    system_prompt: str,
+    tools: list[BaseTool],
+    transient_errors: tuple[type[Exception], ...],
+    *,
+    max_turns: int,
+    output: type[BaseModel] = RecipeDraft,
+    fallback_chat: BaseChatModel | None = None,
+) -> CompiledStateGraph[Any, Any, Any, Any]:
+    """표준 도구 실행과 구조화 출력을 갖춘 recipe-scan agent를 컴파일한다."""
+    system = SystemMessage(content=system_prompt)
+    middleware = recipe_middleware(transient_errors, max_turns=max_turns, fallback_chat=fallback_chat)
     return create_agent(
         chat,
         tools=list(tools),

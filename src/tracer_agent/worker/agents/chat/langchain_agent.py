@@ -38,19 +38,13 @@ def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddl
     )
 
 
-def build_chat_agent(
-    chat: BaseChatModel,
-    system_prompt: str,
-    tools: list[BaseTool],
+def chat_middleware(
     transient_errors: tuple[type[Exception], ...],
     *,
     max_turns: int,
     fallback_chat: BaseChatModel | None = None,
-    checkpointer: BaseCheckpointSaver[Any] | None = None,
-    store: BaseStore | None = None,
-) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """도구 실행과 자유 텍스트 응답을 갖춘 chat 대화 agent를 스레드·사용자 기억과 함께 컴파일한다."""
-    system = SystemMessage(content=system_prompt)
+) -> list[AgentMiddleware[Any, Any, Any]]:
+    """chat agent의 미들웨어를 안쪽부터 바깥쪽 순서로 세운다."""
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         # 시스템 프롬프트와 도구 선언이 턴마다 같으므로 그 둘이 캐시 접두사가 된다.
         AnthropicPromptCachingMiddleware(ttl="1h"),
@@ -65,6 +59,23 @@ def build_chat_agent(
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
     middleware.append(model_retry_middleware())
+    return middleware
+
+
+def build_chat_agent(
+    chat: BaseChatModel,
+    system_prompt: str,
+    tools: list[BaseTool],
+    transient_errors: tuple[type[Exception], ...],
+    *,
+    max_turns: int,
+    fallback_chat: BaseChatModel | None = None,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    store: BaseStore | None = None,
+) -> CompiledStateGraph[Any, Any, Any, Any]:
+    """도구 실행과 자유 텍스트 응답을 갖춘 chat 대화 agent를 스레드·사용자 기억과 함께 컴파일한다."""
+    system = SystemMessage(content=system_prompt)
+    middleware = chat_middleware(transient_errors, max_turns=max_turns, fallback_chat=fallback_chat)
     return create_agent(
         chat,
         tools=list(tools),
