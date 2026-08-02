@@ -22,12 +22,14 @@ from ...runtime.llm.budget import ExecutionBudget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
+from ...runtime.telemetry.execution_metrics import record_probe_exhaustion
 from ...runtime.timeouts import weighted_wall_clock_s
 from ...shared.prompt_source_port import AgentPrompt
 from ..failures import WORKER_FAILED
 from ..langchain_agent import build_recipe_agent
 from ..prompts import build_probe_prompt
 from ..reader import RecipeLedgerReader
+from ..reservation import load_wall_clock_policy
 from ..search import RecipeSearchReader
 from ..tools import PROBE_TOOLS, build_recipe_registry
 
@@ -88,7 +90,10 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
             return {"reports": [report], "provenance": catalog, "model_cost_usd": 0.0, "model_turns_used": 0}
         budget = self._budget.new_loop(probe_name, req.model, max_cost_usd=payload.max_cost_usd)
         wall_clock_s = weighted_wall_clock_s(
-            self._wall_clock_ceiling_s, payload.max_cost_usd, req.limits.budgetUsd
+            self._wall_clock_ceiling_s,
+            payload.max_cost_usd,
+            req.limits.budgetUsd,
+            min_fraction=load_wall_clock_policy().probe_min_fraction,
         )
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
@@ -147,6 +152,7 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
             )
             # 무너진 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
             turns_used = payload.max_turns
+        record_probe_exhaustion(self._agent_name, assignment.probe, budget.delta, payload.max_cost_usd)
         return {
             "reports": [report],
             "provenance": catalog,

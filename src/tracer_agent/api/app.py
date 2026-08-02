@@ -27,7 +27,7 @@ from ..shared.agents.settings.secret import SettingCipher
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
-from ..shared.workflows.jobs_anchor import RuleAnchorClient
+from ..shared.workflows.jobs_anchor import RuleAnchorClient, ScanAnchorClient
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_intake import router as job_intake_router
@@ -77,6 +77,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     )
     application.state.rule_anchor_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
     application.state.rule_anchors = RuleAnchorClient(
+        application.state.rule_anchor_http, settings.tracer_api_url
+    )
+    application.state.scan_anchors = ScanAnchorClient(
         application.state.rule_anchor_http, settings.tracer_api_url
     )
     try:

@@ -13,14 +13,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
+from tracer_agent.shared.agents.recipe_scan.models import scan_anchor_requirements
+
 from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
 from ..agents.runtime.ledger import SqlSource
 from ..agents.shared.wire import SuccessEnvelope, error_responses
-from .jobs_anchor import RuleAnchorSource
+from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
 from .jobs_envelope import JobEnvelopeSource
 from .jobs_input import (
     INPUT_MODEL_BY_KIND,
+    RecipeScanJobInput,
     RuleGenerationJobInput,
     build_payload,
     input_hash,
@@ -43,6 +46,11 @@ INVALID_RULE_ANCHOR = (
     400,
     "job.invalid-rule-anchor",
     "Rule generation requires an owned user-message anchor",
+)
+INELIGIBLE_SCAN_ANCHOR = (
+    400,
+    "job.invalid-scan-anchor",
+    "Recipe scan requires a completed root user task",
 )
 NOT_FOUND = (404, "not_found", "Job execution not found")
 IDEMPOTENCY_CONFLICT = (
@@ -67,6 +75,12 @@ class JobEnqueueBody(BaseModel):
 router = APIRouter()
 
 
+def get_scan_anchors(request: Request) -> ScanAnchorSource:
+    """스캔 앵커 창구를 애플리케이션 상태에서 꺼낸다."""
+    anchors: ScanAnchorSource = request.app.state.scan_anchors
+    return anchors
+
+
 def get_rule_anchors(request: Request) -> RuleAnchorSource:
     """규칙 생성의 근거를 추적 창구에서 읽는 통로를 낸다."""
     anchors: RuleAnchorSource = request.app.state.rule_anchors
@@ -86,6 +100,7 @@ def get_job_dispatch(request: Request) -> TemporalJobDispatch:
 
 
 RuleAnchors = Annotated[RuleAnchorSource, Depends(get_rule_anchors)]
+ScanAnchors = Annotated[ScanAnchorSource, Depends(get_scan_anchors)]
 JobEnvelopes = Annotated[JobEnvelopeSource, Depends(get_job_envelopes)]
 JobDispatch = Annotated[TemporalJobDispatch, Depends(get_job_dispatch)]
 
@@ -101,6 +116,7 @@ async def enqueue_job(
     source: ExecutionSql,
     user_id: UserId,
     anchors: RuleAnchors,
+    scan_anchors: ScanAnchors,
     envelopes: JobEnvelopes,
     dispatch: JobDispatch,
 ) -> JSONResponse:
@@ -120,6 +136,10 @@ async def enqueue_job(
 
     if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(anchors, user_id, job_input):
         return error_envelope(*INVALID_RULE_ANCHOR)
+    if isinstance(job_input, RecipeScanJobInput) and not await _scannable_anchor(
+        scan_anchors, user_id, job_input
+    ):
+        return error_envelope(*INELIGIBLE_SCAN_ANCHOR)
     idempotency_key = _idempotency_key(enqueue.idempotencyKey)
     request_hash = None if idempotency_key is None else input_hash(enqueue.kind, job_input)
     now = datetime.now(UTC)
@@ -181,6 +201,12 @@ async def cancel_job(
     if not runs_locally(kind):
         await dispatch.cancel(AGENT_KIND_BY_WIRE[kind], execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
+
+
+async def _scannable_anchor(anchors: ScanAnchorSource, user_id: str, job_input: RecipeScanJobInput) -> bool:
+    """스캔의 앵커는 이 사용자의 뿌리 사용자 태스크이면서 끝난 것이어야 한다."""
+    anchor = await anchors.find(user_id, job_input.taskId)
+    return anchor is not None and anchor.eligible(scan_anchor_requirements())
 
 
 async def _owns_anchor(anchors: RuleAnchorSource, user_id: str, job_input: RuleGenerationJobInput) -> bool:

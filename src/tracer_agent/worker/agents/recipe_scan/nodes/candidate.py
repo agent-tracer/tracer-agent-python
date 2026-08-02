@@ -20,17 +20,24 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     ValidateCandidateUpdate,
 )
 
+from ...runtime.errors import BudgetExceeded
 from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import AgentBudgetLease, ExecutionBudget, combine_leases
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
+from ...runtime.telemetry.execution_metrics import (
+    record_redispatch_rounds,
+    record_validation_failure,
+)
 from ..langchain_agent import build_recipe_agent
 from ..policy import validate_recipe_candidates
 from ..prompts import build_user_prompt
 from ..reader import RecipeLedgerReader
 from ..search import RecipeSearchReader
 from ..tools import COORDINATOR_TOOLS, build_recipe_registry
+
+AGENT_NAME = "recipe-scan"
 
 
 def _plan_redispatch(
@@ -191,6 +198,7 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
         if plan is not None:
             update["redispatch"] = plan
             update["redispatch_count"] = state["redispatch_count"] + 1
+            record_redispatch_rounds(AGENT_NAME, update["redispatch_count"])
             chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes)
             self._usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
@@ -248,9 +256,16 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
                 ),
             },
         ]
-        draft, messages, catalog, _turns_used, cost_used = await self._invoke_agent(
-            repair_prompt, state, self._lease
-        )
+        try:
+            draft, messages, catalog, _turns_used, cost_used = await self._invoke_agent(
+                repair_prompt, state, self._lease
+            )
+        except BudgetExceeded:
+            # 수리는 이미 마지막 시도이며 끊긴 결과는 근거가 부족해 후보를 내지 못한 것과 같다.
+            self._usage.record_orchestration_event(
+                "node.failed", f"{self.name} exhausted its reserved budget", node_name=self.name
+            )
+            return {"candidates": [], "repair_attempted": True}
         return {
             "candidates": draft.recipes,
             "messages": messages,
@@ -274,4 +289,5 @@ class ValidateCandidateNode(GraphNode[RecipeScanState, ValidateCandidateUpdate])
             self._usage.record_orchestration_event(
                 "validation.failed", "; ".join(errors), node_name=self.name
             )
+            record_validation_failure(AGENT_NAME, state["repair_attempted"])
         return {"validation_errors": errors}

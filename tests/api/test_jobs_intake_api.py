@@ -11,11 +11,12 @@ from fastapi.testclient import TestClient
 from temporalio.exceptions import ApplicationError
 
 from tests.support.contract import conformance_case
+from tests.support.fakes import FakeScanAnchors
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
-from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor
+from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor, ScanAnchor
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
 PATH = "/api/agent/jobs"
@@ -111,16 +112,23 @@ def store() -> Iterator[SqliteLedgerSql]:
 
 
 @pytest.fixture
+def scan_anchors() -> FakeScanAnchors:
+    return FakeScanAnchors()
+
+
+@pytest.fixture
 def client(
     dispatch: FakeJobDispatch,
     envelopes: FakeEnvelopes,
     anchors: FakeRuleAnchors,
+    scan_anchors: FakeScanAnchors,
     store: SqliteLedgerSql,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
         test_client.app.state.job_dispatch = dispatch
         test_client.app.state.job_envelopes = envelopes
         test_client.app.state.rule_anchors = anchors
+        test_client.app.state.scan_anchors = scan_anchors
         test_client.app.state.execution_sql = SingleSql(store)
         yield test_client
 
@@ -423,3 +431,51 @@ def test_로컬_잡의_취소는_워크플로_취소를_부르지_않는다(
     assert res.status_code == 200
     assert res.json()["data"]["job"]["status"] == "canceled"
     assert dispatch.cancelled == []
+
+
+@pytest.mark.parametrize(
+    ("anchor", "expected"),
+    [
+        (ScanAnchor(id="task-1", origin="server-sdk", root=True, status="completed"), 400),
+        (ScanAnchor(id="task-1", origin="user", root=False, status="completed"), 400),
+        (ScanAnchor(id="task-1", origin="user", root=True, status="running"), 400),
+        (ScanAnchor(id="task-1", origin="user", root=True, status="completed"), 202),
+        (None, 400),
+    ],
+)
+def test_스캔은_계약이_정한_앵커_자격만_접수한다(
+    dispatch: FakeJobDispatch,
+    envelopes: FakeEnvelopes,
+    anchors: FakeRuleAnchors,
+    store: SqliteLedgerSql,
+    anchor: ScanAnchor | None,
+    expected: int,
+) -> None:
+    with TestClient(app_module.create_app()) as client:
+        client.app.state.job_dispatch = dispatch
+        client.app.state.job_envelopes = envelopes
+        client.app.state.rule_anchors = anchors
+        client.app.state.scan_anchors = FakeScanAnchors(anchor)
+        client.app.state.execution_sql = SingleSql(store)
+
+        res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
+
+    assert res.status_code == expected
+
+
+def test_자격이_없는_앵커의_거절은_계약이_정한_코드로_나간다(
+    dispatch: FakeJobDispatch,
+    envelopes: FakeEnvelopes,
+    anchors: FakeRuleAnchors,
+    store: SqliteLedgerSql,
+) -> None:
+    with TestClient(app_module.create_app()) as client:
+        client.app.state.job_dispatch = dispatch
+        client.app.state.job_envelopes = envelopes
+        client.app.state.rule_anchors = anchors
+        client.app.state.scan_anchors = FakeScanAnchors(None)
+        client.app.state.execution_sql = SingleSql(store)
+
+        res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
+
+    assert res.json()["error"]["code"] == "job.invalid-scan-anchor"

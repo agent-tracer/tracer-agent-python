@@ -14,6 +14,7 @@ from tests.support.chat_surface import (
     SilentWatch,
     SingleSql,
 )
+from tests.support.fakes import FakeScanAnchors
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 
@@ -41,11 +42,17 @@ def dispatch() -> RecordingDispatch:
 
 
 @pytest.fixture
+def scan_anchors() -> FakeScanAnchors:
+    return FakeScanAnchors()
+
+
+@pytest.fixture
 def client(
     store: SqliteLedgerSql,
     executor: RecordingExecutor,
     updates: RecordingUpdates,
     dispatch: RecordingDispatch,
+    scan_anchors: FakeScanAnchors,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
         test_client.app.state.execution_sql = SingleSql(store)
@@ -53,4 +60,5 @@ def client(
         test_client.app.state.execution_updates = updates
         test_client.app.state.execution_dispatch = dispatch
         test_client.app.state.execution_watch = SilentWatch()
+        test_client.app.state.scan_anchors = scan_anchors
         yield test_client

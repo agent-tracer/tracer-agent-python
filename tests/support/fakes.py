@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from langchain.tools import ToolRuntime
@@ -12,6 +13,7 @@ from langgraph.store.base import BaseStore
 
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan
 from tracer_agent.shared.agents.shared.models import ModelRateDTO
+from tracer_agent.shared.workflows.jobs_anchor import ScanAnchor
 from tracer_agent.worker.agents.runtime.pricing import ModelRates
 
 # 서버 카탈로그가 실행 봉투로 실어 보내는 단가를 대신한다.
@@ -311,3 +313,19 @@ class FakeTracerApi:
         if path == "/api/v1/recipes":
             return {"recipes": [{"id": f"recipe-{index}"} for index in range(len(body["recipes"]))]}
         return {"suggestions": [{"id": f"cleanup-{index}"} for index in range(len(body["suggestions"]))]}
+
+
+_ELIGIBLE_SCAN_ANCHOR = ScanAnchor(id="task-1", origin="user", root=True, status="completed")
+
+
+class FakeScanAnchors:
+    """접수가 스캔 앵커의 자격을 묻는 창구이며 시험이 그 답을 정한다."""
+
+    def __init__(self, anchor: ScanAnchor | None = _ELIGIBLE_SCAN_ANCHOR) -> None:
+        self.anchor = anchor
+        self.asked: list[tuple[str, str]] = []
+
+    async def find(self, user_id: str, task_id: str) -> ScanAnchor | None:
+        """물어 온 사용자와 태스크를 적고 시험이 정한 앵커를 낸다."""
+        self.asked.append((user_id, task_id))
+        return None if self.anchor is None else replace(self.anchor, id=task_id)

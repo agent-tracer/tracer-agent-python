@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import operator
-from typing import Annotated, Literal, Required, TypedDict
+from collections.abc import Mapping
+from functools import lru_cache
+from pathlib import Path
+from typing import Annotated, Any, Literal, Required, TypedDict
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -305,3 +309,14 @@ class RecipeScanState(TypedDict):
     validation_errors: list[str]
     repair_attempted: bool
     result: dict[str, object] | None
+
+
+_ANCHOR_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "recipe-scan" / "agent.json"
+
+
+@lru_cache(maxsize=1)
+def scan_anchor_requirements() -> Mapping[str, Any]:
+    """스캔이 근거를 캘 수 있는 앵커의 자격이며 값은 계약이 소유한다."""
+    document = json.loads(_ANCHOR_PATH.read_text(encoding="utf-8"))
+    requires: Mapping[str, Any] = document["anchor"]["requires"]
+    return requires

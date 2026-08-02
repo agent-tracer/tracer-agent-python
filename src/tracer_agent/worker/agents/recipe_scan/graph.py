@@ -17,18 +17,22 @@ from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, ob
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.survey import SurveyNode
+from .reservation import load_wall_clock_policy
 
 _RECIPE_SCAN_DEADLINE_MS = CATALOG["recipe.scan"].deadline_ms
+_WALL_CLOCK = load_wall_clock_policy()
 
 # 전문가가 진전 없이 머무는 상한이며, 몫이 큰 전문가가 자연히 더 오래 도는 것을 막지 않는다.
-PROBE_WALL_CLOCK_CEILING_S = deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.3)
-_PROBE_SEND_TIMEOUT = TimeoutPolicy(idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.3))
+PROBE_WALL_CLOCK_CEILING_S = deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)
+_PROBE_SEND_TIMEOUT = TimeoutPolicy(
+    idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)
+)
 _SURVEY_TIMEOUT = TimeoutPolicy(
-    run_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.15),
+    run_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.survey),
     idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.08),
 )
 _INVESTIGATE_TIMEOUT = TimeoutPolicy(
-    run_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.5),
+    run_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.synthesis),
     idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.2),
 )
 # 예산 초과와 출력 절단은 같은 예산으로 다시 돌아도 같은 자리에서 끝나므로 재시도하지 않는다.

@@ -15,6 +15,7 @@ from tracer_agent.shared.agents.shared.models import (
 
 from ..errors import CANCELLED, INVALID_REQUEST_ERROR, DeadlineExceeded, classify_exception
 from ..telemetry.attributes import apply_usage_attributes
+from ..telemetry.execution_metrics import record_model_landed
 from ..telemetry.metrics import record_client_metrics
 from ..telemetry.spans import invoke_agent_span, mark_span_error
 from .registry import IdempotencyConflict, run_registered
@@ -116,6 +117,8 @@ async def _execute(
     duration_ms = int((time.monotonic() - started) * 1000)
     error_subtype = error.subtype if error else None
     record_client_metrics(model, duration_ms / 1000, usage_dto, error_subtype)
+    if trace.landed:
+        record_model_landed(label)
     observation = (
         None
         if execution_id is None
