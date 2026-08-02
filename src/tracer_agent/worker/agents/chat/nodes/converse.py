@@ -104,7 +104,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             {"messages": prepared.messages_in},
             context=prepared.context,
             config=prepared.config,
-            # 상태 전체를 매 스텝 복사하지 않도록 그 스텝이 더한 것만 받는다.
+            # 상태 전체를 매 스텝 실어 나르지 않도록 그 스텝이 더한 것만 받는다.
             stream_mode=["messages", "updates"],
         ):
             if mode == "messages":
