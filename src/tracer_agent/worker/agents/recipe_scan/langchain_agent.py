@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
+from ..runtime.llm.retry import model_retry_middleware
 from ..runtime.llm.standard_agent import (
     StandardAgentContext,
     StandardAgentMiddleware,
@@ -60,8 +61,10 @@ def build_recipe_agent(
         StandardAgentMiddleware(),
         _tool_retry(transient_errors),
     ]
+    # 재시도가 더 안쪽이어야 같은 모델로 소진된 뒤에만 FallbackModelMiddleware가 대체로 넘어간다.
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
+    middleware.append(model_retry_middleware())
     # noinspection PyTypeChecker
     return create_agent(
         chat,
