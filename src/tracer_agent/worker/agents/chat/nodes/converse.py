@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
@@ -138,7 +138,6 @@ class ConverseNode(GraphNode):
         agent = build_chat_agent(
             self._chat,
             self._system_prompt,
-            build_context_prompt(self._language_directives[state["language"]], summary, facts),
             registry.langchain_tools(),
             TRANSIENT_ERRORS,
             fallback_chat=self._fallback_chat,
@@ -160,7 +159,8 @@ class ConverseNode(GraphNode):
             max_model_turns=self._req.limits.maxTurns,
         )
         config = self._config()
-        messages_in = await self._seed(agent, checkpointer, config, messages)
+        context_prompt = build_context_prompt(self._language_directives[state["language"]], summary, facts)
+        messages_in = await self._seed(agent, checkpointer, config, messages, context_prompt)
         return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
 
     def _config(self) -> RunnableConfig:
@@ -176,11 +176,20 @@ class ConverseNode(GraphNode):
         checkpointer: Any,
         config: RunnableConfig,
         history: list[ChatHistoryMessage],
+        context_prompt: str,
     ) -> list[BaseMessage]:
         replayed = replay_messages(history)
         if checkpointer is None:
-            return replayed
-        return await seed_checkpoint(agent, checkpointer, config, replayed)
+            return self._with_context(replayed, context_prompt)
+        seeded = await seed_checkpoint(agent, checkpointer, config, replayed)
+        return self._with_context(seeded, context_prompt)
+
+    @staticmethod
+    def _with_context(messages: list[BaseMessage], context_prompt: str) -> list[BaseMessage]:
+        """턴마다 바뀌는 지시와 요약과 사실을 꼬리에 두어 캐시 접두사가 그대로 남게 한다."""
+        if not context_prompt.strip():
+            return messages
+        return [*messages, SystemMessage(content=context_prompt)]
 
     async def _context(self, state: ChatState) -> tuple[list[ChatHistoryMessage], str | None, list[ChatFact]]:
         if not self._req.agentApiBaseUrl or self._req.messages:

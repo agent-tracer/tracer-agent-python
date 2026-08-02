@@ -51,6 +51,8 @@ build-backend = "hatchling.build"
 packages = ["src/tracer_agent"]
 
 [tool.pytest.ini_options]
+# 캐시 미들웨어는 Anthropic 모델만 지원하며 시험의 대역 모델에는 그 경고가 언제나 뜬다.
+filterwarnings = ["ignore:AnthropicPromptCachingMiddleware caching middleware only supports:UserWarning"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]

@@ -163,21 +163,22 @@ async def _system_content(
     return chat, list(chat.requests[0][0].content)
 
 
-async def test_사실과_요약은_시스템_캐시_경계_뒤에_붙는다(monkeypatch: pytest.MonkeyPatch) -> None:
-    _chat, content = await _system_content(
+async def test_사실과_요약은_시스템_메시지_밖에_붙는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat, content = await _system_content(
         monkeypatch,
         ["정리했습니다"],
         summary="앞선 대화 요약",
         facts=[{"key": "editor", "content": "vim을 쓴다"}],
     )
 
-    assert [("cache_control" in block) for block in content] == [True, False]
-    assert "vim을 쓴다" not in content[0]["text"]
-    assert "vim을 쓴다" in content[1]["text"] and "앞선 대화 요약" in content[1]["text"]
+    assert "vim을 쓴다" not in str(content)
+    assert "앞선 대화 요약" not in str(content)
+    보낸것 = str([message.content for message in chat.requests[0]])
+    assert "vim을 쓴다" in 보낸것 and "앞선 대화 요약" in 보낸것
 
 
 async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다(monkeypatch: pytest.MonkeyPatch) -> None:
-    # 접두사 일치라 사실 하나가 경계 앞에 섞이면 remember_fact 한 번에 시스템 캐시가 통째로 죽는다.
+    # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 죽는다.
     _first, before = await _system_content(monkeypatch, ["정리했습니다"], summary="요약 A", facts=[])
     chat, after = await _system_content(
         monkeypatch,
@@ -186,7 +187,6 @@ async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로
         facts=[{"key": "editor", "content": "vim을 쓴다"}],
     )
 
-    assert before[0] == after[0]
-    assert before[1]["text"] != after[1]["text"]
+    assert before == after
     # 시스템 하나에 최근 도구 결과 둘을 더해도 공급자 상한인 네 경계를 넘지 않는다.
-    assert 1 < chat.cached_blocks() <= 4
+    assert 0 < chat.cached_blocks() <= 4
