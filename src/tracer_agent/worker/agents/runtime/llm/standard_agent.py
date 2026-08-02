@@ -70,7 +70,6 @@ class StandardAgentContext:
     max_model_turns: int
 
 
-# noinspection PyTypeChecker
 class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
     """모델 비용과 실행 궤적과 도구 결과를 제품 계약으로 기록한다."""
 
@@ -79,7 +78,6 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
         super().__init__()
         self._tool_lock = asyncio.Lock() if serialize_tools else None
 
-    # noinspection PyTypeChecker
     async def awrap_model_call(
         self,
         request: ModelRequest[StandardAgentContext],
@@ -118,7 +116,6 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
         return response
 
 
-# noinspection PyTypeChecker
 def tool_context[ContextT: StandardAgentContext](
     request: ToolCallRequest, _schema: type[ContextT]
 ) -> ContextT:
@@ -127,7 +124,6 @@ def tool_context[ContextT: StandardAgentContext](
     return cast("ContextT", request.runtime.context)
 
 
-# noinspection PyTypeChecker
 def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[StandardAgentContext]:
     context = request.runtime.context
     messages = request.messages

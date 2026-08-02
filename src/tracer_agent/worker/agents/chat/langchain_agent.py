@@ -65,7 +65,6 @@ def build_chat_agent(
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
     middleware.append(model_retry_middleware())
-    # noinspection PyTypeChecker
     return create_agent(
         chat,
         tools=list(tools),

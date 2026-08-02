@@ -66,7 +66,6 @@ class ToolRegistry:
         async def run(**kwargs: Any) -> str:
             return await self.invoke(tool.name, kwargs)
 
-        # noinspection PyTypeChecker
         return StructuredTool(
             name=tool.name,
             description=tool.description,

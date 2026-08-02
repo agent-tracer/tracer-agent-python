@@ -35,7 +35,6 @@ class ValidationGraphContext:
 
 def new_graph(state_schema: type[Any]) -> StateGraph[Any, Any, Any, Any]:
     """요청별 의존성을 Runtime Context로 받는 빈 그래프를 연다."""
-    # noinspection PyTypeChecker
     return StateGraph(state_schema, context_schema=ValidationGraphContext)
 
 
@@ -71,7 +70,6 @@ def add_validation_tail(graph: StateGraph[Any, Any, Any, Any], validation_node: 
     graph.add_edge(EMPTY, END)
 
 
-# noinspection PyTypeChecker
 def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, Any]]]:
     async def run(state: Any, runtime: Runtime[ValidationGraphContext]) -> Mapping[str, Any]:
         context = runtime.context
@@ -101,6 +99,5 @@ def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, Any]]]:
     return run
 
 
-# noinspection PyTypeChecker
 def _route(state: Any, runtime: Runtime[ValidationGraphContext]) -> ValidationRouteName:
     return runtime.context.route_validation(state)

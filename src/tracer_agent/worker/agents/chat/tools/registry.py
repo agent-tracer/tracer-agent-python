@@ -89,7 +89,6 @@ def build_chat_registry(
 
 def _structured(name: str, descriptions: dict[str, str], coroutine: Any) -> StructuredTool:
     # 인자 스키마를 계약 와이어 이름(예: from) 그대로 노출하려면 별칭을 적용한 JSON 스키마를 넘긴다.
-    # noinspection PyTypeChecker
     return StructuredTool(
         name=name,
         description=descriptions.get(name, name),

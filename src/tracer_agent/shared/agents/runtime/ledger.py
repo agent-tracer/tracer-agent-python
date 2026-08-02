@@ -12,11 +12,9 @@ import asyncpg
 from asyncpg.pool import PoolConnectionProxy
 
 # 런타임의 Pool은 첨자를 받지 않으므로 평가가 지연되는 별칭으로만 제네릭 형태를 쓴다.
-# noinspection PyUnresolvedReferences
 type LedgerPool = asyncpg.Pool[asyncpg.Record]
 
 # 풀에서 빌린 연결은 대리자로 오므로 두 형태를 모두 받는다.
-# noinspection PyUnresolvedReferences
 type LedgerConnection = asyncpg.Connection[asyncpg.Record] | PoolConnectionProxy[asyncpg.Record]
 
 type SqlRow = dict[str, Any]

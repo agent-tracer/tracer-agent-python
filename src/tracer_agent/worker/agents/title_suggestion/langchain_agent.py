@@ -37,7 +37,6 @@ def build_title_agent(
     ]
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
-    # noinspection PyTypeChecker
     return create_agent(
         chat,
         tools=list(tools),
