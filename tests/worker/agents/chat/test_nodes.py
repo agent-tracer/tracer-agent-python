@@ -188,3 +188,29 @@ async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로
     )
 
     assert before == after
+
+
+async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선두에만_연속으로_온다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 지난 이력의 human·ai 메시지 뒤에 맥락을 시스템으로 붙이면 Anthropic이 메시지 순서를 거절한다.
+    chat = FakeToolLoopChat(["정리했습니다"])
+    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    req = _request(
+        messages=[
+            {"role": "user", "content": "task-1 상태 알려줘"},
+            {"role": "assistant", "content": "진행 중입니다"},
+            {"role": "user", "content": "task-1 아카이브해줘"},
+        ],
+        summary="앞선 대화 요약",
+        facts=[{"key": "editor", "content": "vim을 쓴다"}],
+        draftCallback=None,
+    )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
+        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
+
+    보낸것 = chat.requests[0]
+    타입들 = [message.type for message in 보낸것]
+    첫_비시스템_위치 = next(index for index, 타입 in enumerate(타입들) if 타입 != "system")
+    assert "system" not in 타입들[첫_비시스템_위치:], f"system 메시지가 human·ai 뒤에 왔다: {타입들}"

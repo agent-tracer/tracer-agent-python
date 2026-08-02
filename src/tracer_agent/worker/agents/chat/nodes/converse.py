@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
@@ -186,10 +186,10 @@ class ConverseNode(GraphNode):
 
     @staticmethod
     def _with_context(messages: list[BaseMessage], context_prompt: str) -> list[BaseMessage]:
-        """턴마다 바뀌는 지시와 요약과 사실을 꼬리에 두어 캐시 접두사가 그대로 남게 한다."""
+        """턴마다 바뀌는 지시와 요약과 사실을 human으로 꼬리에 두어 캐시 접두사도 system 자리도 지킨다."""
         if not context_prompt.strip():
             return messages
-        return [*messages, SystemMessage(content=context_prompt)]
+        return [*messages, HumanMessage(content=context_prompt)]
 
     async def _context(self, state: ChatState) -> tuple[list[ChatHistoryMessage], str | None, list[ChatFact]]:
         if not self._req.agentApiBaseUrl or self._req.messages:

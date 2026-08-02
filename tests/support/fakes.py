@@ -75,6 +75,17 @@ _DEFAULT_PLAN = DispatchPlan.model_validate(
 )
 
 
+def _assert_system_messages_lead(messages: list[Any]) -> None:
+    """Anthropic이 강제하는 자리를 대역도 강제한다: system은 메시지 목록 앞에 연속으로만 온다."""
+    seen_non_system = False
+    for message in messages:
+        if getattr(message, "type", None) == "system":
+            if seen_non_system:
+                raise AssertionError("system 메시지가 human·ai 뒤에 왔다")
+        else:
+            seen_non_system = True
+
+
 class FakeToolLoopChat:
     """턴마다 도구 호출이나 구조화 출력을 순서대로 재생하는 도구 루프 대역이다."""
 
@@ -122,6 +133,7 @@ class FakeToolLoopChat:
         return None
 
     async def ainvoke(self, messages: list[Any]) -> AIMessage:
+        _assert_system_messages_lead(messages)
         self.requests.append(list(messages))
         auto_names = {"ProbeReport", "InspectReport", "TriagePlan"}
         probe_tool = next(
