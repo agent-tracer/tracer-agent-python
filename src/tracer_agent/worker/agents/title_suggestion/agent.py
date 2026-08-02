@@ -14,13 +14,13 @@ from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
 from ..runtime.llm.structured_agent import recursion_config
-from ..runtime.node import node_registry
+from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .graph import TITLE_SUGGESTION_GRAPH
+from .graph import TITLE_SUGGESTION_GRAPH, TITLE_SUGGESTION_NODE_NAMES
 from .nodes.candidate import (
     EmptyNode,
     FinalizeNode,
@@ -67,9 +67,9 @@ async def run_title_suggestion(
     context = ValidationGraphContext(
         AGENT_NAME,
         usage,
-        node_registry(
-            [
-                InvestigateNode(
+        NodeRegistry(
+            {
+                InvestigateNode.name: InvestigateNode(
                     req,
                     reader,
                     usage,
@@ -81,8 +81,8 @@ async def run_title_suggestion(
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
                 ),
-                ValidateCandidateNode(usage),
-                RepairNode(
+                ValidateCandidateNode.name: ValidateCandidateNode(usage),
+                RepairNode.name: RepairNode(
                     req,
                     reader,
                     usage,
@@ -94,9 +94,10 @@ async def run_title_suggestion(
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
                 ),
-                FinalizeNode(),
-                EmptyNode(),
-            ]
+                FinalizeNode.name: FinalizeNode(),
+                EmptyNode.name: EmptyNode(),
+            },
+            TITLE_SUGGESTION_NODE_NAMES,
         ),
         build_routes(usage, ValidateCandidateNode.name),
     )

@@ -14,13 +14,13 @@ from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
 from ..runtime.llm.structured_agent import recursion_config
-from ..runtime.node import node_registry
+from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .graph import PROBE_WALL_CLOCK_CEILING_S, RECIPE_SCAN_GRAPH
+from .graph import PROBE_WALL_CLOCK_CEILING_S, RECIPE_SCAN_GRAPH, RECIPE_SCAN_NODE_NAMES
 from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import EmptyNode, FinalizeNode, wire_provenance
@@ -72,12 +72,12 @@ async def run_recipe_scan(
     context = ValidationGraphContext(
         AGENT_NAME,
         usage,
-        node_registry(
-            [
-                SurveyNode(
+        NodeRegistry(
+            {
+                SurveyNode.name: SurveyNode(
                     req, usage, chat, fallback_chat, budget, survey_lease, prompts["surveySystemPrompt"]
                 ),
-                ProbeNode(
+                ProbeNode.name: ProbeNode(
                     req,
                     reader,
                     search_reader,
@@ -89,7 +89,7 @@ async def run_recipe_scan(
                     system_prompt=prompts["probeSystemPrompt"],
                     wall_clock_ceiling_s=PROBE_WALL_CLOCK_CEILING_S,
                 ),
-                InvestigateNode(
+                InvestigateNode.name: InvestigateNode(
                     req,
                     reader,
                     search_reader,
@@ -103,8 +103,8 @@ async def run_recipe_scan(
                     language_directives=prompt.language_directives,
                     synthesis_floor_lease=synthesis_floor_lease,
                 ),
-                ValidateCandidateNode(usage),
-                RepairNode(
+                ValidateCandidateNode.name: ValidateCandidateNode(usage),
+                RepairNode.name: RepairNode(
                     req,
                     reader,
                     search_reader,
@@ -118,9 +118,10 @@ async def run_recipe_scan(
                     language_directives=prompt.language_directives,
                     lease=repair_lease,
                 ),
-                FinalizeNode(),
-                EmptyNode(),
-            ]
+                FinalizeNode.name: FinalizeNode(),
+                EmptyNode.name: EmptyNode(),
+            },
+            RECIPE_SCAN_NODE_NAMES,
         ),
         build_routes(usage, ValidateCandidateNode.name),
     )

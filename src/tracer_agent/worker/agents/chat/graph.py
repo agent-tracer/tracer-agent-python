@@ -14,4 +14,7 @@ observed(_graph, ConverseNode.name)
 _graph.add_edge(START, ConverseNode.name)
 _graph.add_edge(ConverseNode.name, END)
 
+# 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
+CHAT_NODE_NAMES: frozenset[str] = frozenset(name for name in _graph.nodes if not name.startswith("__"))
+
 CHAT_GRAPH = _graph.compile()

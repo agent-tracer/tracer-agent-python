@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
-from .validation_graph import ValidationNode
+type ValidationNode = Callable[[Any], Awaitable[Mapping[str, Any]]]
 
 
 class GraphNode[InputT, UpdateT: Mapping[str, Any]](ABC):
@@ -19,6 +19,22 @@ class GraphNode[InputT, UpdateT: Mapping[str, Any]](ABC):
         """자기 상태 부분집합이나 분기 페이로드로 실행해 자기 갱신 타입을 낸다."""
 
 
-def node_registry(nodes: Sequence[GraphNode[Any, Any]]) -> dict[str, ValidationNode]:
-    """노드들을 이름을 키로 하는 검증 그래프용 노드 사전으로 모은다."""
-    return {node.name: node.run for node in nodes}
+class NodeRegistry:
+    """그래프가 요구하는 이름과 등록된 노드가 맞는지 조립 시점에 대조한다."""
+
+    def __init__(self, nodes: Mapping[str, GraphNode[Any, Any]], expected: frozenset[str]) -> None:
+        names = set(nodes)
+        missing = expected - names
+        if missing:
+            raise ValueError(f"graph nodes are not registered: {sorted(missing)}")
+        extra = names - expected
+        if extra:
+            raise ValueError(f"registered nodes are not on the graph: {sorted(extra)}")
+        drifted = sorted(name for name, node in nodes.items() if node.name != name)
+        if drifted:
+            raise ValueError(f"registered nodes disagree with their own name: {drifted}")
+        self._nodes: dict[str, ValidationNode] = {name: node.run for name, node in nodes.items()}
+
+    def __getitem__(self, name: str) -> ValidationNode:
+        """그래프가 진입한 노드의 실행을 낸다."""
+        return self._nodes[name]

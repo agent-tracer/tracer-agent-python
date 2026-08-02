@@ -16,4 +16,9 @@ add_validation_tail(_graph, ValidateCandidateNode.name)
 _graph.add_edge(START, InvestigateNode.name)
 _graph.add_edge(InvestigateNode.name, ValidateCandidateNode.name)
 
+# 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
+TITLE_SUGGESTION_NODE_NAMES: frozenset[str] = frozenset(
+    name for name in _graph.nodes if not name.startswith("__")
+)
+
 TITLE_SUGGESTION_GRAPH = DurableGraph(_graph)

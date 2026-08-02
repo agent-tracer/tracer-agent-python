@@ -14,13 +14,13 @@ from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
 from ..runtime.llm.structured_agent import recursion_config
-from ..runtime.node import node_registry
+from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .graph import TASK_CLEANUP_GRAPH
+from .graph import TASK_CLEANUP_GRAPH, TASK_CLEANUP_NODE_NAMES
 from .nodes.decision import InvestigateNode, RepairNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
 from .nodes.result import EmptyNode, FinalizeNode
@@ -63,9 +63,9 @@ async def run_task_cleanup(
     context = ValidationGraphContext(
         AGENT_NAME,
         usage,
-        node_registry(
-            [
-                TriageNode(
+        NodeRegistry(
+            {
+                TriageNode.name: TriageNode(
                     req,
                     reader,
                     usage,
@@ -75,7 +75,7 @@ async def run_task_cleanup(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["triageSystemPrompt"],
                 ),
-                InspectNode(
+                InspectNode.name: InspectNode(
                     req,
                     reader,
                     usage,
@@ -85,7 +85,7 @@ async def run_task_cleanup(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["inspectSystemPrompt"],
                 ),
-                InvestigateNode(
+                InvestigateNode.name: InvestigateNode(
                     req,
                     reader,
                     usage,
@@ -97,8 +97,8 @@ async def run_task_cleanup(
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
                 ),
-                ValidateDecisionsNode(usage),
-                RepairNode(
+                ValidateDecisionsNode.name: ValidateDecisionsNode(usage),
+                RepairNode.name: RepairNode(
                     req,
                     reader,
                     usage,
@@ -110,9 +110,10 @@ async def run_task_cleanup(
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
                 ),
-                FinalizeNode(),
-                EmptyNode(),
-            ]
+                FinalizeNode.name: FinalizeNode(),
+                EmptyNode.name: EmptyNode(),
+            },
+            TASK_CLEANUP_NODE_NAMES,
         ),
         build_routes(usage, ValidateDecisionsNode.name),
     )

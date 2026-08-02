@@ -12,12 +12,12 @@ from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.client import make_chat
 from ..runtime.llm.structured_agent import recursion_config, recursion_limit_for
-from ..runtime.node import node_registry
+from ..runtime.node import NodeRegistry
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.validation_graph import FINALIZE, ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
 from .drafts import DraftPublisher
-from .graph import CHAT_GRAPH
+from .graph import CHAT_GRAPH, CHAT_NODE_NAMES
 from .nodes.converse import ConverseNode
 from .prompts import build_system_prompt
 
@@ -95,7 +95,9 @@ async def run_chat(
         drafts=drafts,
         prompt=prompt,
     )
-    context = ValidationGraphContext(AGENT_NAME, usage, node_registry([node]), _no_validation)
+    context = ValidationGraphContext(
+        AGENT_NAME, usage, NodeRegistry({ConverseNode.name: node}, CHAT_NODE_NAMES), _no_validation
+    )
     final = await CHAT_GRAPH.ainvoke(
         _initial_state(req),
         context=context,

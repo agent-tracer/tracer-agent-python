@@ -100,4 +100,7 @@ _graph.add_conditional_edges(
     InvestigateNode.name, _after_investigate, [ProbeNode.name, ValidateCandidateNode.name]
 )
 
+# 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
+RECIPE_SCAN_NODE_NAMES: frozenset[str] = frozenset(name for name in _graph.nodes if not name.startswith("__"))
+
 RECIPE_SCAN_GRAPH = DurableGraph(_graph)

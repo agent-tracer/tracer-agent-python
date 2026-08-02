@@ -12,8 +12,8 @@ from langgraph.runtime import Runtime
 from langgraph.types import RetryPolicy, TimeoutPolicy
 
 from .execution.trace import ExecutionTrace
+from .node import NodeRegistry
 
-type ValidationNode = Callable[[Any], Awaitable[Mapping[str, Any]]]
 type ValidationRouteName = Literal["repair", "finalize", "empty"]
 type ValidationRoute = Callable[[Any], ValidationRouteName]
 type NodeErrorHandler = Callable[..., Any]
@@ -29,7 +29,7 @@ class ValidationGraphContext:
 
     agent_name: str
     trace: ExecutionTrace
-    nodes: dict[str, ValidationNode]
+    nodes: NodeRegistry
     route_validation: ValidationRoute
 
 
