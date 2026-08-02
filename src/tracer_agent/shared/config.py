@@ -9,6 +9,7 @@ from functools import lru_cache
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 
 # 배포가 이 환경변수로 큐 접두사를 주며, 나란히 띄운 두 구현체는 다른 값을 받아 서로 다른 큐를 본다.
 TASK_QUEUE_PREFIX_ENV = "AGENT_TASK_QUEUE_PREFIX"
@@ -91,8 +92,12 @@ class Settings(BaseSettings):
         )
 
     async def connect_temporal(self) -> Client:
-        """설정한 Temporal에 붙는 연결 하나를 연다."""
-        return await Client.connect(self.temporal_address, namespace=self.temporal_namespace)
+        """설정한 Temporal에 붙는 연결 하나를 열며 페이로드를 도메인 모델 그대로 싣는다."""
+        return await Client.connect(
+            self.temporal_address,
+            namespace=self.temporal_namespace,
+            data_converter=pydantic_data_converter,
+        )
 
     def agent_dsn(self) -> str:
         """앱 계정으로 실행 원장에 붙는 접속 문자열을 만든다."""
