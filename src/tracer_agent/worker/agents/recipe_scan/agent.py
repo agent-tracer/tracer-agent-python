@@ -16,7 +16,7 @@ from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .graph import RECIPE_SCAN_GRAPH
+from .graph import PROBE_WALL_CLOCK_CEILING_S, RECIPE_SCAN_GRAPH
 from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import EmptyNode, FinalizeNode, wire_provenance
@@ -68,6 +68,7 @@ async def run_recipe_scan(
                     budget,
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["probeSystemPrompt"],
+                    wall_clock_ceiling_s=PROBE_WALL_CLOCK_CEILING_S,
                 ),
                 InvestigateNode(
                     req,

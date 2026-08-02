@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from langchain_core.language_models import BaseChatModel
@@ -20,6 +21,7 @@ from ...runtime.llm.budget import ExecutionBudget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
+from ...runtime.timeouts import weighted_wall_clock_s
 from ..failures import WORKER_FAILED
 from ..langchain_agent import build_recipe_agent
 from ..prompts import build_probe_prompt
@@ -52,6 +54,7 @@ class ProbeNode(GraphNode):
         *,
         agent_name: str,
         system_prompt: str,
+        wall_clock_ceiling_s: float,
     ) -> None:
         self._req = req
         self._reader = reader
@@ -62,6 +65,7 @@ class ProbeNode(GraphNode):
         self._budget = budget
         self._agent_name = agent_name
         self._system_prompt = system_prompt
+        self._wall_clock_ceiling_s = wall_clock_ceiling_s
 
     async def run(self, payload: ProbeDispatch) -> ProbeUpdate:
         req = self._req
@@ -71,6 +75,7 @@ class ProbeNode(GraphNode):
         catalog = ProvenanceCatalog()
         probe_name = f"{self._agent_name}:{assignment.probe}"
         budget = self._budget.new_loop(probe_name, req.model, max_cost_usd=share)
+        wall_clock_s = weighted_wall_clock_s(self._wall_clock_ceiling_s, share, req.limits.budgetUsd)
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
             registry = build_recipe_registry(
@@ -89,23 +94,26 @@ class ProbeNode(GraphNode):
                 fallback_chat=self._fallback_chat,
                 max_turns=self._req.limits.maxTurns,
             )
-            result = await invoke_structured_agent(
-                agent,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": build_probe_prompt(req.taskId, assignment.question),
-                    }
-                ],
-                context=StandardAgentContext(
-                    agent_name=probe_name,
-                    trace=self._usage,
-                    budget=budget,
-                    max_model_turns=self._req.limits.maxTurns,
+            result = await asyncio.wait_for(
+                invoke_structured_agent(
+                    agent,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": build_probe_prompt(req.taskId, assignment.question),
+                        }
+                    ],
+                    context=StandardAgentContext(
+                        agent_name=probe_name,
+                        trace=self._usage,
+                        budget=budget,
+                        max_model_turns=self._req.limits.maxTurns,
+                    ),
+                    response_type=ProbeReport,
+                    recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
+                    missing_response=f"{assignment.probe} probe produced no structured report",
                 ),
-                response_type=ProbeReport,
-                recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
-                missing_response=f"{assignment.probe} probe produced no structured report",
+                timeout=wall_clock_s,
             )
             report = result.response
         except Exception as exc:

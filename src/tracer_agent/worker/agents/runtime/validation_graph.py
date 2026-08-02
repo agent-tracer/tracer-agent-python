@@ -9,12 +9,14 @@ from typing import Any, Literal, cast
 
 from langgraph.graph import END, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import RetryPolicy, TimeoutPolicy
 
 from .execution.trace import ExecutionTrace
 
 type ValidationNode = Callable[[Any], Awaitable[dict[str, Any]]]
 type ValidationRouteName = Literal["repair", "finalize", "empty"]
 type ValidationRoute = Callable[[Any], ValidationRouteName]
+type NodeErrorHandler = Callable[..., Any]
 
 REPAIR: ValidationRouteName = "repair"
 FINALIZE: ValidationRouteName = "finalize"
@@ -37,9 +39,22 @@ def new_graph(state_schema: type[Any]) -> StateGraph[Any, Any, Any, Any]:
     return StateGraph(state_schema, context_schema=ValidationGraphContext)
 
 
-def observed(graph: StateGraph[Any, Any, Any, Any], node_name: str) -> None:
+def observed(
+    graph: StateGraph[Any, Any, Any, Any],
+    node_name: str,
+    *,
+    retry_policy: RetryPolicy | None = None,
+    error_handler: NodeErrorHandler | None = None,
+    timeout: TimeoutPolicy | None = None,
+) -> None:
     """노드를 그래프에 올리며 진입·완료·실패를 실행 궤적에 남긴다."""
-    graph.add_node(node_name, cast(Any, _dispatch(node_name)))
+    graph.add_node(
+        node_name,
+        cast(Any, _dispatch(node_name)),
+        retry_policy=retry_policy,
+        error_handler=cast(Any, error_handler),
+        timeout=timeout,
+    )
 
 
 def add_validation_tail(graph: StateGraph[Any, Any, Any, Any], validation_node: str) -> None:

@@ -7,6 +7,7 @@ from typing import Final
 
 from anthropic import APIConnectionError, APIError, APIStatusError
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+from langgraph.errors import NodeTimeoutError
 
 from tracer_agent.shared.agents.shared.models import AgentErrorDTO
 
@@ -95,6 +96,9 @@ def classify_exception(err: BaseException) -> AgentErrorDTO:
         return AgentErrorDTO(subtype=MAX_TOKENS, summary=_redact_error_message(str(err)))
     # 도구 예산을 다 쓴 실행은 같은 예산으로 재시도해도 같은 자리에서 끝나므로 비재시도로 넘긴다.
     if isinstance(err, ModelCallLimitExceededError):
+        return AgentErrorDTO(subtype=MAX_TURNS_EXCEEDED, summary=_redact_error_message(str(err)))
+    # 노드 하나의 벽시계 초과이며, Temporal 경계에서 잡 전체가 걸리는 DeadlineExceeded와는 다른 자리다.
+    if isinstance(err, NodeTimeoutError):
         return AgentErrorDTO(subtype=MAX_TURNS_EXCEEDED, summary=_redact_error_message(str(err)))
     # Anthropic SDK에서 APIConnectionError는 APIError의 서브클래스다.
     if isinstance(err, APIConnectionError):
