@@ -13,6 +13,7 @@ from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.intake.models import PostMessagePayload
 from tracer_agent.shared.agents.chat.intake.turn import ChatIntakeRejected, ChatTurnIntake
 from tracer_agent.shared.agents.runtime.ledger import UniqueViolation
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 NOW = datetime(2026, 7, 26, 0, 5, tzinfo=UTC)
 
@@ -180,12 +181,10 @@ async def test_이미_돌고_있는_실행에는_다시_신호하지_않는다(
     assert dispatch.signaled == []
 
 
-async def test_접수는_실행에_구현체를_적지_않는다(
-    store: SqliteLedgerSql, dispatch: RecordingDispatch
-) -> None:
+async def test_접수는_실행에_자기_축을_적는다(store: SqliteLedgerSql, dispatch: RecordingDispatch) -> None:
     await ChatTurnIntake(store, dispatch).enqueue("u1", "t1", payload(), NOW)
 
-    assert store.rows("chat_executions")[0]["requested_backend"] is None
+    assert store.rows("chat_executions")[0]["requested_backend"] == AGENT_BACKEND
 
 
 async def test_진행_중인_턴이_있으면_접수하지_않는다(

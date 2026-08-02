@@ -15,6 +15,7 @@ from temporalio.testing import ActivityEnvironment
 from tests.support.prompts import CHAT_PROMPT
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.shared.workflows.chat_spec import (
     STOP_COMPLETED,
     THREAD_BUSY_FAILURE,
@@ -66,6 +67,7 @@ def execution_row(**overrides: Any) -> dict[str, Any]:
         "client_request_id": "r1",
         "input_hash": "h1",
         "status": "queued",
+        "requested_backend": AGENT_BACKEND,
         "language": "ko",
         "model": "claude-haiku-4-5",
         "created_at": NOW,

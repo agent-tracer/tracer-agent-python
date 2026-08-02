@@ -11,6 +11,7 @@ import pytest
 
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.worker.workflows.recovery import resume_active_executions
 
 NOW = datetime(2026, 7, 26, 12, tzinfo=UTC)
@@ -55,6 +56,7 @@ def execution_row(**overrides: Any) -> dict[str, Any]:
         "client_request_id": "r1",
         "input_hash": "h1",
         "status": "queued",
+        "requested_backend": AGENT_BACKEND,
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -91,6 +93,29 @@ async def test_아직_끝나지_않은_턴을_접수_순서대로_다시_태운�
 
     assert swept.resumed == 2
     assert dispatch.signaled == [("e1", "t1"), ("e2", "t2")]
+
+
+async def test_다른_축이_접수한_턴은_다시_태우지_않는다(store: SqliteLedgerSql) -> None:
+    store.seed("chat_executions", [execution_row(requested_backend="ts")])
+    dispatch = RecordingDispatch()
+
+    swept = await resume_active_executions(SingleSqlSource(store), dispatch, NOW)
+
+    assert swept.resumed == 0
+    assert dispatch.signaled == []
+
+
+async def test_다른_축이_접수한_running은_되돌리지_않는다(store: SqliteLedgerSql) -> None:
+    store.seed(
+        "chat_executions",
+        [execution_row(status="running", updated_at=STALE, requested_backend="ts")],
+    )
+    dispatch = RecordingDispatch()
+
+    swept = await resume_active_executions(SingleSqlSource(store), dispatch, NOW)
+
+    assert swept.recovered == 0
+    assert store.rows("chat_executions")[0]["status"] == "running"
 
 
 async def test_이미_끝난_턴은_다시_태우지_않는다(store: SqliteLedgerSql) -> None:

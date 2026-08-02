@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ...runtime.ledger import LedgerSql, SqlRow
+from ...shared.axis import AGENT_BACKEND
 
 QUEUED = "queued"
 
@@ -36,7 +37,7 @@ INSERT INTO chat_executions (
     requested_backend, model, language, draft_text, draft_seq, attempt, usage,
     created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, 'queued', NULL, $7, $8, '', 0, 0, $9, $10, $10)
+VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9, '', 0, 0, $10, $11, $11)
 RETURNING *
 """
 
@@ -88,7 +89,7 @@ class ChatIntakeLedger:
         language: str | None,
         now: datetime,
     ) -> SqlRow:
-        """이번 턴을 태울 실행을 대기 상태로 새로 세운다."""
+        """이 접수구가 받았다는 것이 곧 축이므로 축을 함께 적고 이번 턴을 태울 실행을 대기 상태로 세운다."""
         rows = await self._sql.fetch(
             _INSERT_QUEUED_EXECUTION,
             execution_id,
@@ -97,6 +98,7 @@ class ChatIntakeLedger:
             user_message_id,
             client_request_id,
             input_hash,
+            AGENT_BACKEND,
             model,
             language,
             {},

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from ..runtime.ledger import LedgerSql, SqlRow, UniqueViolation
+from ..shared.axis import AGENT_BACKEND
 
 CLAIMED = "claimed"
 STALE = "stale"
@@ -17,20 +18,21 @@ _SELECT = "SELECT * FROM chat_executions WHERE id = $1"
 _SELECT_ACTIVE = """
 SELECT id, thread_id FROM chat_executions
  WHERE status IN ('queued', 'running')
+   AND requested_backend = $1
  ORDER BY id
 """
 
 _RECOVER_STALE_RUNNING = """
 UPDATE chat_executions
    SET status = 'queued', started_at = NULL, updated_at = $1
- WHERE status = 'running' AND updated_at < $2
+ WHERE status = 'running' AND updated_at < $2 AND requested_backend = $3
 RETURNING id
 """
 
 _RECOVER_STALE_RUNNING_IN_THREAD = """
 UPDATE chat_executions
    SET status = 'queued', started_at = NULL, updated_at = $1
- WHERE status = 'running' AND updated_at < $2 AND thread_id = $3
+ WHERE status = 'running' AND updated_at < $2 AND requested_backend = $3 AND thread_id = $4
 RETURNING id
 """
 
@@ -166,17 +168,19 @@ class ChatExecutionLedger:
         return rows[0] if rows else None
 
     async def list_active(self) -> list[SqlRow]:
-        """아직 끝나지 않은 실행을 접수 순서대로 낸다."""
-        return await self._sql.fetch(_SELECT_ACTIVE)
+        """이 축이 접수한 것 가운데 아직 끝나지 않은 실행을 접수 순서대로 낸다."""
+        return await self._sql.fetch(_SELECT_ACTIVE, AGENT_BACKEND)
 
     async def recover_stale_running(
         self, idle_before: datetime, now: datetime, thread_id: str | None = None
     ) -> int:
-        """갱신이 끊긴 running 실행을 대기 자리로 되돌리고 되돌린 개수를 낸다."""
+        """이 축이 접수한 것 가운데 갱신이 끊긴 running 실행을 대기 자리로 되돌리고 개수를 낸다."""
         if thread_id is None:
-            rows = await self._sql.fetch(_RECOVER_STALE_RUNNING, now, idle_before)
+            rows = await self._sql.fetch(_RECOVER_STALE_RUNNING, now, idle_before, AGENT_BACKEND)
         else:
-            rows = await self._sql.fetch(_RECOVER_STALE_RUNNING_IN_THREAD, now, idle_before, thread_id)
+            rows = await self._sql.fetch(
+                _RECOVER_STALE_RUNNING_IN_THREAD, now, idle_before, AGENT_BACKEND, thread_id
+            )
         return len(rows)
 
     async def claim_queued(self, execution_id: str, now: datetime) -> str:

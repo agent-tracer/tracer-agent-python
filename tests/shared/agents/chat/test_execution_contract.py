@@ -12,6 +12,7 @@ import pytest
 from tests.support.contract import agent_cases
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger, ChatExecutionSpend
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 CONTRACT = agent_cases("chat")["cases"]
 
@@ -46,6 +47,7 @@ def seed_row(case_row: Mapping[str, Any]) -> dict[str, Any]:
         "client_request_id": f"request-{identifier}",
         "input_hash": f"hash-{identifier}",
         "status": "queued",
+        "requested_backend": AGENT_BACKEND,
     }
     for source in (CONTRACT["row"], case_row):
         for key, value in source.items():
