@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, AXIS_ATTRIBUTE_KEY
 from tracer_agent.shared.agents.shared.models import UsageDTO
 
 JOB_ID_ATTRIBUTE = "agent_tracer.job.id"
@@ -44,7 +44,7 @@ def build_invoke_agent_attributes(
         "gen_ai.agent.name": agent_name,
         "gen_ai.request.model": model,
         JOB_KIND_ATTRIBUTE: AGENT_JOB_KIND.get(agent_name),
-        BACKEND_ATTRIBUTE: AGENT_AXIS,
+        BACKEND_ATTRIBUTE: AGENT_BACKEND,
     }
     return {key: value for key, value in attrs.items() if value is not None}
 

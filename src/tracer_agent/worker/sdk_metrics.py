@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
 
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_LABEL_NAME
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, AXIS_LABEL_NAME
 
 # 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
 METRICS_PATH = Path(__file__).resolve().parents[3] / "contract" / "workflow" / "metrics.yaml"
@@ -35,7 +35,7 @@ def sdk_metrics_telemetry() -> TelemetryConfig:
             counters_total_suffix=bool(declared["countersTotalSuffix"]),
             unit_suffix=bool(declared["unitSuffix"]),
         ),
-        global_tags={AXIS_LABEL_NAME: AGENT_AXIS},
+        global_tags={AXIS_LABEL_NAME: AGENT_BACKEND},
     )
 
 

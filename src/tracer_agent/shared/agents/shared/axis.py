@@ -51,6 +51,6 @@ def _grounded(axis: AgentAxis) -> AgentAxis:
     return axis
 
 
-AGENT_AXIS: AgentAxis = _grounded("python")
+AGENT_BACKEND: AgentAxis = _grounded("python")
 AXIS_ATTRIBUTE_KEY = axis_attribute_key()
 AXIS_LABEL_NAME = axis_label_name()

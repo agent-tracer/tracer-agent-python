@@ -14,7 +14,7 @@ from tests.support.contract import wire_contract
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionSpend
 from tracer_agent.shared.agents.runtime.wakeup import UpdatePublisher
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.shared.agents.shared.models import AgentStepDTO
 from tracer_agent.shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from tracer_agent.worker.agents.chat.execution_writer import ChatExecutionWriter, ChatTurnOutcome
@@ -200,7 +200,7 @@ async def test_완료가_스레드의_백엔드와_정렬_기준을_민다(store
     assert await ChatExecutionWriter(store).finalize(outcome(), NOW) is True
 
     thread = store.rows("chat_threads")[0]
-    assert thread["backend"] == AGENT_AXIS
+    assert thread["backend"] == AGENT_BACKEND
     assert thread["updated_at"] == NOW
 
 

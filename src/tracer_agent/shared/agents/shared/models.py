@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from .axis import AGENT_AXIS, AgentAxis
+from .axis import AGENT_BACKEND, AgentAxis
 
 
 def _strip(value: object) -> object:
@@ -222,7 +222,7 @@ class AgentRunObservationDTO(BaseModel):
     attemptId: TrimmedStr
     jobId: str | None
     agentName: TrimmedStr
-    backend: AgentAxis = AGENT_AXIS
+    backend: AgentAxis = AGENT_BACKEND
     modelRequested: TrimmedStr
     modelActual: str | None
     promptVersion: TrimmedStr

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from ..agents.runtime.ledger import LedgerSql, SqlRow, UniqueViolation
-from ..agents.shared.axis import AGENT_AXIS
+from ..agents.shared.axis import AGENT_BACKEND
 from ..agents.shared.models import AgentStepDTO
 
 _CLAIM = """
@@ -158,7 +158,7 @@ class JobLedger:
                 user_id,
                 kind,
                 executor,
-                AGENT_AXIS,
+                AGENT_BACKEND,
                 task_id,
                 idempotency_key,
                 idempotency_input_hash,

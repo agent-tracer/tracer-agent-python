@@ -1,4 +1,4 @@
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY, declared_axes
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, AXIS_ATTRIBUTE_KEY, declared_axes
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_config
 from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceSafeMetadata
 
@@ -6,7 +6,7 @@ from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceSafeMet
 def test_추적_뿌리_메타데이터가_langsmith_설정을_이룬다():
     metadata = TraceSafeMetadata(
         agent_name="test_agent",
-        backend=AGENT_AXIS,
+        backend=AGENT_BACKEND,
         model_requested="claude-3-5-sonnet",
         prompt_version="v1.0",
         execution_id="e1",
@@ -25,6 +25,6 @@ def test_추적_뿌리_메타데이터가_langsmith_설정을_이룬다():
     assert config["metadata"] == ls_meta
     assert config["run_name"] == "test_agent"
     assert "test_agent" in config["tags"]
-    assert AGENT_AXIS in config["tags"]
+    assert AGENT_BACKEND in config["tags"]
     assert "v1.0" in config["tags"]
     assert config.get("run_id") is not None

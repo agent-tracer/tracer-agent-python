@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from tracer_agent.shared.agents.shared.axis import AGENT_AXIS, AXIS_ATTRIBUTE_KEY, AgentAxis
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, AXIS_ATTRIBUTE_KEY, AgentAxis
 from tracer_agent.shared.agents.shared.redaction import (
     RedactableScalar,
     RedactionStage,
@@ -21,7 +21,7 @@ class TraceSafeMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     agent_name: str
-    backend: AgentAxis = AGENT_AXIS
+    backend: AgentAxis = AGENT_BACKEND
     model_requested: str
     prompt_version: str
     tool_contract_version: str | None = None
