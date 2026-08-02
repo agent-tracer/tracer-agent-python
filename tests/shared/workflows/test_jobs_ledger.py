@@ -222,3 +222,65 @@ async def test_남의_잡_궤적은_읽히지_않는다(store: SqliteLedgerSql) 
     await ledger.record_steps("j1", "u1", 1, [AgentStepDTO(seq=0, role="assistant", content="mine")], NOW)
 
     assert await ledger.steps("j1", "u2") == []
+
+
+async def test_비어_있는_잡을_부른_실행기의_리스로_가져간다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+
+    assert await ledger.claim_lease("j1", "runner-1", LATER, NOW) is True
+
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "running"
+    assert row["lease_owner"] == "runner-1"
+
+
+async def test_남이_쥔_살아_있는_리스는_가져가지_못한다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim_lease("j1", "runner-1", LATER, NOW)
+
+    assert await ledger.claim_lease("j1", "runner-2", LATER, NOW) is False
+
+
+async def test_만료된_리스는_다른_실행기가_가져간다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim_lease("j1", "runner-1", NOW, NOW)
+
+    assert await ledger.claim_lease("j1", "runner-2", LATER, LATER) is True
+
+
+async def test_쥐고_있는_실행기만_리스를_늘린다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim_lease("j1", "runner-1", LATER, NOW)
+
+    assert await ledger.renew_lease("j1", "runner-1", LATER, NOW) is True
+    assert await ledger.renew_lease("j1", "runner-2", LATER, NOW) is False
+
+
+async def test_리스를_쥔_실행기만_잡을_종결한다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim_lease("j1", "runner-1", LATER, NOW)
+
+    assert await ledger.settle_with_lease("j1", "runner-2", "completed", {}, None, LATER) is False
+    assert await ledger.settle_with_lease("j1", "runner-1", "completed", {"rules": []}, None, LATER) is True
+
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "completed"
+    assert row["lease_owner"] is None
+
+
+async def test_리스를_놓으면_잡이_곧바로_대기로_돌아간다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim_lease("j1", "runner-1", LATER, NOW)
+
+    assert await ledger.release_lease("j1", "runner-2", LATER) is False
+    assert await ledger.release_lease("j1", "runner-1", LATER) is True
+
+    row = store.rows("ai_jobs")[0]
+    assert row["status"] == "pending"
+    assert row["lease_owner"] is None

@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
+
 from .jobs_spec import AgentJobKind
+
+# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
+_JOB_KINDS_PATH = Path(__file__).resolve().parents[4] / "contract" / "wire" / "job.kinds.json"
+
+
+@lru_cache(maxsize=1)
+def lease_ttl_ms() -> int:
+    """리스가 이만큼 살아 있고 하트비트가 이보다 잦아야 다른 실행기가 같은 잡을 가져가지 않는다."""
+    document = json.loads(_JOB_KINDS_PATH.read_text(encoding="utf-8"))
+    return int(document["lease"]["ttlMs"])
+
 
 TEMPORAL_EXECUTOR = "temporal"
 LOCAL_EXECUTOR = "local"

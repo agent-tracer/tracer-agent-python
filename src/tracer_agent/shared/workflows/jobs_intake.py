@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -12,7 +13,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
-from ..agents.runtime.dependencies import ExecutionSql, UserId
+from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
+from ..agents.runtime.ledger import SqlSource
 from ..agents.shared.wire import SuccessEnvelope, error_responses
 from .jobs_anchor import RuleAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
@@ -24,12 +26,17 @@ from .jobs_input import (
     input_hash,
     task_id_of,
 )
-from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR, runs_locally
+from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR, lease_ttl_ms, runs_locally
 from .jobs_ledger import JobLedger
-from .jobs_view import job_dto
+from .jobs_view import iso, job_dto
 
 JOBS_PATH = "/api/agent/jobs"
 JOB_CANCEL_PATH = f"{JOBS_PATH}/{{execution_id}}/cancel"
+JOB_START_PATH = f"{JOBS_PATH}/{{execution_id}}/start"
+JOB_LEASE_PATH = f"{JOBS_PATH}/{{execution_id}}/lease"
+JOB_RESULTS_PATH = f"{JOBS_PATH}/{{execution_id}}/results"
+JOB_FAIL_PATH = f"{JOBS_PATH}/{{execution_id}}/fail"
+JOB_RELEASE_PATH = f"{JOBS_PATH}/{{execution_id}}/release"
 ACCEPTED_STATUS = 202
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 INVALID_RULE_ANCHOR = (
@@ -44,6 +51,7 @@ IDEMPOTENCY_CONFLICT = (
     "Idempotency key was already used with different job input",
 )
 ENVELOPE_UNAVAILABLE = (502, "job.envelope-unavailable", "Could not obtain model and credential envelope")
+LEASE_HELD = (409, "job.lease-held", "Job lease is held by another runner")
 
 
 class JobEnqueueBody(BaseModel):
@@ -205,3 +213,134 @@ async def _read_body(request: Request) -> dict[str, Any] | None:
 
 def _details(invalid: ValidationError) -> Any:
     return json.loads(invalid.json(include_url=False, include_context=False, include_input=False))
+
+
+class JobReportBody(BaseModel):
+    """실행기가 만든 규칙과 그 근거이며 잡의 산출물 자리에 그대로 실린다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rules: list[dict[str, Any]]
+    skipped: list[str] | None = None
+
+
+class JobFailureBody(BaseModel):
+    """실행기가 보고하는 실패이며 원장의 오류 자리에 남는다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1)
+    retryable: bool = False
+
+
+@router.post(JOB_START_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+async def claim_job(
+    execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
+) -> JSONResponse:
+    """대기 중인 잡 하나를 부른 실행기의 리스로 가져간다."""
+    now = datetime.now(UTC)
+    async with source.connect() as sql:
+        ledger = JobLedger(sql)
+        row = await ledger.find(execution_id)
+        if row is None or row["user_id"] != user_id:
+            return error_envelope(*NOT_FOUND)
+        expires_at = now + timedelta(milliseconds=lease_ttl_ms())
+        if not await ledger.claim_lease(execution_id, owner, expires_at, now):
+            return error_envelope(*LEASE_HELD)
+    return JSONResponse(status_code=200, content={"ok": True, "data": _lease(owner, expires_at)})
+
+
+@router.post(JOB_LEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
+async def renew_job_lease(
+    execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
+) -> JSONResponse:
+    """실행이 길어지는 동안 쥔 리스의 수명을 늘린다."""
+    now = datetime.now(UTC)
+    async with source.connect() as sql:
+        ledger = JobLedger(sql)
+        row = await ledger.find(execution_id)
+        if row is None or row["user_id"] != user_id:
+            return error_envelope(*NOT_FOUND)
+        expires_at = now + timedelta(milliseconds=lease_ttl_ms())
+        if not await ledger.renew_lease(execution_id, owner, expires_at, now):
+            held = _lease_of(row, owner, now)
+            return JSONResponse(status_code=200, content={"ok": True, "data": held})
+    return JSONResponse(status_code=200, content={"ok": True, "data": _lease(owner, expires_at)})
+
+
+@router.post(JOB_RESULTS_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+async def report_job_result(
+    execution_id: str,
+    body: JobReportBody,
+    source: ExecutionSql,
+    user_id: UserId,
+    owner: LeaseOwner,
+) -> JSONResponse:
+    """실행기가 만든 산출물을 잡에 싣고 종결한다."""
+    return await _settle(
+        execution_id, source, user_id, owner, "completed", body.model_dump(exclude_none=True), None
+    )
+
+
+@router.post(JOB_FAIL_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+async def fail_job(
+    execution_id: str,
+    body: JobFailureBody,
+    source: ExecutionSql,
+    user_id: UserId,
+    owner: LeaseOwner,
+) -> JSONResponse:
+    """실행기가 실패를 보고하고 잡을 종결한다."""
+    return await _settle(execution_id, source, user_id, owner, "failed", {}, body.message)
+
+
+@router.post(JOB_RELEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
+async def release_job(
+    execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
+) -> JSONResponse:
+    """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 돌린다."""
+    now = datetime.now(UTC)
+    async with source.connect() as sql:
+        ledger = JobLedger(sql)
+        row = await ledger.find(execution_id)
+        if row is None or row["user_id"] != user_id:
+            return error_envelope(*NOT_FOUND)
+        released = await ledger.release_lease(execution_id, owner, now)
+    return JSONResponse(status_code=200, content={"ok": True, "data": {"released": released}})
+
+
+async def _settle(
+    execution_id: str,
+    source: SqlSource,
+    user_id: str,
+    owner: str,
+    status: str,
+    result: dict[str, Any],
+    error: str | None,
+) -> JSONResponse:
+    now = datetime.now(UTC)
+    async with source.connect() as sql:
+        ledger = JobLedger(sql)
+        row = await ledger.find(execution_id)
+        if row is None or row["user_id"] != user_id:
+            return error_envelope(*NOT_FOUND)
+        if not await ledger.settle_with_lease(execution_id, owner, status, result, error, now):
+            return error_envelope(*LEASE_HELD)
+        row = await ledger.find(execution_id) or row
+    return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
+
+
+def _lease(owner: str, expires_at: datetime) -> dict[str, Any]:
+    return {"held": True, "leaseOwner": owner, "leaseExpiresAt": iso(expires_at)}
+
+
+def _lease_of(row: Mapping[str, Any], owner: str, now: datetime) -> dict[str, Any]:
+    """쥔 사람이 부른 사람과 같고 아직 살아 있을 때만 쥔 것으로 본다."""
+    held_by = row["lease_owner"]
+    expires_at = row["lease_expires_at"]
+    alive = expires_at is not None and expires_at > now
+    return {
+        "held": bool(alive and held_by == owner),
+        "leaseOwner": held_by,
+        "leaseExpiresAt": None if expires_at is None else iso(expires_at),
+    }
