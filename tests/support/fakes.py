@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as _json
+from collections.abc import Mapping
 from typing import Any
 
 from langchain.tools import ToolRuntime
@@ -86,6 +87,17 @@ def _assert_system_messages_lead(messages: list[Any]) -> None:
             seen_non_system = True
 
 
+_OWN_QUESTION = "Your question: "
+
+
+def _addressed_questions(text: str, declared: Mapping[str, Any]) -> set[str]:
+    """전문가 프롬프트는 다른 전문가의 질문도 실으므로 자기 질문의 자리에 선 것만 고른다."""
+    if _OWN_QUESTION not in text:
+        return {key for key in declared if key in text}
+    own = text.split(_OWN_QUESTION, 1)[1].split("\n", 1)[0].strip()
+    return {key for key in declared if key == own}
+
+
 class FakeToolLoopChat:
     """턴마다 도구 호출이나 구조화 출력을 순서대로 재생하는 도구 루프 대역이다."""
 
@@ -123,7 +135,7 @@ class FakeToolLoopChat:
     def _next_worker_turn(self, messages: list[Any]) -> Any | None:
         text = " ".join(str(getattr(message, "content", message)) for message in messages)
         for key, turns in self.worker_turns.items():
-            if key not in text:
+            if key not in _addressed_questions(text, self.worker_turns):
                 continue
             cursor = self._worker_cursor.get(key, 0)
             if cursor >= len(turns):

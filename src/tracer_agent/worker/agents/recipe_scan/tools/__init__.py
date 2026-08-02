@@ -43,6 +43,7 @@ from .registry import (
     COORDINATOR_TOOLS,
     PROBE_TOOLS,
     RECIPE_TOOL_CLASSES,
+    SURVEY_TOOLS,
     build_recipe_registry,
     validate_tool_args,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "SEARCH_EVENTS_DESCRIPTION",
     "SEARCH_RECIPES",
     "SEARCH_RECIPES_DESCRIPTION",
+    "SURVEY_TOOLS",
     "CheckCitationsArgs",
     "CheckCitationsTool",
     "FindSimilarTasksArgs",

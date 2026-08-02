@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from string import Template
 from typing import Protocol
+
+# 조립 시점에 값을 알 수 없고 slot 을 부르는 자리가 채우는 자리표시자다.
+RUNTIME_PLACEHOLDERS: frozenset[str] = frozenset({"turns"})
 
 
 class PromptSlotMissing(LookupError):
@@ -30,12 +34,17 @@ class PromptTemplate:
     version: str
     slots: Mapping[str, PromptSlot]
 
-    def slot(self, name: str) -> str:
-        """slot 하나의 본문을 내며 없으면 던진다."""
+    def slot(self, name: str, **values: str) -> str:
+        """slot 하나의 본문을 내며 호출마다 달라지는 자리는 values 가 채운다."""
         found = self.slots.get(name)
         if found is None:
             raise PromptSlotMissing(f"prompt slot is missing: {name}")
-        return found.content
+        if not values:
+            return found.content
+        try:
+            return Template(found.content).substitute(values)
+        except KeyError as unknown:
+            raise PromptSlotMissing(f"prompt placeholder has no value: {unknown.args[0]}") from unknown
 
 
 @dataclass(frozen=True)

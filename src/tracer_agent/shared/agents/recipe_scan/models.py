@@ -68,6 +68,8 @@ class ProbeDispatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     assignment: ProbeAssignment
+    # 같은 계획의 다른 전문가가 맡은 축이며 이 전문가는 그 축을 조사하지 않는다.
+    siblings: list[ProbeAssignment] = Field(default_factory=list, max_length=MAX_DISPATCH_PROBES)
     # 0턴은 그 전문가에게 몫이 남지 않았다는 뜻이며 노드가 모델을 부르지 않는 길로 스스로 보낸다.
     max_turns: int = Field(ge=0)
     max_cost_usd: float = Field(ge=0.0)

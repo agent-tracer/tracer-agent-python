@@ -237,11 +237,15 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
     async def run(self, state: RecipeScanState) -> RepairUpdate:
         if not state["candidates"]:
             return {"repair_attempted": True}
+        # 직전 산출을 본문에 실어 맥락 정리가 도구 결과를 비운 뒤에도 무엇을 고치는지 남는다.
+        previous = RecipeDraft(recipes=state["candidates"]).model_dump_json()
         repair_prompt = [
             *state["messages"],
             {
                 "role": "user",
-                "content": self._repair_directive.format(errors="\n".join(state["validation_errors"])),
+                "content": self._repair_directive.format(
+                    previous=previous, errors="\n".join(state["validation_errors"])
+                ),
             },
         ]
         draft, messages, catalog, _turns_used, cost_used = await self._invoke_agent(

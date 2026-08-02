@@ -23,6 +23,7 @@ from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
 from ...runtime.timeouts import weighted_wall_clock_s
+from ...shared.prompt_source_port import AgentPrompt
 from ..failures import WORKER_FAILED
 from ..langchain_agent import build_recipe_agent
 from ..prompts import build_probe_prompt
@@ -56,6 +57,7 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
         agent_name: str,
         system_prompt: str,
         wall_clock_ceiling_s: float,
+        prompt: AgentPrompt,
     ) -> None:
         self._req = req
         self._reader = reader
@@ -67,6 +69,7 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
         self._agent_name = agent_name
         self._system_prompt = system_prompt
         self._wall_clock_ceiling_s = wall_clock_ceiling_s
+        self._prompt = prompt
 
     async def run(self, payload: ProbeDispatch) -> ProbeUpdate:
         req = self._req
@@ -108,7 +111,17 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
             result = await asyncio.wait_for(
                 invoke_structured_agent(
                     agent,
-                    messages=[HumanMessage(content=build_probe_prompt(req.taskId, assignment.question))],
+                    messages=[
+                        HumanMessage(
+                            content=build_probe_prompt(
+                                self._prompt,
+                                req.taskId,
+                                assignment.question,
+                                payload.max_turns,
+                                payload.siblings,
+                            )
+                        )
+                    ],
                     context=StandardAgentContext(
                         agent_name=probe_name,
                         trace=self._usage,

@@ -45,6 +45,7 @@ def _probe_node(chat: FakeToolLoopChat, *, wall_clock_ceiling_s: float, req: Rec
         agent_name="recipe-scan",
         system_prompt=build_prompt_bundle(RECIPE_SCAN_PROMPT)["probeSystemPrompt"],
         wall_clock_ceiling_s=wall_clock_ceiling_s,
+        prompt=RECIPE_SCAN_PROMPT,
     )
 
 
@@ -80,6 +81,7 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
         agent_name="recipe-scan",
         system_prompt=build_prompt_bundle(RECIPE_SCAN_PROMPT)["probeSystemPrompt"],
         wall_clock_ceiling_s=60.0,
+        prompt=RECIPE_SCAN_PROMPT,
     )
 
     result = await node.run(
@@ -216,6 +218,9 @@ async def test_0턴_리스를_받은_조율자는_모델을_부르지_않는다(
         ExecutionBudget(1.0, mk_rates()),
         AgentBudgetLease(max_turns=0, max_cost_usd=0.0),
         build_prompt_bundle(RECIPE_SCAN_PROMPT)["surveySystemPrompt"],
+        RECIPE_SCAN_PROMPT,
+        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
     )
 
     result = await node.run({})  # type: ignore[arg-type]

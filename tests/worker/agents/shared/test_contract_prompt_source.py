@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -13,11 +14,14 @@ from tracer_agent.worker.agents.shared.contract_prompt_source import (
     ContractPromptUnavailable,
 )
 from tracer_agent.worker.agents.shared.prompt_source_port import (
+    RUNTIME_PLACEHOLDERS,
     AgentPrompt,
     PromptSlotMissing,
     PromptTemplate,
     PromptVersionDiverged,
 )
+
+_PLACEHOLDER = re.compile(r"\$\{([A-Za-z][A-Za-z0-9_]*)\}")
 
 AGENTS = ("chat", "recipe-scan", "task-cleanup", "title-suggestion")
 
@@ -35,12 +39,13 @@ def test_template과_slot이_계약이_선언한_이름_그대로다(agent: str)
 
 
 @pytest.mark.parametrize("agent", AGENTS)
-def test_조각의_자리표시자는_하나도_남지_않는다(agent: str) -> None:
+def test_조립이_채울_수_있는_자리표시자는_하나도_남지_않는다(agent: str) -> None:
     resolved = ContractPromptSource().resolve(agent)
 
     for template in resolved.templates.values():
         for slot in template.slots.values():
-            assert "${" not in slot.content
+            # 호출마다 달라지는 자리만 남고 그 자리는 slot 을 부를 때 채워진다.
+            assert set(_PLACEHOLDER.findall(slot.content)) <= RUNTIME_PLACEHOLDERS
 
 
 @pytest.mark.parametrize("agent", AGENTS)
@@ -108,12 +113,19 @@ def test_계약을_읽지_못하면_프롬프트를_세우지_않는다(tmp_path
         ContractPromptSource(tmp_path).resolve("chat")
 
 
-def test_상한이_비어_있으면_자리표시자를_채우지_못하고_던진다(tmp_path: Path) -> None:
+def test_상한이_비어_있으면_그_자리가_채워지지_않은_채_남는다(tmp_path: Path) -> None:
     (tmp_path / "agent" / "recipe-scan").mkdir(parents=True)
     (tmp_path / "agent" / "recipe-scan" / "prompt.json").write_text(
         json.dumps(agent_prompt("recipe-scan")), encoding="utf-8"
     )
-    (tmp_path / "agent" / "recipe-scan" / "tool.json").write_text(json.dumps({}), encoding="utf-8")
+    (tmp_path / "agent" / "recipe-scan" / "tool.json").write_text(
+        json.dumps({"version": "v0.0.1"}), encoding="utf-8"
+    )
 
-    with pytest.raises(ContractPromptUnavailable):
-        ContractPromptSource(tmp_path).resolve("recipe-scan")
+    resolved = ContractPromptSource(tmp_path).resolve("recipe-scan")
+    template = resolved.template("recipe-scan.investigator.system")
+
+    # 계약이 값을 주지 않은 자리는 조립을 멈추지 않고 남으며, 채우려는 자리에서 걸린다.
+    assert "${recipeCandidateLimit}" in template.slot("candidateBudget")
+    with pytest.raises(PromptSlotMissing):
+        template.slot("candidateBudget", unrelated="값")

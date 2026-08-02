@@ -75,9 +75,10 @@ def _joined(lines: list[str]) -> str:
     return "\n".join(lines)
 
 
+# 호출마다 달라지는 자리는 조립 시점에 값이 없으므로 그대로 두고 slot 이 채운다.
 def _render(content: str, values: Mapping[str, str]) -> str:
     try:
-        return Template(content).substitute(values)
+        return Template(content).safe_substitute(values)
     except KeyError as unknown:
         raise ContractPromptUnavailable(f"prompt placeholder has no value: {unknown.args[0]}") from unknown
 

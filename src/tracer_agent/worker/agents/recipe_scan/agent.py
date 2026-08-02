@@ -75,7 +75,16 @@ async def run_recipe_scan(
         NodeRegistry(
             {
                 SurveyNode.name: SurveyNode(
-                    req, usage, chat, fallback_chat, budget, survey_lease, prompts["surveySystemPrompt"]
+                    req,
+                    usage,
+                    chat,
+                    fallback_chat,
+                    budget,
+                    survey_lease,
+                    prompts["surveySystemPrompt"],
+                    prompt,
+                    reader,
+                    search_reader,
                 ),
                 ProbeNode.name: ProbeNode(
                     req,
@@ -88,6 +97,7 @@ async def run_recipe_scan(
                     agent_name=AGENT_NAME,
                     system_prompt=prompts["probeSystemPrompt"],
                     wall_clock_ceiling_s=PROBE_WALL_CLOCK_CEILING_S,
+                    prompt=prompt,
                 ),
                 InvestigateNode.name: InvestigateNode(
                     req,

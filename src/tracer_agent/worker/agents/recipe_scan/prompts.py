@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from tracer_agent.shared.agents.recipe_scan.models import MAX_RECIPE_CANDIDATES, DispatchPlan, ProbeReport
+from tracer_agent.shared.agents.recipe_scan.models import (
+    MAX_RECIPE_CANDIDATES,
+    DispatchPlan,
+    ProbeAssignment,
+    ProbeReport,
+)
 
 from ..shared.prompt_source_port import AgentPrompt
 
@@ -58,12 +63,16 @@ def _investigator(prompt: AgentPrompt) -> str:
 
 
 def _repair(prompt: AgentPrompt) -> str:
+    template = prompt.template("recipe-scan.investigator.repair")
     return "\n".join(
         [
+            template.slot("repairPriorOutput"),
+            "{previous}",
+            "",
             "Deterministic provenance validation rejected your output:",
             "{errors}",
             "",
-            prompt.template("recipe-scan.investigator.repair").slot("repairDirective"),
+            template.slot("repairDirective"),
         ]
     )
 
@@ -83,7 +92,6 @@ def _survey(prompt: AgentPrompt) -> str:
     )
 
 
-# 예산 소진을 무엇으로 세는지는 실행 기계가 소유하므로 조각이 아니라 이 백엔드가 마지막 문장을 쓴다.
 def _probe(prompt: AgentPrompt) -> str:
     template = prompt.template("recipe-scan.probe.system")
     return "\n".join(
@@ -93,8 +101,10 @@ def _probe(prompt: AgentPrompt) -> str:
             template.slot("specialistCharter"),
             "",
             template.slot("specialistReporting"),
-            "If your budget runs out with the question still open, say so in exhausted so the coordinator",
-            "can decide whether to spend more.",
+            "",
+            template.slot("probeBoundary"),
+            "",
+            template.slot("budgetExhaustion"),
         ]
     )
 
@@ -136,14 +146,36 @@ def render_plan(plan: DispatchPlan | None) -> str:
     return "\n\nYour own plan for this investigation:\n" + "\n".join(lines)
 
 
-def build_survey_prompt(task_id: str, user_prompt: str | None) -> str:
-    """조율자가 조사 계획을 세우는 데 필요한 사실만 싣는다."""
-    lines = [f"Anchor task ID: {task_id}"]
+def build_survey_prompt(
+    prompt: AgentPrompt, task_id: str, user_prompt: str | None, available_turns: int
+) -> str:
+    """조율자가 조사 계획을 세우는 데 필요한 사실과 쓸 수 있는 턴을 싣는다."""
+    template = prompt.template("recipe-scan.survey.user")
+    lines = [
+        f"Anchor task ID: {task_id}",
+        template.slot("turnAllowance", turns=str(available_turns)),
+    ]
     if user_prompt:
         lines.append(f"What the user asked for: {user_prompt}")
     return "\n".join(lines)
 
 
-def build_probe_prompt(task_id: str, question: str) -> str:
-    """전문가가 자기 질문 하나에 집중하도록 맡은 범위만 싣는다."""
-    return "\n".join([f"Anchor task ID: {task_id}", f"Your question: {question}"])
+def build_probe_prompt(
+    prompt: AgentPrompt,
+    task_id: str,
+    question: str,
+    turns: int,
+    siblings: Sequence[ProbeAssignment] = (),
+) -> str:
+    """전문가가 자기 질문에 집중하도록 맡은 범위와 맡지 않은 범위를 함께 싣는다."""
+    template = prompt.template("recipe-scan.probe.user")
+    lines = [
+        f"Anchor task ID: {task_id}",
+        f"Your question: {question}",
+        template.slot("turnAllowance", turns=str(turns)),
+    ]
+    if siblings:
+        lines.append("")
+        lines.append(template.slot("siblingAssignments"))
+        lines.extend(f"- {one.probe}: {one.question}" for one in siblings)
+    return "\n".join(lines)

@@ -58,7 +58,12 @@ def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd:
     return [
         Send(
             ProbeNode.name,
-            ProbeDispatch(assignment=assignment, max_turns=lease.max_turns, max_cost_usd=lease.max_cost_usd),
+            ProbeDispatch(
+                assignment=assignment,
+                siblings=[other for other in probes if other.probe != assignment.probe],
+                max_turns=lease.max_turns,
+                max_cost_usd=lease.max_cost_usd,
+            ),
             timeout=_PROBE_SEND_TIMEOUT,
         )
         for assignment, lease in zip(probes, leases, strict=True)
