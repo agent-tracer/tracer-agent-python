@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gc
+
 import pytest
 
 from tests.support.contract import agent_cases, shared_contract
@@ -181,3 +183,38 @@ def test_전문가가_예산을_소진해도_종합과_수리의_몫은_예약�
     assert repair_lease.max_turns == reservation["repair"]["turns"]
     assert repair_lease.max_cost_usd > 0
     assert synthesis_floor_lease.max_turns == reservation["synthesisFloor"]["turns"]
+
+
+class Test리스식별자:
+    def test_회수된_리스의_열쇠가_다음_리스를_오염시키지_않는다(self) -> None:
+        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
+        first = budget.reserve(2, 0.2)
+        first_id = first.lease_id
+        budget.settle(first, AgentBudgetSpend(cost_usd=0.1, num_turns=1))
+        del first
+        gc.collect()
+
+        second = budget.reserve(2, 0.2)
+
+        assert second.lease_id != first_id
+        budget.settle(second, AgentBudgetSpend(cost_usd=0.1, num_turns=1))
+
+    def test_같은_몫의_리스_둘이_서로_다른_열쇠를_갖는다(self) -> None:
+        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
+
+        left = budget.reserve(2, 0.2)
+        right = budget.reserve(2, 0.2)
+
+        assert left.lease_id != right.lease_id
+        budget.settle(left, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
+        budget.settle(right, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
+
+    def test_합친_리스가_자기_열쇠로_예약분을_한_번만_되돌린다(self) -> None:
+        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
+        floor = budget.reserve(3, 0.0)
+        remaining_before = budget.remaining_turns
+
+        combined = budget.combine([floor, AgentBudgetLease(max_turns=2, max_cost_usd=0.0)])
+        budget.settle(combined, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
+
+        assert budget.remaining_turns == remaining_before + 3

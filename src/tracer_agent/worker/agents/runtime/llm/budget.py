@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from itertools import count
 from typing import Protocol
 
 from langchain_core.messages import AIMessage
@@ -13,6 +14,8 @@ from ..errors import BudgetExceeded
 from ..pricing import ModelRates
 from .trajectory import extract_token_usage, message_identity
 
+_lease_ids = count(1)
+
 
 @dataclass(frozen=True)
 class AgentBudgetLease:
@@ -20,6 +23,8 @@ class AgentBudgetLease:
 
     max_turns: int
     max_cost_usd: float
+    # 실행 장부가 예약과 정산을 대조하는 열쇠이며 리스마다 하나뿐이다.
+    lease_id: int = field(default_factory=lambda: next(_lease_ids), compare=False)
 
 
 @dataclass(frozen=True)
@@ -202,7 +207,7 @@ class ExecutionBudget:
         granted_usd = self._remaining_budget_usd * budget_share
         self._remaining_budget_usd -= granted_usd
         lease = AgentBudgetLease(max_turns=granted_turns, max_cost_usd=granted_usd)
-        self._reservations[id(lease)] = _ReservedShare(turns=granted_turns, usd=granted_usd)
+        self._reservations[lease.lease_id] = _ReservedShare(turns=granted_turns, usd=granted_usd)
         return lease
 
     def lease(self, share: float) -> AgentBudgetLease:
@@ -226,7 +231,7 @@ class ExecutionBudget:
 
     def settle(self, lease: AgentBudgetLease, spend: AgentBudgetSpend) -> None:
         """떼어 준 몫에 실제 지출을 대조해 잔량을 되돌리되 예약분을 두 번 빼지 않는다."""
-        key = id(lease)
+        key = lease.lease_id
         if key in self._settled:
             raise RuntimeError("budget lease is already settled")
         self._settled.add(key)
@@ -245,11 +250,11 @@ class ExecutionBudget:
         reserved_turns = 0
         reserved_usd = 0.0
         for one in leases:
-            reserved = self._reservations.get(id(one), _EMPTY_RESERVED_SHARE)
+            reserved = self._reservations.get(one.lease_id, _EMPTY_RESERVED_SHARE)
             reserved_turns += reserved.turns
             reserved_usd += reserved.usd
         if reserved_turns > 0 or reserved_usd != 0:
-            self._reservations[id(combined)] = _ReservedShare(turns=reserved_turns, usd=reserved_usd)
+            self._reservations[combined.lease_id] = _ReservedShare(turns=reserved_turns, usd=reserved_usd)
         return combined
 
     def _turn_ledger(self) -> int:
