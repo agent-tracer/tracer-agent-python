@@ -165,10 +165,10 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
 
     def _config(self) -> RunnableConfig:
-        # thread_id는 체크포인터가 스레드 단기기억을, user_id는 저장소가 장기기억을 범위로 잡는 열쇠다.
+        # thread_id는 체크포인터가 단기기억을 범위로 잡는 열쇠이며 실행 하나가 그 범위다.
         return {
             "recursion_limit": recursion_limit_for(self._req.limits.maxTurns),
-            "configurable": {"thread_id": self._req.executionId, "user_id": self._req.userId},
+            "configurable": {"thread_id": self._req.executionId},
         }
 
     async def _seed(
