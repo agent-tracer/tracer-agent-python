@@ -137,7 +137,13 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
         client,
         task_queue=CHAT_TASK_QUEUE,
         workflows=[ChatThreadWorkflow, ChatExecutionWorkflow],
-        activities=[activities.prepare, activities.generate, activities.finalize, activities.fail],
+        activities=[
+            activities.next_execution,
+            activities.prepare,
+            activities.generate,
+            activities.finalize,
+            activities.fail,
+        ],
         graceful_shutdown_timeout=timedelta(seconds=SHUTDOWN_GRACE_S),
     )
 

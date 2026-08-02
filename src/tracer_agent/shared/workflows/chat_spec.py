@@ -20,6 +20,9 @@ CHAT_ENQUEUE_SIGNAL = "enqueueChatExecution"
 # 실행 갱신을 다른 replica의 SSE에 알리는 토픽이며 식별자만 나른다.
 CHAT_EXECUTION_UPDATES_TOPIC = "chat.execution.updates"
 
+NEXT_EXECUTION_ACTIVITY = "getNextChatExecution"
+NEXT_EXECUTION_TIMEOUT_S = 60.0
+
 PREPARE_ACTIVITY = "prepareChatExecution"
 GENERATE_ACTIVITY = "generateChatExecution"
 FINALIZE_ACTIVITY = "finalizeChatExecution"
@@ -73,10 +76,9 @@ class ChatExecutionRequest:
 
 @dataclass
 class ChatThreadRequest:
-    """스레드 하나의 턴을 직렬로 흘리는 워크플로 입력이며 아직 못 돌린 실행을 함께 나른다."""
+    """스레드 하나의 턴을 직렬로 흘리는 워크플로 입력이며 대기 줄은 원장이 갖는다."""
 
     thread_id: str
-    pending: list[ChatExecutionRequest] = field(default_factory=list)
 
 
 @dataclass

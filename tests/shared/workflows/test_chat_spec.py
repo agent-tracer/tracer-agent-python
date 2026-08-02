@@ -5,6 +5,7 @@ from __future__ import annotations
 from tests.support.contract import workflow_contract
 from tracer_agent.shared.config import DEFAULT_TASK_QUEUE_PREFIX
 from tracer_agent.shared.workflows.chat_spec import (
+    CHAT_ENQUEUE_SIGNAL,
     CHAT_EXECUTION_WORKFLOW,
     CHAT_QUEUE_KEY,
     CHAT_TASK_QUEUE,
@@ -12,7 +13,10 @@ from tracer_agent.shared.workflows.chat_spec import (
     FAIL_ACTIVITY,
     FINALIZE_ACTIVITY,
     GENERATE_ACTIVITY,
+    NEXT_EXECUTION_ACTIVITY,
+    NEXT_EXECUTION_TIMEOUT_S,
     PREPARE_ACTIVITY,
+    STAGE_MAX_ATTEMPTS,
     STOP_BUDGET_LANDED,
     STOP_CANCELED,
     STOP_COMPLETED,
@@ -46,6 +50,22 @@ def test_스레드와_실행의_워크플로_식별자가_서로_겹치지_않�
 def test_두_워크플로가_같은_큐에서_실행된다() -> None:
     assert _WORKFLOWS["chatThread"]["queue"] == CHAT_QUEUE_KEY
     assert _WORKFLOWS["chatExecution"]["queue"] == CHAT_QUEUE_KEY
+
+
+def test_스레드_워크플로의_액티비티가_계약이_적은_것과_같다() -> None:
+    activities = _WORKFLOWS["chatThread"]["activities"]
+
+    assert [activity["name"] for activity in activities] == [NEXT_EXECUTION_ACTIVITY]
+    assert activities[0]["queue"] == CHAT_QUEUE_KEY
+    assert activities[0]["startToCloseSeconds"] == NEXT_EXECUTION_TIMEOUT_S
+    assert activities[0]["maximumAttempts"] == STAGE_MAX_ATTEMPTS
+
+
+def test_스레드_시그널이_실행_식별자_하나를_나른다() -> None:
+    signals = _WORKFLOWS["chatThread"]["signals"]
+
+    assert [signal["name"] for signal in signals] == [CHAT_ENQUEUE_SIGNAL]
+    assert signals[0]["args"] == ["executionId"]
 
 
 def test_액티비티_이름과_배치가_계약이_적은_것과_같다() -> None:

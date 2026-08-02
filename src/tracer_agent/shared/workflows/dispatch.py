@@ -12,7 +12,6 @@ from .chat_spec import (
     CHAT_ENQUEUE_SIGNAL,
     CHAT_TASK_QUEUE,
     CHAT_THREAD_WORKFLOW,
-    ChatExecutionRequest,
     ChatThreadRequest,
     execution_workflow_id,
     thread_workflow_id,
@@ -48,7 +47,6 @@ class TemporalExecutionDispatch:
         client = await self._provider.client()
         await client.start_workflow(
             CHAT_THREAD_WORKFLOW,
-            # 신호가 실행을 나르므로 워크플로를 처음 여는 경우에도 대기 줄은 비운 채 시작한다.
             ChatThreadRequest(thread_id),
             id=thread_workflow_id(thread_id),
             task_queue=CHAT_TASK_QUEUE,
@@ -56,7 +54,8 @@ class TemporalExecutionDispatch:
             # 앞선 스레드 워크플로가 이미 닫혔으면 같은 식별자로 다시 열려야 다음 턴이 돈다.
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             start_signal=CHAT_ENQUEUE_SIGNAL,
-            start_signal_args=[ChatExecutionRequest(execution_id, thread_id)],
+            # 신호는 대기 줄이 움직였다는 포인터이며 실행의 사실은 원장이 갖는다.
+            start_signal_args=[execution_id],
         )
 
     async def cancel(self, execution_id: str) -> None:

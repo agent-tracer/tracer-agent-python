@@ -21,6 +21,8 @@ from ...shared.workflows.chat_spec import (
     GENERATE_HEARTBEAT_TIMEOUT_S,
     GENERATE_MAX_ATTEMPTS,
     GENERATE_TIMEOUT_S,
+    NEXT_EXECUTION_ACTIVITY,
+    NEXT_EXECUTION_TIMEOUT_S,
     PREPARE_ACTIVITY,
     PREPARE_TIMEOUT_S,
     STAGE_MAX_ATTEMPTS,
@@ -123,40 +125,58 @@ class ChatThreadWorkflow:
     """스레드 안의 실행을 접수 순서대로 하나씩 기다려 모델 호출이 겹치지 않게 한다."""
 
     def __init__(self) -> None:
-        self._pending: list[ChatExecutionRequest] = []
+        self._wake = False
         self._completed = 0
 
     @workflow.signal(name=CHAT_ENQUEUE_SIGNAL)
-    def enqueue(self, request: ChatExecutionRequest) -> None:
-        """접수된 실행을 이 스레드의 대기 줄 끝에 세운다."""
-        self._pending.append(request)
+    def enqueue(self, _execution_id: str) -> None:
+        """대기 줄이 움직였다는 것만 받고 실행의 사실은 원장에서 다시 조회한다."""
+        self._wake = True
 
     @workflow.run
     async def run(self, request: ChatThreadRequest) -> None:
-        """대기 줄을 순서대로 비우고 유휴가 이어지면 스레드 워크플로를 닫는다."""
-        # 앞선 실행이 못 돌린 것이 먼저이고, 그 사이 들어온 신호가 그다음이다.
-        self._pending = [*request.pending, *self._pending]
+        """원장의 대기 줄을 순서대로 비우고 유휴가 이어지면 스레드 워크플로를 닫는다."""
         while True:
-            if not self._pending and not await self._wait_for_work():
+            if not await self._wait_for_work():
                 return
-            await self._run_child(self._pending.pop(0))
-            self._completed += 1
-            if self._completed >= THREAD_MAX_CHILDREN:
-                workflow.continue_as_new(ChatThreadRequest(request.thread_id, [*self._pending]))
+            self._wake = False
+            await self._drain(request)
+
+    async def _drain(self, request: ChatThreadRequest) -> None:
+        last_failed: str | None = None
+        while True:
+            execution_id = await workflow.execute_activity(
+                NEXT_EXECUTION_ACTIVITY,
+                request.thread_id,
+                start_to_close_timeout=timedelta(seconds=NEXT_EXECUTION_TIMEOUT_S),
+                retry_policy=RetryPolicy(maximum_attempts=STAGE_MAX_ATTEMPTS),
+            )
+            if execution_id is None:
+                return
+            # 같은 실행이 연달아 실패하면 원장에 그대로 남아 무한히 다시 집히므로 이번 회차를 접는다.
+            if execution_id == last_failed:
+                return
+            if await self._run_child(request.thread_id, execution_id):
+                last_failed = None
+                self._completed += 1
+                if self._completed >= THREAD_MAX_CHILDREN:
+                    workflow.continue_as_new(ChatThreadRequest(request.thread_id))
+            else:
+                last_failed = execution_id
 
     async def _wait_for_work(self) -> bool:
         try:
-            await workflow.wait_condition(lambda: bool(self._pending), timeout=THREAD_IDLE_S)
+            await workflow.wait_condition(lambda: self._wake, timeout=THREAD_IDLE_S)
         except TimeoutError:
             return False
         return True
 
-    async def _run_child(self, request: ChatExecutionRequest) -> None:
+    async def _run_child(self, thread_id: str, execution_id: str) -> bool:
         try:
             await workflow.execute_child_workflow(
                 CHAT_EXECUTION_WORKFLOW,
-                request,
-                id=execution_workflow_id(request.execution_id),
+                ChatExecutionRequest(execution_id, thread_id),
+                id=execution_workflow_id(execution_id),
                 id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
             )
         except asyncio.CancelledError:
@@ -164,3 +184,5 @@ class ChatThreadWorkflow:
             raise
         except Exception as error:
             workflow.logger.warning("chat execution did not settle: %s", error)
+            return False
+        return True

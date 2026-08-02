@@ -19,6 +19,7 @@ from ...shared.workflows.chat_spec import (
     FINALIZE_ACTIVITY,
     GENERATE_ACTIVITY,
     HEARTBEAT_INTERVAL_S,
+    NEXT_EXECUTION_ACTIVITY,
     PREPARE_ACTIVITY,
     RUNNING_LEASE_S,
     THREAD_BUSY_FAILURE,
@@ -66,6 +67,12 @@ class ChatExecutionActivities:
         self._wakeup = wakeup
         self._prompt = prompt
         self._system_prompt = build_system_prompt(prompt)
+
+    @activity.defn(name=NEXT_EXECUTION_ACTIVITY)
+    async def next_execution(self, thread_id: str) -> str | None:
+        """이 스레드에서 이 축이 맡은 다음 대기 실행 하나를 원장에서 조회한다."""
+        async with self._sql.connect() as sql:
+            return await ChatExecutionLedger(sql).next_queued_in_thread(thread_id)
 
     @activity.defn(name=PREPARE_ACTIVITY)
     async def prepare(self, request: ChatExecutionRequest) -> PreparedChatExecution:

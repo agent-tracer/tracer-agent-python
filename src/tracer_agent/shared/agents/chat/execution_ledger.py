@@ -22,6 +22,15 @@ SELECT id, thread_id FROM chat_executions
  ORDER BY id
 """
 
+_SELECT_NEXT_QUEUED_IN_THREAD = """
+SELECT id FROM chat_executions
+ WHERE thread_id = $1
+   AND status = 'queued'
+   AND requested_backend = $2
+ ORDER BY created_at ASC, id ASC
+ LIMIT 1
+"""
+
 _RECOVER_STALE_RUNNING = """
 UPDATE chat_executions
    SET status = 'queued', started_at = NULL, updated_at = $1
@@ -170,6 +179,11 @@ class ChatExecutionLedger:
     async def list_active(self) -> list[SqlRow]:
         """이 축이 접수한 것 가운데 아직 끝나지 않은 실행을 접수 순서대로 낸다."""
         return await self._sql.fetch(_SELECT_ACTIVE, AGENT_BACKEND)
+
+    async def next_queued_in_thread(self, thread_id: str) -> str | None:
+        """이 스레드에서 이 축이 맡은 다음 대기 실행 하나를 내고 없으면 아무것도 내지 않는다."""
+        rows = await self._sql.fetch(_SELECT_NEXT_QUEUED_IN_THREAD, thread_id, AGENT_BACKEND)
+        return str(rows[0]["id"]) if rows else None
 
     async def recover_stale_running(
         self, idle_before: datetime, now: datetime, thread_id: str | None = None
