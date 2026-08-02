@@ -57,6 +57,8 @@ uv run tracer-agent-worker generate
 - `LANGSMITH_TRACING`은 명시적으로 켠 경우에만 사용합니다.
 - 운영 프로파일의 설정 암호화 키를 개발 기본값으로 두지 않습니다.
 - 테스트 없는 워크플로·에이전트·유스케이스를 추가하지 않습니다.
+- 실행 구조 문서는 설명하는 코드와 같은 디렉터리의 `README.md`에 둡니다. `src/tracer_agent/worker/agents/README.md`와 에이전트별 `README.md`가 그 자리이며 뿌리 `README.md`가 링크합니다. `docs/` 디렉터리로 모으지 않습니다.
+- 실행 구조 문서는 지금 코드가 하는 일만 적고 인용한 경로·식별자·수치가 실재해야 합니다. 계약이 소유한 값을 복제하지 않고, TypeScript 구현의 같은 문서와 절의 이름과 순서를 맞춥니다.
 
 ## 검증
 
