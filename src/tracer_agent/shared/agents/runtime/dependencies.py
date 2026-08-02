@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
-from fastapi.exceptions import RequestValidationError
 
 from .ledger import SqlSource
 
@@ -34,11 +33,8 @@ def get_user_id(monitor_user: Annotated[str | None, Header(alias=MONITOR_USER_HE
 def get_lease_owner(
     monitor_lease_owner: Annotated[str | None, Header(alias=MONITOR_LEASE_OWNER_HEADER)] = None,
 ) -> str:
-    """리스는 쥔 실행기를 이름으로 구분하므로 이름이 없으면 요청 자체가 성립하지 않는다."""
-    owner = (monitor_lease_owner or "").strip()
-    if not owner:
-        raise RequestValidationError([])
-    return owner
+    """리스를 쥔 실행기의 이름이며 없으면 빈 값이라 부르는 창구가 거절을 낸다."""
+    return (monitor_lease_owner or "").strip()
 
 
 ExecutionSql = Annotated[SqlSource, Depends(get_execution_sql)]

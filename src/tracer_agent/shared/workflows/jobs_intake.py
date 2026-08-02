@@ -233,11 +233,13 @@ class JobFailureBody(BaseModel):
     retryable: bool = False
 
 
-@router.post(JOB_START_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+@router.post(JOB_START_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
 async def claim_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
 ) -> JSONResponse:
     """대기 중인 잡 하나를 부른 실행기의 리스로 가져간다."""
+    if not owner:
+        return error_envelope(*INVALID_REQUEST)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -250,11 +252,13 @@ async def claim_job(
     return JSONResponse(status_code=200, content={"ok": True, "data": _lease(owner, expires_at)})
 
 
-@router.post(JOB_LEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
+@router.post(JOB_LEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
 async def renew_job_lease(
     execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
 ) -> JSONResponse:
     """실행이 길어지는 동안 쥔 리스의 수명을 늘린다."""
+    if not owner:
+        return error_envelope(*INVALID_REQUEST)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -268,7 +272,7 @@ async def renew_job_lease(
     return JSONResponse(status_code=200, content={"ok": True, "data": _lease(owner, expires_at)})
 
 
-@router.post(JOB_RESULTS_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+@router.post(JOB_RESULTS_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
 async def report_job_result(
     execution_id: str,
     body: JobReportBody,
@@ -282,7 +286,7 @@ async def report_job_result(
     )
 
 
-@router.post(JOB_FAIL_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
+@router.post(JOB_FAIL_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
 async def fail_job(
     execution_id: str,
     body: JobFailureBody,
@@ -294,11 +298,13 @@ async def fail_job(
     return await _settle(execution_id, source, user_id, owner, "failed", {}, body.message)
 
 
-@router.post(JOB_RELEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
+@router.post(JOB_RELEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
 async def release_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
 ) -> JSONResponse:
     """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 돌린다."""
+    if not owner:
+        return error_envelope(*INVALID_REQUEST)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -318,6 +324,8 @@ async def _settle(
     result: dict[str, Any],
     error: str | None,
 ) -> JSONResponse:
+    if not owner:
+        return error_envelope(*INVALID_REQUEST)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
