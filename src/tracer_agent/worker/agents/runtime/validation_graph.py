@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -13,7 +13,7 @@ from langgraph.types import RetryPolicy, TimeoutPolicy
 
 from .execution.trace import ExecutionTrace
 
-type ValidationNode = Callable[[Any], Awaitable[dict[str, Any]]]
+type ValidationNode = Callable[[Any], Awaitable[Mapping[str, Any]]]
 type ValidationRouteName = Literal["repair", "finalize", "empty"]
 type ValidationRoute = Callable[[Any], ValidationRouteName]
 type NodeErrorHandler = Callable[..., Any]
@@ -72,8 +72,8 @@ def add_validation_tail(graph: StateGraph[Any, Any, Any, Any], validation_node: 
 
 
 # noinspection PyTypeChecker
-def _dispatch(node_name: str) -> Callable[..., Awaitable[dict[str, Any]]]:
-    async def run(state: Any, runtime: Runtime[ValidationGraphContext]) -> dict[str, Any]:
+def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, Any]]]:
+    async def run(state: Any, runtime: Runtime[ValidationGraphContext]) -> Mapping[str, Any]:
         context = runtime.context
         trace = context.trace
         trace.record_orchestration_event(

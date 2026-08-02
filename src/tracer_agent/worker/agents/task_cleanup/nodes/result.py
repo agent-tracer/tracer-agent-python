@@ -8,7 +8,7 @@ from ...runtime.node import GraphNode
 from ...runtime.validation_graph import EMPTY, FINALIZE
 
 
-class FinalizeNode(GraphNode):
+class FinalizeNode(GraphNode[TaskCleanupState, ResultUpdate]):
     """검증된 제안을 보관 작업 결과로 직렬화한다."""
 
     name = FINALIZE
@@ -18,7 +18,7 @@ class FinalizeNode(GraphNode):
         return {"result": {"suggestions": suggestions}}
 
 
-class EmptyNode(GraphNode):
+class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
     """제안이 없는 정리 작업 결과를 반환한다."""
 
     name = EMPTY

@@ -42,7 +42,7 @@ def _plan_redispatch(
     return TriagePlan(inspect=draft.redispatch), remaining
 
 
-class _DecisionAgent(GraphNode, ABC):
+class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, UpdateT], ABC):
     def __init__(
         self,
         req: TaskCleanupRequest,
@@ -106,7 +106,7 @@ class _DecisionAgent(GraphNode, ABC):
         return result.response, result.messages, budget
 
 
-class InvestigateNode(_DecisionAgent):
+class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
     """검토 전문가 보고를 모아 정리 제안을 쓰거나 근거가 얇으면 후보를 한 번 더 열어보게 한다."""
 
     name = "investigate"
@@ -150,7 +150,7 @@ class InvestigateNode(_DecisionAgent):
         return update
 
 
-class RepairNode(_DecisionAgent):
+class RepairNode(_DecisionAgent[RepairUpdate]):
     """검증에서 걸린 제안을 한 번 더 고쳐 쓴다."""
 
     name = "repair"
@@ -174,7 +174,7 @@ class RepairNode(_DecisionAgent):
         }
 
 
-class ValidateDecisionsNode(GraphNode):
+class ValidateDecisionsNode(GraphNode[TaskCleanupState, ValidateDecisionsUpdate]):
     """정리 제안이 도구가 노출한 후보와 이벤트만 인용하는지 판정한다."""
 
     name = "validate_decisions"

@@ -38,7 +38,7 @@ def _failure_verdict(exc: Exception) -> str:
     return WORKER_FAILED.format(reason=summary)[:MAX_VERDICT_CHARS]
 
 
-class ProbeNode(GraphNode):
+class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
     """맡은 질문 하나를 자기 도구와 자기 예산과 자기 장부로 조사하는 전문가를 만든다."""
 
     name = "probe"

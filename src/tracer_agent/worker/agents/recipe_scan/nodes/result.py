@@ -18,7 +18,7 @@ def wire_provenance(catalog: ProvenanceCatalog) -> dict[str, object]:
     }
 
 
-class FinalizeNode(GraphNode):
+class FinalizeNode(GraphNode[RecipeScanState, ResultUpdate]):
     """검증된 후보 목록을 레시피 결과로 직렬화한다."""
 
     name = FINALIZE
@@ -28,7 +28,7 @@ class FinalizeNode(GraphNode):
         return {"result": {"recipes": recipes, "provenance": wire_provenance(state["provenance"])}}
 
 
-class EmptyNode(GraphNode):
+class EmptyNode(GraphNode[RecipeScanState, ResultUpdate]):
     """후보가 없는 레시피 결과를 반환한다."""
 
     name = EMPTY

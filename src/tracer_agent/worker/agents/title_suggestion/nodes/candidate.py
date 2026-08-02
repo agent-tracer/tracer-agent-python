@@ -31,7 +31,7 @@ from ..reader import TitleLedgerReader
 from ..tools import build_title_registry
 
 
-class _CandidateAgent(GraphNode, ABC):
+class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[TitleSuggestionState, UpdateT], ABC):
     def __init__(
         self,
         req: TitleSuggestionRequest,
@@ -86,7 +86,7 @@ class _CandidateAgent(GraphNode, ABC):
         return result.response, result.messages, budget
 
 
-class InvestigateNode(_CandidateAgent):
+class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
     """대화 발췌와 필요한 이벤트로 제목 후보를 조사한다."""
 
     name = "investigate"
@@ -107,7 +107,7 @@ class InvestigateNode(_CandidateAgent):
         return {"candidate": draft, "messages": messages, "model_cost_usd": budget.delta}
 
 
-class RepairNode(_CandidateAgent):
+class RepairNode(_CandidateAgent[RepairUpdate]):
     """검증에서 걸린 후보를 한 번 더 고쳐 쓴다."""
 
     name = "repair"
@@ -129,7 +129,7 @@ class RepairNode(_CandidateAgent):
         }
 
 
-class ValidateCandidateNode(GraphNode):
+class ValidateCandidateNode(GraphNode[TitleSuggestionState, ValidateCandidateUpdate]):
     """제목 후보가 결정적 제약을 지키는지 판정한다."""
 
     name = "validate_candidate"
@@ -148,7 +148,7 @@ class ValidateCandidateNode(GraphNode):
         return {"validation_errors": errors}
 
 
-class FinalizeNode(GraphNode):
+class FinalizeNode(GraphNode[TitleSuggestionState, ResultUpdate]):
     """검증된 제목 후보를 외부 결과로 직렬화한다."""
 
     name = FINALIZE
@@ -158,7 +158,7 @@ class FinalizeNode(GraphNode):
         return {"result": candidate.model_dump(mode="json")}
 
 
-class EmptyNode(GraphNode):
+class EmptyNode(GraphNode[TitleSuggestionState, ResultUpdate]):
     """후보가 없는 제목 제안 결과를 반환한다."""
 
     name = EMPTY

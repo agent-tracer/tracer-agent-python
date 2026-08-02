@@ -44,7 +44,7 @@ def _plan_redispatch(
     return DispatchPlan(probes=draft.redispatch)
 
 
-class _CandidateAgent(GraphNode, ABC):
+class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[RecipeScanState, UpdateT], ABC):
     def __init__(
         self,
         req: RecipeScanRequest,
@@ -110,7 +110,7 @@ class _CandidateAgent(GraphNode, ABC):
         return result.response, result.messages, catalog, result.num_turns, budget.delta
 
 
-class InvestigateNode(_CandidateAgent):
+class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
     """전문가 보고를 모아 레시피 후보를 쓰거나 근거가 얇으면 전문가를 한 번 더 부른다."""
 
     name = "investigate"
@@ -198,7 +198,7 @@ class InvestigateNode(_CandidateAgent):
         return update
 
 
-class RepairNode(_CandidateAgent):
+class RepairNode(_CandidateAgent[RepairUpdate]):
     """검증에서 걸린 후보를 한 번 더 고쳐 쓴다."""
 
     name = "repair"
@@ -256,7 +256,7 @@ class RepairNode(_CandidateAgent):
         }
 
 
-class ValidateCandidateNode(GraphNode):
+class ValidateCandidateNode(GraphNode[RecipeScanState, ValidateCandidateUpdate]):
     """레시피 후보가 전문가 장부의 근거만 인용하는지 판정한다."""
 
     name = "validate_candidate"

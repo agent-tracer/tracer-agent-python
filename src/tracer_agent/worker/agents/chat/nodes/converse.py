@@ -50,7 +50,7 @@ TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-class ConverseNode(GraphNode):
+class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
     """대화 이력과 도구로 한 턴의 어시스턴트 답변을 만든다."""
 
     name = "converse"

@@ -23,7 +23,7 @@ from ..prompts import build_survey_prompt
 AGENT_NAME = "recipe-scan"
 
 
-class SurveyNode(GraphNode):
+class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
     """조율자가 어디를 얼마나 팔지 weight로 스스로 정하게 한다."""
 
     name = "survey"

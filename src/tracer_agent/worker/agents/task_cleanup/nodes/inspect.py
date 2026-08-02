@@ -39,7 +39,7 @@ def _failure_reason(exc: Exception) -> str:
     return WORKER_FAILED.format(reason=summary)[:MAX_INSPECT_REASON_CHARS]
 
 
-class TriageNode(GraphNode):
+class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
     """조율자가 후보 목록만 보고 어느 것을 열어볼지 스스로 정하게 한다."""
 
     name = "triage"
@@ -111,7 +111,7 @@ class TriageNode(GraphNode):
         }
 
 
-class InspectNode(GraphNode):
+class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
     """후보 하나를 자기 예산과 자기 장부로 열어보고 판정을 올린다."""
 
     name = "inspect"
