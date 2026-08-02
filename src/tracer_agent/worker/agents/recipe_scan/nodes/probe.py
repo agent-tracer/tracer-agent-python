@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_VERDICT_CHARS,
@@ -107,12 +108,7 @@ class ProbeNode(GraphNode):
             result = await asyncio.wait_for(
                 invoke_structured_agent(
                     agent,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": build_probe_prompt(req.taskId, assignment.question),
-                        }
-                    ],
+                    messages=[HumanMessage(content=build_probe_prompt(req.taskId, assignment.question))],
                     context=StandardAgentContext(
                         agent_name=probe_name,
                         trace=self._usage,

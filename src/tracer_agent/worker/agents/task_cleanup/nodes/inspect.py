@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 
 from tracer_agent.shared.agents.task_cleanup.models import (
     CLEANUP_REVIEWER_ROLE,
@@ -84,12 +85,7 @@ class TriageNode(GraphNode):
         )
         result = await invoke_structured_agent(
             agent,
-            messages=[
-                {
-                    "role": "user",
-                    "content": build_triage_prompt(len(req.batch.candidates)),
-                }
-            ],
+            messages=[HumanMessage(content=build_triage_prompt(len(req.batch.candidates)))],
             context=StandardAgentContext(
                 agent_name=triage_name,
                 trace=self._usage,
@@ -164,12 +160,7 @@ class InspectNode(GraphNode):
             )
             result = await invoke_structured_agent(
                 agent,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": build_inspect_prompt(assignment.taskId),
-                    }
-                ],
+                messages=[HumanMessage(content=build_inspect_prompt(assignment.taskId))],
                 context=StandardAgentContext(
                     agent_name=name,
                     trace=self._usage,

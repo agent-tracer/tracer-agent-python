@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     DispatchPlan,
@@ -63,7 +64,7 @@ class SurveyNode(GraphNode):
         )
         result = await invoke_structured_agent(
             agent,
-            messages=[{"role": "user", "content": build_survey_prompt(req.taskId, req.userPrompt)}],
+            messages=[HumanMessage(content=build_survey_prompt(req.taskId, req.userPrompt))],
             context=StandardAgentContext(
                 agent_name=f"{AGENT_NAME}:survey",
                 trace=self._usage,

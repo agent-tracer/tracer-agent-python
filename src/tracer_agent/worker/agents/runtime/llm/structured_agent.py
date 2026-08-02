@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.graph.state import CompiledStateGraph
@@ -25,7 +25,7 @@ class StructuredAgentResult[Response: BaseModel]:
     """검증을 마친 구조화 응답과 다음 호출에 이어갈 메시지와 이 호출이 실제로 그은 턴이다."""
 
     response: Response
-    messages: list[Any]
+    messages: list[BaseMessage]
     num_turns: int
 
 
@@ -68,7 +68,7 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
 async def invoke_structured_agent[Response: BaseModel](
     agent: CompiledStateGraph[Any, Any, Any, Any],
     *,
-    messages: list[Any],
+    messages: list[BaseMessage],
     context: StandardAgentContext,
     response_type: type[Response],
     recursion_limit: int,
