@@ -104,13 +104,14 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         return raw["messages"] if isinstance(raw, dict) else []
 
     async def _invoke_with_drafts(self, prepared: _PreparedTurn, drafts: DraftPublisher) -> list[Any]:
-        """접수만 하고 끊긴 실행이라 진행 중인 답변을 창구로 되돌려 보내며 돈다."""
-        final_state: dict[str, Any] = {}
+        """접수만 하고 끊긴 실행이라 진행 중인 답변을 창구로 되돌려 보내며 수행한다."""
+        collected: list[Any] = []
         async for mode, chunk in prepared.agent.astream(
             {"messages": prepared.messages_in},
             context=prepared.context,
             config=prepared.config,
-            stream_mode=["messages", "values"],
+            # 상태 전체를 매 스텝 복사하지 않도록 그 스텝이 더한 것만 받는다.
+            stream_mode=["messages", "updates"],
         ):
             if mode == "messages":
                 message = chunk[0]
@@ -118,11 +119,10 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
                     await drafts.push(_text(message.content))
                     for call in message.tool_calls:
                         await drafts.push_tool(str(call.get("name", "")))
-            elif mode == "values" and isinstance(chunk, dict):
-                final_state = chunk
+            elif mode == "updates" and isinstance(chunk, dict):
+                collected.extend(_appended_messages(chunk))
         await drafts.flush()
-        messages: list[Any] = final_state.get("messages", [])
-        return messages
+        return collected
 
     async def _prepare(self, state: ChatState) -> _PreparedTurn:
         proposals: list[ProposedWrite] = []
@@ -286,3 +286,15 @@ def _text(content: Any) -> str:
         ]
         return "".join(parts)
     return ""
+
+
+def _appended_messages(update: dict[str, Any]) -> list[Any]:
+    """한 슈퍼스텝의 갱신에서 이 턴이 새로 더한 메시지만 꺼낸다."""
+    appended: list[Any] = []
+    for node_update in update.values():
+        if not isinstance(node_update, dict):
+            continue
+        messages = node_update.get("messages")
+        if isinstance(messages, list):
+            appended.extend(messages)
+    return appended
