@@ -107,9 +107,8 @@ class ChatMemoryStore(BaseStore):
         return None
 
     async def _put(self, op: PutOp) -> None:
-        if op.value is None:
-            raise NotImplementedError("chat memory has no delete binding")
-        _unwrapped(await self._client.remember(op.key, str(op.value.get(CONTENT_FIELD, ""))))
+        # 사용자에 대한 사실은 승인을 거쳐 적히므로 이 저장소는 되읽기만 한다.
+        raise NotImplementedError("chat memory is written through the confirmation flow")
 
     async def _rows(self) -> list[dict[str, Any]]:
         payload = json.loads(_unwrapped(await self._client.recall()))

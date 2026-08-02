@@ -135,11 +135,10 @@ TOOL_BINDINGS: dict[str, ToolBinding] = {
     ),
     "enqueue_job": _write("POST", "/api/agent/jobs", body=_same("kind", "input")),
     "recall_facts": _get("/api/agent/chat/memories"),
-    # 확인 게이트 없이 즉시 upsert하는 유일한 쓰기라 gate는 write가 아니라 none으로 남는다.
     "remember_fact": ToolBinding(
         method="PUT",
         path="/api/agent/chat/memories/{key}",
-        gate=GATE_NONE,
+        gate=GATE_CONFIRM,
         path_args=("key",),
         body=_same("content"),
     ),

@@ -17,7 +17,7 @@ from tracer_agent.shared.agents.shared.models import TrimmedStr
 # 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
 CHAT_TOOLS_PATH = Path(__file__).resolve().parents[6] / "contract" / "agent" / "chat" / "tool.json"
 
-MEMORY_TOOL_NAMES: tuple[str, ...] = ("recall_facts", "remember_fact")
+MEMORY_TOOL_NAMES: tuple[str, ...] = ("recall_facts",)
 
 
 @lru_cache(maxsize=1)

@@ -84,7 +84,7 @@ async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변�
     assert data["assistantText"] != ""
 
 
-async def test_remember_fact는_턴이_끝나기_전에_기억_API에_적재된다(
+async def test_remember_fact는_승인_대기로_서고_기억_API를_건드리지_않는다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     memory = FakeChatMemoryApi()
@@ -97,11 +97,11 @@ async def test_remember_fact는_턴이_끝나기_전에_기억_API에_적재된�
         memory=memory,
     )
 
-    narrate("chat :: remember_fact를 부른 자리에서 기억 API에 적재한다", result)
+    narrate("chat :: remember_fact를 승인 대기로 세운다", result)
     data = result.data or {}
-    # 산출물에 기억이 실리지 않으므로 적재됐다는 증거는 기억 API에만 있다.
-    assert memory.facts == {"lang": "한국어를 쓴다"}
-    assert data["proposedWrites"] == []
+    # 승인 전에는 기억 API가 움직이지 않고 대기 행만 선다.
+    assert memory.facts == {}
+    assert [write["toolName"] for write in data["proposedWrites"]] == ["remember_fact"]
 
 
 def _replay_handler(replay: dict[str, Any] | None, memory: FakeChatMemoryApi) -> Any:

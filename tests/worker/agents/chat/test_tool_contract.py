@@ -39,7 +39,7 @@ def test_mutation_분할이_계약과_같다() -> None:
 
     assert set(WRITE_TOOL_NAMES) == mutation
     assert set(READ_TOOL_NAMES) | set(AGENT_READ_TOOL_NAMES) | set(MEMORY_TOOL_NAMES) == set(tools) - mutation
-    assert set(MEMORY_TOOL_NAMES) == {"recall_facts", "remember_fact"}
+    assert set(MEMORY_TOOL_NAMES) == {"recall_facts"}
     assert set(AGENT_READ_TOOL_NAMES) == {"get_job"}
 
 

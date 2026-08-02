@@ -201,6 +201,10 @@ _PLANS: dict[str, Callable[[dict[str, Any]], ChatToolCall]] = {
     "archive_task": _one_id("taskId", "Archived task {}."),
     "unarchive_task": _one_id("taskId", "Unarchived task {}."),
     "delete_task": _one_id("taskId", "Deleted task {}."),
+    "remember_fact": lambda args: _plain(
+        {"key": _req(args, "key"), "content": _req(args, "content")},
+        f'Remembered "{_req(args, "key")}" about you.',
+    ),
     "create_memo": _create_memo,
     "update_memo": lambda args: _plain(
         {"memoId": _req(args, "memoId"), "body": _req(args, "body")},

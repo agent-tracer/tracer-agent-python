@@ -8,20 +8,16 @@ from typing import Any
 from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool, StructuredTool
 
-from tracer_agent.shared.agents.chat.memory_policy import memory_rejection
 from tracer_agent.shared.agents.chat.models import ProposedWrite
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.telemetry.spans import tool_span
 from ..reader import ChatReadClient
 from ..store import (
-    CONTENT_FIELD,
     FACTS_FIELD,
     KEY_FIELD,
     MEMORY_NAMESPACE,
     RECALL_LIMIT,
-    REMEMBERED_STATUS,
-    STATUS_FIELD,
     ChatMemoryUnavailable,
 )
 from ..writer import ChatWriteClient
@@ -86,7 +82,6 @@ def build_chat_registry(
             for name in WRITE_TOOL_NAMES
         ),
         _recall_tool(descriptions, agent_name),
-        _remember_tool(descriptions, agent_name),
     ]
     return ChatToolRegistry(tools)
 
@@ -159,29 +154,6 @@ def _recall_tool(descriptions: dict[str, str], agent_name: str) -> StructuredToo
     return _structured("recall_facts", descriptions, run)
 
 
-def _remember_tool(descriptions: dict[str, str], agent_name: str) -> StructuredTool:
-    async def run(runtime: ToolRuntime, **kwargs: Any) -> str:
-        args = _clean(kwargs)
-        key = str(args["key"])
-        content = str(args.get("content", ""))
-        async with tool_span("remember_fact", agent_name=agent_name, parameters={"key": key}):
-            store = runtime.store
-            if store is None:
-                return TOOL_FAILED.format(tool="remember_fact", reason=MEMORY_BACKEND_MISSING)
-            rejection = memory_rejection(content)
-            if rejection is not None:
-                return TOOL_FAILED.format(tool="remember_fact", reason=rejection)
-            try:
-                # 턴이 중간에 끊겨도 남아야 하므로 산출물로 미루지 않고 부른 자리에서 즉시 적재한다.
-                await store.aput(MEMORY_NAMESPACE, key, {CONTENT_FIELD: content})
-            except ChatMemoryUnavailable as failure:
-                return TOOL_FAILED.format(tool="remember_fact", reason=str(failure))
-            remembered = {KEY_FIELD: key, CONTENT_FIELD: content, STATUS_FIELD: REMEMBERED_STATUS}
-            return for_model(json.dumps(remembered, ensure_ascii=False))
-
-    return _structured("remember_fact", descriptions, run)
-
-
 def _assert_memory_names() -> None:
-    if set(MEMORY_TOOL_NAMES) != {"recall_facts", "remember_fact"}:
+    if set(MEMORY_TOOL_NAMES) != {"recall_facts"}:
         raise ValueError("chat memory tool names drifted from the contract")

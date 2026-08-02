@@ -11,7 +11,6 @@ from tracer_agent.shared.agents.chat.tools.bindings import GATE_NONE, TOOL_BINDI
 from .reader import scoped_headers, unwrap_envelope
 
 RECALL_TOOL = "recall_facts"
-REMEMBER_TOOL = "remember_fact"
 
 
 @dataclass(frozen=True)
@@ -42,14 +41,10 @@ class ChatMemoryClient:
         """recall_facts 바인딩대로 이 사용자의 장기기억 전체를 되읽는다."""
         return await self._call(RECALL_TOOL, {})
 
-    async def remember(self, key: str, content: str) -> ChatMemoryResult:
-        """remember_fact 바인딩대로 사실 하나를 턴이 끝나기를 기다리지 않고 즉시 적재한다."""
-        return await self._call(REMEMBER_TOOL, {"key": key, "content": content})
-
     async def _call(self, tool_name: str, args: dict[str, object]) -> ChatMemoryResult:
         binding = TOOL_BINDINGS[tool_name]
         if binding.gate != GATE_NONE:
-            raise ValueError(f"{tool_name} is not an unapproved memory tool")
+            raise ValueError(f"{tool_name} does not read without a gate")
         url = f"{self._base_url}{fill_path(binding, args)}"
         headers = scoped_headers(self._user_id, self._scope_token)
         body = {wire: args[arg] for arg, wire in binding.body.items() if args.get(arg) is not None}

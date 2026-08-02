@@ -57,14 +57,15 @@ async def test_검색이_상한과_시작점을_지킨다() -> None:
     assert [item.key for item in window] == ["b", "c"]
 
 
-async def test_적재가_기억_API에_그대로_흐른다() -> None:
+async def test_저장소는_되읽기만_하고_적재하지_않는다() -> None:
     api = FakeChatMemoryApi()
     store, http = _store(httpx.MockTransport(api.handle))
 
     async with http:
-        await store.aput(MEMORY_NAMESPACE, "lang", {"content": "한국어를 쓴다"})
+        with pytest.raises(NotImplementedError):
+            await store.aput(MEMORY_NAMESPACE, "lang", {"content": "한국어를 쓴다"})
 
-    assert api.facts == {"lang": "한국어를 쓴다"}
+    assert api.facts == {}
 
 
 async def test_기억_API가_거절하면_상태_코드를_들고_끊는다() -> None:
