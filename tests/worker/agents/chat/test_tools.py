@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from functools import partial
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -14,6 +15,8 @@ from tracer_agent.shared.agents.chat.models import ProposedWrite
 from tracer_agent.worker.agents.chat.memory import ChatMemoryClient
 from tracer_agent.worker.agents.chat.store import ChatMemoryStore
 from tracer_agent.worker.agents.chat.tools import build_chat_registry
+from tracer_agent.worker.agents.chat.tools.registry import INVALID_ARGS
+from tracer_agent.worker.agents.chat.tools.specs import READ_TOOL_NAMES
 from tracer_agent.worker.agents.chat.writer import ChatWriteClient
 
 _BASE_URL = "http://tracer-api.test"
@@ -169,3 +172,30 @@ async def test_기억_API가_없는_실행은_되읽었다고_말하지_않는�
 
     assert "recall_facts" in recalled
     assert "{" not in recalled
+
+
+class Test도구인자검증:
+    async def test_계약_밖의_인자는_도구_실패로_모델에게_알린다(self) -> None:
+        registry = build_chat_registry(None, [], {}, agent_name="chat")
+        tool = next(one for one in registry.langchain_tools() if one.name in READ_TOOL_NAMES)
+
+        answered = await tool.coroutine(unknown_argument="값")  # type: ignore[misc]
+
+        assert "failed" in answered
+        assert INVALID_ARGS in answered
+
+    async def test_검증을_통과한_인자는_와이어_이름으로_조회에_넘어간다(self) -> None:
+        seen: dict[str, object] = {}
+
+        class _Client:
+            async def read(self, name: str, args: dict[str, object]) -> Any:
+                seen.update({"name": name, "args": args})
+                return SimpleNamespace(ok=True, status_code=200, text="{}")
+
+        registry = build_chat_registry(_Client(), [], {}, agent_name="chat")  # type: ignore[arg-type]
+        tool = next(one for one in registry.langchain_tools() if one.name == "get_task")
+
+        await tool.coroutine(taskId="t1")  # type: ignore[misc]
+
+        assert seen["name"] == "get_task"
+        assert seen["args"] == {"taskId": "t1"}

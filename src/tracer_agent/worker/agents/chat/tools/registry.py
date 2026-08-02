@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import ValidationError
 
 from tracer_agent.shared.agents.chat.models import ProposedWrite
 from tracer_agent.shared.agents.chat.tools.surface import recall_tool_name
@@ -40,8 +41,22 @@ WRITE_BACKEND_MISSING = "the confirmation backend is not available in this execu
 MEMORY_BACKEND_MISSING = "the memory backend is not available in this execution"
 
 
-def _clean(kwargs: dict[str, Any]) -> dict[str, object]:
-    return {key: value for key, value in kwargs.items() if value is not None}
+# 모델이 계약 밖의 인자를 보냈을 때 그 사유로 쓰는 문구다.
+INVALID_ARGS = "the arguments did not match the tool contract"
+
+
+class ChatToolArgsInvalid(ValueError):
+    """모델이 낸 인자가 계약의 인자 모델을 통과하지 못했음을 부른 자리에 알린다."""
+
+
+def _validated(name: str, kwargs: dict[str, Any]) -> dict[str, object]:
+    """모델이 고른 인자를 계약이 선언한 모델로 검증해 와이어 이름의 조회 인자로 만든다."""
+    try:
+        args = ARGS_MODELS[name].model_validate(kwargs)
+    except ValidationError as invalid:
+        raise ChatToolArgsInvalid(INVALID_ARGS) from invalid
+    dumped: dict[str, object] = args.model_dump(by_alias=True, exclude_none=True)
+    return dumped
 
 
 def for_model(text: str) -> str:
@@ -101,7 +116,10 @@ def _read_tool(
     name: str, read_client: ChatReadClient | None, descriptions: dict[str, str], agent_name: str
 ) -> StructuredTool:
     async def run(**kwargs: Any) -> str:
-        args = _clean(kwargs)
+        try:
+            args = _validated(name, kwargs)
+        except ChatToolArgsInvalid as invalid:
+            return TOOL_FAILED.format(tool=name, reason=str(invalid))
         async with tool_span(name, agent_name=agent_name, parameters=args):
             if read_client is None:
                 return TOOL_FAILED.format(tool=name, reason=READ_BACKEND_MISSING)
@@ -121,7 +139,10 @@ def _proposal_tool(
     agent_name: str,
 ) -> StructuredTool:
     async def run(**kwargs: Any) -> str:
-        args = _clean(kwargs)
+        try:
+            args = _validated(name, kwargs)
+        except ChatToolArgsInvalid as invalid:
+            return TOOL_FAILED.format(tool=name, reason=str(invalid))
         async with tool_span(name, agent_name=agent_name, parameters=args):
             if write_client is None:
                 return TOOL_FAILED.format(tool=name, reason=WRITE_BACKEND_MISSING)
