@@ -163,6 +163,10 @@ LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소
 
 새 엔드포인트·워크플로·도구·프롬프트·DB 필드를 더할 때는 계약을 먼저 확인하고 테스트와 적합성 케이스와 구현을 함께 갱신합니다. 구현 차이는 임의의 예외 목록으로 숨기지 않고 `divergence.json`과 함께 갱신합니다.
 
+## 에이전트 구현 문서
+
+노드 토폴로지, 노드 간 이동, 도구, 프롬프트 원문·번역, 미들웨어, 구조화 출력과 워크플로 시각화는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
+
 ## 관련 저장소
 
 - [tracer-agent-contract](https://github.com/agent-tracer/tracer-agent-contract) — HTTP·wire·workflow·DB·prompt 계약

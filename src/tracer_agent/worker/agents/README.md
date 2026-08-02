@@ -1,0 +1,223 @@
+# Python 에이전트 실행 구조
+
+이 문서는 `src/tracer_agent/worker/agents`에 구현된 Python 에이전트의 공통 실행 구조를 정리한다. Python 구현은 LangGraph를 사용하므로 정적 그래프, 노드 registry, 실행 context, LangChain agent, 미들웨어, 도구 registry의 경계를 분리해 관리한다.
+
+## 먼저 확인할 결론
+
+Temporal activity가 에이전트 종류에 따라 `run_*` 함수를 호출하고, 각 실행 함수가 요청별 모델·HTTP client·추적 객체·프롬프트를 주입한다. 그래프 정의는 정적으로 컴파일되어 있으며, 요청별 구현 객체는 `ValidationGraphContext.nodes`에 연결된다.
+
+## 전체 토폴로지
+
+```mermaid
+flowchart LR
+    API[agent-api / worker entrypoint] --> T[Temporal activity]
+    T --> DISPATCH{agent kind}
+    DISPATCH --> CHAT[run_chat]
+    DISPATCH --> RECIPE[run_recipe_scan]
+    DISPATCH --> CLEANUP[run_task_cleanup]
+    DISPATCH --> TITLE[run_title_suggestion]
+    CHAT --> GRAPH[compiled LangGraph]
+    RECIPE --> GRAPH
+    CLEANUP --> GRAPH
+    TITLE --> GRAPH
+    GRAPH --> CTX[ValidationGraphContext]
+    CTX --> NODE[node registry]
+    NODE --> AGENT[LangChain create_agent]
+    AGENT --> MW[LangChain middleware]
+    MW --> MODEL[BaseChatModel]
+    MW --> TOOLS[ToolRegistry]
+    TOOLS --> EXT[tracer-api / agent-api / memory]
+    GRAPH --> OUT[wire result + execution ledger]
+```
+
+## 에이전트별 문서
+
+개별 에이전트 문서는 다음과 같다.
+
+- [Chat 에이전트](chat/README.md): 대화·메모리·확인 쓰기·스트림
+- [Recipe Scan 에이전트](recipe_scan/README.md): survey·probe·investigate·redispatch·repair
+- [Task Cleanup 에이전트](task_cleanup/README.md): triage·inspect·investigate·repair
+- [Title Suggestion 에이전트](title_suggestion/README.md): investigate·validate·repair
+
+## 노드와 단계
+
+일반적인 노드는 전체 상태의 부분 갱신을 반환한다. `Send` 기반 fan-out 노드는 분기 전용 payload를 입력으로 받고, 병렬 실행 결과는 LangGraph의 상태 병합 규칙에 따라 합쳐진다.
+
+```mermaid
+stateDiagram-v2
+    [*] --> NodeStarted
+    NodeStarted --> NodeRunning
+    NodeRunning --> ToolUse: 도구 호출
+    ToolUse --> NodeRunning: 도구 결과
+    NodeRunning --> Candidate: 구조화 출력
+    Candidate --> Validate: 결정적 검증
+    Validate --> Finalize: 통과
+    Validate --> Repair: 실패 + repair 미실행
+    Repair --> Validate
+    Validate --> Empty: 실패 + repair 완료
+    NodeRunning --> Failed: 예외·timeout·취소
+    Finalize --> [*]
+    Empty --> [*]
+    Failed --> [*]
+```
+
+## 타입 체계
+
+| 타입 | 구현 | 책임 |
+| --- | --- | --- |
+| 상태 | `shared.agents.*.models.*State` | 그래프 전체가 공유하는 실행 입력·부분 갱신·결과를 보유한다 |
+| 노드 | `runtime.node.GraphNode[InputT, UpdateT]` | 이름과 비동기 `run` 메서드와 입력·갱신 타입을 결합한다 |
+| 노드 registry | `runtime.node.node_registry` | 정적 그래프 노드 이름과 요청별 실행 함수를 연결한다 |
+| 실행 context | `runtime.validation_graph.ValidationGraphContext` | 에이전트 이름, 추적 객체, registry, 검증 router를 보유한다 |
+| 관측 등록 | `runtime.validation_graph.observed` | 노드 시작·완료·실패와 retry·timeout 메타데이터를 기록한다 |
+| 검증 꼬리 | `add_validation_tail` | 검증 → repair 1회 → finalize 또는 empty 경로를 공통화한다 |
+
+## 노드 간 이동
+
+공통 이동 규칙은 다음과 같다.
+
+1. 그래프 진입 노드가 요청을 정규화하고 필요한 외부 문맥을 준비한다.
+2. 조사·계획 노드가 다음 노드에 전달할 구조화 payload를 만든다.
+3. `Send` fan-out 노드가 전문가별 조사 노드를 병렬 실행한다.
+4. 조율 노드가 보고와 provenance를 합성하고 결과 또는 redispatch를 선택한다.
+5. 결정적 검증 노드가 식별자·인용·중복·개수·형식 제약을 검사한다.
+6. 검증 실패 시 repair 노드를 최대 한 번 실행한다.
+7. repair 이후에도 실패하면 에이전트별 empty 경로 또는 유효한 부분 결과로 종료한다.
+
+```mermaid
+flowchart TD
+    ENTRY[agent entry] --> PREPARE[prepare / context preparation]
+    PREPARE --> PLAN[plan or survey / triage]
+    PLAN -->|assignments| FANOUT{{Send fan-out}}
+    FANOUT --> PROBE[probe / inspect]
+    PROBE --> INVESTIGATE[investigate / decide]
+    INVESTIGATE --> ROUTE{redispatch?}
+    ROUTE -- 예산·횟수 허용 --> FANOUT
+    ROUTE -- 아니오 --> VALIDATE[deterministic validation]
+    VALIDATE -->|통과| FINALIZE[finalize]
+    VALIDATE -->|실패 + repair 미실행| REPAIR[repair]
+    REPAIR --> VALIDATE
+    VALIDATE -->|실패 + repair 완료| EMPTY[empty]
+```
+
+## 미들웨어에 해당하는 실행 정책
+
+Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이다. 에이전트별 `langchain_agent.py`가 공통 미들웨어와 선택적 기능을 조합한다.
+
+| 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
+| --- | --- | --- | --- |
+| 프롬프트 캐시 | `AnthropicPromptCachingMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언을 캐시 접두사로 유지한다 |
+| 모델 호출 상한 | `ModelCallLimitMiddleware` | 전체 | `max_turns + 2` 호출 상한을 적용한다 |
+| 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 오래된 도구 결과를 정리하고 최근 2개를 유지한다 |
+| 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록한다 |
+| 도구 재시도 | `ToolRetryMiddleware` | Chat·Recipe Scan·Task Cleanup | 선언된 일시 오류를 최대 2회 재시도한다 |
+| 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | `anthropic.APIError`에 대해서만 대체 모델을 1회 호출한다 |
+| 모델 재시도 | `model_retry_middleware()` | Chat·Recipe Scan | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
+
+```mermaid
+flowchart LR
+    REQ[ModelRequest] --> CACHE[Prompt cache]
+    CACHE --> LIMIT[Model call limit]
+    LIMIT --> EDIT[Context editing]
+    EDIT --> STANDARD[StandardAgentMiddleware]
+    STANDARD --> TOOL_RETRY[Tool retry]
+    TOOL_RETRY --> FALLBACK{provider APIError?}
+    FALLBACK -- 아니오 --> MODEL_RETRY[Same-model retry]
+    FALLBACK -- 예 --> ALT[Fallback model]
+    MODEL_RETRY --> PRIMARY[Primary model]
+    ALT --> RESULT[Agent result]
+    PRIMARY --> RESULT
+```
+
+`FallbackModelMiddleware`는 예산 초과·출력 절단·취소를 fallback 대상으로 바꾸지 않는다. `model_retry_middleware`도 정의된 공급자 일시 오류 범위 밖의 예외를 재시도하지 않는다. 이 경계는 예산·출력·취소 상태가 상위 실행기로 전달되도록 한다.
+
+## 도구 실행 구조
+
+`runtime.tooling.AgentTool`은 도구 이름, 설명, Pydantic 인자 모델, 실행 함수, 일시 오류 목록, 근거 기록을 하나의 타입으로 결합한다. `ToolRegistry`는 인자를 검증한 뒤 도구 span을 열고, 실행 결과를 provenance/evidence ledger에 기록하며, LangChain `StructuredTool`로 변환한다.
+
+```mermaid
+sequenceDiagram
+    participant Model as 모델
+    participant LC as StructuredTool
+    participant Registry as ToolRegistry
+    participant Tool as AgentTool
+    participant API as tracer-api / agent-api
+    participant Ledger as provenance ledger
+    Model->>LC: tool call(name, raw args)
+    LC->>Registry: invoke(name, raw args)
+    Registry->>Registry: Pydantic args validation
+    Registry->>Tool: execute(validated args)
+    Tool->>API: 사용자 범위 HTTP 요청
+    API-->>Tool: JSON response
+    Tool-->>Registry: content
+    Registry->>Ledger: returned identifiers 기록
+    Registry-->>LC: tool message
+    LC-->>Model: redacted result
+```
+
+Chat 도구는 `read`, `agentRead`, `memory`, `confirm` surface로 나뉜다. Recipe Scan과 Task Cleanup은 조사 단계별 provenance ledger를 사용하며, 조율 단계는 조사 보고와 ledger에 기록된 근거만 사용한다.
+
+## 프롬프트 실행 구조
+
+프롬프트의 원천은 `contract/agent/{agent}/prompt.json`과 `tool.json`이다. `ContractPromptSource`가 template과 fragment를 읽고 placeholder를 치환해 `AgentPrompt`를 만든다. 에이전트별 `prompts.py`는 고정 영어 scaffold와 계약 fragment를 결합하고, 실행별 데이터는 user message 또는 메시지 꼬리에 배치한다.
+
+```mermaid
+flowchart LR
+    PJ[contract prompt.json] --> SOURCE[ContractPromptSource]
+    TJ[contract tool.json] --> SOURCE
+    SOURCE --> PROMPT[AgentPrompt\nversion + templates + fragments]
+    PROMPT --> BUILDER[agent prompts.py]
+    BUILDER --> SYSTEM[SystemMessage\nstable scaffold + contract text]
+    BUILDER --> USER[HumanMessage\nrequest + reports + facts]
+    SYSTEM --> AGENT[LangChain create_agent]
+    USER --> AGENT
+```
+
+`AgentPrompt.version()`은 template들이 동일한 계약 판을 사용하는지 확인한다. 구조화 에이전트는 `ToolStrategy`로 출력 타입을 강제하며, Chat은 자유 텍스트 응답과 `ChatResult`를 사용한다.
+
+## 공통 안전 정책 prompt
+
+모든 에이전트의 system prompt 앞에는 코드가 소유하는 `SAFETY_POLICY`가 배치된다. 아래는 `shared/safety_policy.py`의 영어 원문과 한국어 번역이다.
+
+전문은 `shared/safety_policy.py` 가 갖는다. 문서가 옮겨 적으면 두 벌이 되어 한쪽만 바뀐다.
+
+## 에이전트별 출력 타입
+
+| 에이전트 | 주요 노드 출력 | 최종 결과 |
+| --- | --- | --- |
+| Chat | `ConverseUpdate` | `ChatResult`: 답변과 확인 대기 write 목록 |
+| Recipe Scan | `DispatchPlan`, `ProbeReport`, `RecipeDraft` | recipe 후보와 provenance |
+| Task Cleanup | `TriagePlan`, `InspectReport`, `CleanupDraft` | archive 제안 목록 |
+| Title Suggestion | `TitleSuggestionDraft` | title 제안 목록 |
+
+## 워크플로 공통 흐름
+
+```mermaid
+flowchart TD
+    START[workflow start] --> RUN[runAgentJob on generate queue]
+    RUN --> GRAPH[compiled LangGraph]
+    GRAPH --> SETTLE[원장 정산·알림]
+    RUN -->|취소| CANCEL[settleCanceledAgentJob]
+    RUN -->|취소가 아닌 오류| FAIL[실패 상태]
+    SETTLE --> DONE[완료 상태·산출물]
+```
+
+세 잡 종류가 `agentJobWorkflow` 하나를 함께 쓰고 준비와 종결이 실행 액티비티 안에 있다.
+Chat만 스레드 워크플로와 실행 워크플로를 따로 두고 준비·생성·종결·실패를 별도 액티비티로 나눈다.
+자세한 표는 각 에이전트 문서의 Temporal 워크플로 절이 갖는다.
+
+## 코드 탐색 기준점
+
+| 확인 대상 | 기준 파일 |
+| --- | --- |
+| 노드 계약과 registry | `runtime/node.py` |
+| 검증 그래프와 관측 | `runtime/validation_graph.py` |
+| LangChain 표준 실행 체인 | `runtime/llm/standard_agent.py` |
+| 구조화 출력 실행 | `runtime/llm/structured_agent.py` |
+| 대체 모델·모델 재시도 | `runtime/llm/fallback.py`, `runtime/llm/retry.py` |
+| 실행 예산 | `runtime/llm/budget.py` |
+| 도구 계약과 registry | `runtime/tooling.py` |
+| 궤적과 관측 | `runtime/execution/trace.py` |
+| 공통 안전 정책 | `shared/safety_policy.py` |
+| 잡 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |
+| 대화 워크플로와 액티비티 | `worker/workflows/chat_workflows.py`, `chat_activities.py` |
