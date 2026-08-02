@@ -7,10 +7,10 @@ from langgraph.graph import START
 from langgraph.types import Command, RetryPolicy, Send, TimeoutPolicy
 
 from tracer_agent.shared.agents.envelope.catalog import CATALOG
-from tracer_agent.shared.agents.recipe_scan.models import ProbeDispatch, RecipeScanState
+from tracer_agent.shared.agents.recipe_scan.models import ProbeAssignment, ProbeDispatch, RecipeScanState
 
 from ..runtime.errors import is_retryable_node_failure
-from ..runtime.orchestration import allocate_cost_shares
+from ..runtime.llm.budget import lease_shares
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, observed
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
@@ -43,36 +43,42 @@ async def _survey_error_handler(
     return Command(update={"plan": None}, goto=EMPTY)
 
 
+def _remaining(state: RecipeScanState) -> tuple[int, float]:
+    """repair·survey·synthesisFloor 예약을 뗀 뒤 팬아웃이 아직 쓰지 않은 턴과 달러다."""
+    remaining_turns = state["max_turns"] - state.get("model_turns_used", 0)
+    remaining_usd = state["max_cost_usd"] - state.get("model_cost_usd", 0.0)
+    return remaining_turns, remaining_usd
+
+
+def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
+    if not probes or remaining_turns <= 0 or remaining_usd <= 0.0:
+        return []
+    leases = lease_shares([assignment.weight for assignment in probes], remaining_turns, remaining_usd)
+    return [
+        Send(
+            ProbeNode.name,
+            ProbeDispatch(assignment=assignment, max_turns=lease.max_turns, max_cost_usd=lease.max_cost_usd),
+            timeout=_PROBE_SEND_TIMEOUT,
+        )
+        for assignment, lease in zip(probes, leases, strict=True)
+    ]
+
+
 def _dispatch(state: RecipeScanState) -> list[Send]:
     plan = state["plan"]
     # 조율자가 근거를 캐는 도구를 갖지 않으므로 띄울 전문가가 없으면 바로 빈 결과로 끝낸다.
     if plan is None or not plan.probes:
         return [Send(EMPTY, state)]
-    remaining = state["max_cost_usd"] - state.get("model_cost_usd", 0.0)
-    if remaining <= 0.0:
-        return [Send(EMPTY, state)]
-    return [
-        Send(
-            ProbeNode.name,
-            ProbeDispatch(assignment=assignment, cost_budget=cost_budget),
-            timeout=_PROBE_SEND_TIMEOUT,
-        )
-        for assignment, cost_budget in allocate_cost_shares(plan.probes, ceiling=remaining)
-    ]
+    remaining_turns, remaining_usd = _remaining(state)
+    return _fan_out(plan.probes, remaining_turns, remaining_usd) or [Send(EMPTY, state)]
 
 
 def _after_investigate(state: RecipeScanState) -> list[Send]:
     plan = state["redispatch"]
     if plan is None:
         return [Send(ValidateCandidateNode.name, state)]
-    return [
-        Send(
-            ProbeNode.name,
-            ProbeDispatch(assignment=assignment, cost_budget=cost_budget),
-            timeout=_PROBE_SEND_TIMEOUT,
-        )
-        for assignment, cost_budget in allocate_cost_shares(plan.probes, ceiling=state["redispatch_ceiling"])
-    ]
+    remaining_turns, remaining_usd = _remaining(state)
+    return _fan_out(plan.probes, remaining_turns, remaining_usd) or [Send(ValidateCandidateNode.name, state)]
 
 
 _graph = new_graph(RecipeScanState)

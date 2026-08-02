@@ -70,12 +70,22 @@ class ProbeNode(GraphNode):
     async def run(self, payload: ProbeDispatch) -> ProbeUpdate:
         req = self._req
         assignment = payload.assignment
-        share = payload.cost_budget
         # 장부를 전문가마다 새로 두어 다른 전문가가 읽은 것을 인용하지 못하게 한다.
         catalog = ProvenanceCatalog()
         probe_name = f"{self._agent_name}:{assignment.probe}"
-        budget = self._budget.new_loop(probe_name, req.model, max_cost_usd=share)
-        wall_clock_s = weighted_wall_clock_s(self._wall_clock_ceiling_s, share, req.limits.budgetUsd)
+        # 턴을 하나도 못 받으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
+        if payload.max_turns <= 0:
+            report = ProbeReport(
+                probe=assignment.probe,
+                verdict=WORKER_FAILED.format(reason="no turns allocated")[:MAX_VERDICT_CHARS],
+                excerpts=[],
+                exhausted=True,
+            )
+            return {"reports": [report], "provenance": catalog, "model_cost_usd": 0.0, "model_turns_used": 0}
+        budget = self._budget.new_loop(probe_name, req.model, max_cost_usd=payload.max_cost_usd)
+        wall_clock_s = weighted_wall_clock_s(
+            self._wall_clock_ceiling_s, payload.max_cost_usd, req.limits.budgetUsd
+        )
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
             registry = build_recipe_registry(
@@ -92,7 +102,7 @@ class ProbeNode(GraphNode):
                 registry.transient_errors(),
                 output=ProbeReport,
                 fallback_chat=self._fallback_chat,
-                max_turns=self._req.limits.maxTurns,
+                max_turns=payload.max_turns,
             )
             result = await asyncio.wait_for(
                 invoke_structured_agent(
@@ -107,15 +117,16 @@ class ProbeNode(GraphNode):
                         agent_name=probe_name,
                         trace=self._usage,
                         budget=budget,
-                        max_model_turns=self._req.limits.maxTurns,
+                        max_model_turns=payload.max_turns,
                     ),
                     response_type=ProbeReport,
-                    recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
+                    recursion_limit=recursion_limit_for(payload.max_turns),
                     missing_response=f"{assignment.probe} probe produced no structured report",
                 ),
                 timeout=wall_clock_s,
             )
             report = result.response
+            turns_used = result.num_turns
         except Exception as exc:
             verdict = _failure_verdict(exc)
             _log.warning("probe %s failed: %s", assignment.probe, exc)
@@ -125,8 +136,11 @@ class ProbeNode(GraphNode):
                 excerpts=[],
                 exhausted=True,
             )
+            # 무너진 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
+            turns_used = payload.max_turns
         return {
             "reports": [report],
             "provenance": catalog,
             "model_cost_usd": budget.delta,
+            "model_turns_used": turns_used,
         }

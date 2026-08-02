@@ -63,12 +63,14 @@ class DispatchPlan(ModelFacing):
 
 
 class ProbeDispatch(BaseModel):
-    """조율자가 전문가 분기 하나에 실어 보내는 조사 지시와 배분한 비용 예산이다."""
+    """조율자가 전문가 분기 하나에 실어 보내는 조사 지시와 배분한 턴과 달러 몫이다."""
 
     model_config = ConfigDict(extra="forbid")
 
     assignment: ProbeAssignment
-    cost_budget: float = Field(gt=0.0)
+    # 0턴은 그 전문가에게 몫이 남지 않았다는 뜻이며 노드가 모델을 부르지 않는 길로 스스로 보낸다.
+    max_turns: int = Field(ge=0)
+    max_cost_usd: float = Field(ge=0.0)
 
 
 # 발췌 상한이 곧 맥락 격리의 강도이며 넉넉히 열면 전문가의 맥락이 조율자에게 그대로 옮겨온다.
@@ -237,6 +239,8 @@ class ProbeUpdate(TypedDict):
     reports: list[ProbeReport]
     provenance: ProvenanceCatalog
     model_cost_usd: float
+    # 전문가가 그은 턴은 팬아웃 잔량 풀에서 곧장 빠져 다음 팬아웃의 가용 턴을 줄인다.
+    model_turns_used: int
 
 
 class InvestigateUpdate(TypedDict):
@@ -246,8 +250,8 @@ class InvestigateUpdate(TypedDict):
     messages: list[BaseMessage]
     provenance: ProvenanceCatalog
     model_cost_usd: float
+    model_turns_used: int
     redispatch: DispatchPlan | None
-    redispatch_ceiling: float
     redispatch_count: int
 
 
@@ -273,12 +277,14 @@ class ResultUpdate(TypedDict):
     result: dict[str, object]
 
 
+def _sum_turns(left: int, right: int) -> int:
+    return left + right
+
+
 class RecipeScanState(TypedDict):
     plan: DispatchPlan | None
     # 조율자가 종합 대신 요청한 추가 파견 계획이며 없으면 검증으로 넘어간다.
     redispatch: DispatchPlan | None
-    # 추가 파견에 넘길 수 있는 남은 비용 상한과, 상한을 지키기 위해 센 파견 횟수다.
-    redispatch_ceiling: float
     redispatch_count: int
     # 전문가가 병렬로 보고를 올리므로 동시 갱신을 누적으로 합치는 리듀서가 필요하다.
     reports: Annotated[list[ProbeReport], operator.add]
@@ -289,8 +295,10 @@ class RecipeScanState(TypedDict):
     messages: list[BaseMessage]
     provenance: Annotated[ProvenanceCatalog, merged_provenance]
     model_cost_usd: Annotated[float, _sum_cost]
-    # 팬아웃이 남은 몫을 나눌 때 봐야 하는 이 실행의 달러 상한이다.
+    # repair·survey·synthesisFloor 예약을 뗀 뒤 팬아웃과 종합이 나눠 쓰는 턴과 달러 잔량이다.
     max_cost_usd: float
+    max_turns: int
+    model_turns_used: Annotated[int, _sum_turns]
     candidates: list[RecipeCandidate]
     validation_errors: list[str]
     repair_attempted: bool

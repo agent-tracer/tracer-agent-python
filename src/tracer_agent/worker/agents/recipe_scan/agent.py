@@ -24,6 +24,7 @@ from .nodes.survey import SurveyNode
 from .policy import build_routes
 from .prompts import build_prompt_bundle
 from .reader import RecipeLedgerReader
+from .reservation import load_reservation_policy
 from .search import RecipeSearchReader
 
 AGENT_NAME = "recipe-scan"
@@ -51,13 +52,20 @@ async def run_recipe_scan(
     )
     reader = RecipeLedgerReader(tracer)
     search_reader = RecipeSearchReader(tracer)
-    budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates))
+    budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates), max_turns=req.limits.maxTurns)
+    # 뗄 순서를 바꾸면 그 시점 잔량에 곱하는 비율이 달라지므로 repair → survey → synthesisFloor 순서를 지킨다.
+    policy = load_reservation_policy()
+    repair_lease = budget.reserve(policy.repair.turns, policy.repair.budget_share)
+    survey_lease = budget.reserve(policy.survey.turns, policy.survey.budget_share)
+    synthesis_floor_lease = budget.reserve(policy.synthesis_floor.turns, policy.synthesis_floor.budget_share)
     context = ValidationGraphContext(
         AGENT_NAME,
         usage,
         node_registry(
             [
-                SurveyNode(req, usage, chat, fallback_chat, budget, prompts["surveySystemPrompt"]),
+                SurveyNode(
+                    req, usage, chat, fallback_chat, budget, survey_lease, prompts["surveySystemPrompt"]
+                ),
                 ProbeNode(
                     req,
                     reader,
@@ -82,6 +90,7 @@ async def run_recipe_scan(
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
+                    synthesis_floor_lease=synthesis_floor_lease,
                 ),
                 ValidateCandidateNode(usage),
                 RepairNode(
@@ -96,6 +105,7 @@ async def run_recipe_scan(
                     system_prompt=prompts["investigatorSystemPrompt"],
                     repair_directive=prompts["repairDirective"],
                     language_directives=prompt.language_directives,
+                    lease=repair_lease,
                 ),
                 FinalizeNode(),
                 EmptyNode(),
@@ -111,12 +121,13 @@ async def run_recipe_scan(
             "messages": [],
             "plan": None,
             "redispatch": None,
-            "redispatch_ceiling": 0.0,
             "redispatch_count": 0,
             "reports": [],
             "provenance": ProvenanceCatalog(),
             "model_cost_usd": 0.0,
-            "max_cost_usd": req.limits.budgetUsd,
+            "max_cost_usd": budget.remaining_budget_usd,
+            "max_turns": budget.remaining_turns,
+            "model_turns_used": 0,
             "candidates": [],
             "validation_errors": [],
             "repair_attempted": False,

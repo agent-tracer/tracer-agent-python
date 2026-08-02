@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import ExecutionBudget
+from ...runtime.llm.budget import AgentBudgetLease, ExecutionBudget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
@@ -34,6 +34,7 @@ class SurveyNode(GraphNode):
         chat: BaseChatModel,
         fallback_chat: BaseChatModel | None,
         budget: ExecutionBudget,
+        lease: AgentBudgetLease,
         system_prompt: str,
     ) -> None:
         self._req = req
@@ -41,11 +42,16 @@ class SurveyNode(GraphNode):
         self._chat = chat
         self._fallback_chat = fallback_chat
         self._budget = budget
+        self._lease = lease
         self._system_prompt = system_prompt
 
     async def run(self, _state: RecipeScanState) -> SurveyUpdate:
         req = self._req
-        budget = self._budget.new_loop(f"{AGENT_NAME}:survey", req.model)
+        lease = self._lease
+        # 예약에서 턴을 하나도 못 받으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
+        if lease.max_turns <= 0:
+            return {"plan": DispatchPlan(probes=[]), "model_cost_usd": 0.0}
+        budget = self._budget.new_loop(f"{AGENT_NAME}:survey", req.model, max_cost_usd=lease.max_cost_usd)
         agent = build_recipe_agent(
             self._chat,
             self._system_prompt,
@@ -53,7 +59,7 @@ class SurveyNode(GraphNode):
             (),
             output=DispatchPlan,
             fallback_chat=self._fallback_chat,
-            max_turns=req.limits.maxTurns,
+            max_turns=lease.max_turns,
         )
         result = await invoke_structured_agent(
             agent,
@@ -62,10 +68,10 @@ class SurveyNode(GraphNode):
                 agent_name=f"{AGENT_NAME}:survey",
                 trace=self._usage,
                 budget=budget,
-                max_model_turns=req.limits.maxTurns,
+                max_model_turns=lease.max_turns,
             ),
             response_type=DispatchPlan,
-            recursion_limit=recursion_limit_for(req.limits.maxTurns),
+            recursion_limit=recursion_limit_for(lease.max_turns),
             missing_response="survey produced no structured plan",
         )
         plan = result.response

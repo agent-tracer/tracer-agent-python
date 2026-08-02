@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
 
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.graph.state import CompiledStateGraph
@@ -20,10 +21,11 @@ _LANGSMITH_RUN_NAMESPACE = UUID("90dd2ae3-e1b4-43bc-9538-f70898c147bd")
 
 @dataclass(frozen=True)
 class StructuredAgentResult[Response: BaseModel]:
-    """검증을 마친 구조화 응답과 다음 호출에 이어갈 메시지다."""
+    """검증을 마친 구조화 응답과 다음 호출에 이어갈 메시지와 이 호출이 실제로 그은 턴이다."""
 
     response: Response
     messages: list[Any]
+    num_turns: int
 
 
 # 한 턴이 langchain agent의 여러 슈퍼스텝을 돌므로 재귀 한도는 예산이 아니라 폭주만 끊는 그물이다.
@@ -88,4 +90,7 @@ async def invoke_structured_agent[Response: BaseModel](
     raw_messages = output.get("messages")
     if not isinstance(raw_messages, list):
         raise ValueError("agent output contains no message history")
-    return StructuredAgentResult(response=response, messages=raw_messages)
+    # 넘긴 메시지 뒤에 새로 붙은 AIMessage 수가 이 호출이 실제로 그은 모델 턴이다.
+    new_messages = raw_messages[len(messages) :]
+    num_turns = sum(1 for message in new_messages if isinstance(message, AIMessage))
+    return StructuredAgentResult(response=response, messages=raw_messages, num_turns=num_turns)
