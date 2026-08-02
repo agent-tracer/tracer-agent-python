@@ -109,3 +109,11 @@ def classify_exception(err: BaseException) -> AgentErrorDTO:
         return AgentErrorDTO(subtype=API_ERROR, summary=_redact_error_message(str(err)))
     summary = _redact_error_message(str(err)) or type(err).__name__
     return AgentErrorDTO(subtype=AGENT_EXECUTION_ERROR, summary=summary)
+
+
+_RETRYABLE_SUBTYPES: Final = frozenset({API_ERROR, CONNECTION_ERROR, "rate_limit_error", "overloaded_error"})
+
+
+def is_retryable_node_failure(err: Exception) -> bool:
+    """공급자가 일시적으로 응답하지 못한 실패만 그래프 노드 재시도 대상으로 본다."""
+    return classify_exception(err).subtype in _RETRYABLE_SUBTYPES

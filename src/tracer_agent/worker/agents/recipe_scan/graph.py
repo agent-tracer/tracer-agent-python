@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from langgraph.errors import NodeError
 from langgraph.graph import START
-from langgraph.types import Send, TimeoutPolicy
+from langgraph.types import Command, RetryPolicy, Send, TimeoutPolicy
 
 from tracer_agent.shared.agents.envelope.catalog import CATALOG
 from tracer_agent.shared.agents.recipe_scan.models import ProbeDispatch, RecipeScanState
 
+from ..runtime.errors import is_retryable_node_failure
 from ..runtime.orchestration import allocate_cost_shares
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, observed
@@ -28,6 +30,17 @@ _INVESTIGATE_TIMEOUT = TimeoutPolicy(
     run_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.5),
     idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, 0.2),
 )
+# 예산 초과와 출력 절단은 같은 예산으로 다시 돌아도 같은 자리에서 끝나므로 재시도하지 않는다.
+_NODE_RETRY = RetryPolicy(max_attempts=3, retry_on=is_retryable_node_failure)
+
+
+async def _survey_error_handler(
+    _state: RecipeScanState,
+    *,
+    error: NodeError,  # noqa: ARG001 (langgraph는 이 이름으로만 주입한다)
+) -> Command[str]:
+    """조율자 계획이 재시도 끝에도 무너지면 빈 계획으로 강등해 결론 없는 성공으로 끝낸다."""
+    return Command(update={"plan": None}, goto=EMPTY)
 
 
 def _dispatch(state: RecipeScanState) -> list[Send]:
@@ -63,9 +76,15 @@ def _after_investigate(state: RecipeScanState) -> list[Send]:
 
 
 _graph = new_graph(RecipeScanState)
-observed(_graph, SurveyNode.name, timeout=_SURVEY_TIMEOUT)
+observed(
+    _graph,
+    SurveyNode.name,
+    retry_policy=_NODE_RETRY,
+    error_handler=_survey_error_handler,
+    timeout=_SURVEY_TIMEOUT,
+)
 observed(_graph, ProbeNode.name)
-observed(_graph, InvestigateNode.name, timeout=_INVESTIGATE_TIMEOUT)
+observed(_graph, InvestigateNode.name, retry_policy=_NODE_RETRY, timeout=_INVESTIGATE_TIMEOUT)
 add_validation_tail(_graph, ValidateCandidateNode.name)
 _graph.add_edge(START, SurveyNode.name)
 _graph.add_conditional_edges(SurveyNode.name, _dispatch, [ProbeNode.name, EMPTY])

@@ -14,6 +14,7 @@ from tests.support.prompts import CONTRACT_VERSION, RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
+from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"}
@@ -316,7 +317,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
     narrate("recipe-scan :: 재파견 상한을 넘긴 두 번째 요청은 무시하고 끝낸다", res)
 
 
-async def test_모델_호출_실패는_완료가_아니라_노드_실패로_기록한다(
+async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등하고_잡은_성공한다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingChat(FakeToolLoopChat):
@@ -334,11 +335,61 @@ async def test_모델_호출_실패는_완료가_아니라_노드_실패로_기�
 
     res = await _run(monkeypatch, chat)
 
-    assert res.error is not None
+    # 재시도 대상이 아닌 실패는 조율자를 빈 계획으로 강등하고 잡은 성공한다.
+    assert res.error is None and res.data is not None and res.data["recipes"] == []
     # 계획 단계가 첫 모델 호출이므로 실패도 거기서 궤적에 남는다.
     events = [step.eventKind for step in res.steps if step.nodeName == "survey"]
     assert events == ["node.started", "node.failed"]
-    narrate("recipe-scan :: 모델 호출 실패는 완료가 아니라 노드 실패로 기록한다", res)
+    narrate("recipe-scan :: 조율자 모델 호출이 무너지면 빈 계획으로 강등하고 잡은 성공한다", res)
+
+
+async def test_예산_초과는_조율자를_재시도하지_않고_바로_강등한다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class BudgetBlownChat(FakeToolLoopChat):
+        def with_structured_output(self, _schema: object, **_kwargs: object) -> object:
+            return self
+
+        def __init__(self) -> None:
+            super().__init__([])
+            self.calls = 0
+
+        async def ainvoke(self, _messages: list[object]) -> object:
+            self.calls += 1
+            raise BudgetExceeded("survey exceeded internal model budget")
+
+    chat = BudgetBlownChat()
+
+    res = await _run(monkeypatch, chat)
+
+    # 재시도했다면 한 번보다 많이 불렸을 것이다.
+    assert chat.calls == 1
+    assert res.error is None and res.data is not None and res.data["recipes"] == []
+    narrate("recipe-scan :: 예산 초과는 조율자를 재시도하지 않고 바로 강등한다", res)
+
+
+async def test_출력_절단은_조율자를_재시도하지_않고_바로_강등한다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TruncatedChat(FakeToolLoopChat):
+        def with_structured_output(self, _schema: object, **_kwargs: object) -> object:
+            return self
+
+        def __init__(self) -> None:
+            super().__init__([])
+            self.calls = 0
+
+        async def ainvoke(self, _messages: list[object]) -> object:
+            self.calls += 1
+            raise OutputTruncated("survey structured output truncated at max_tokens")
+
+    chat = TruncatedChat()
+
+    res = await _run(monkeypatch, chat)
+
+    assert chat.calls == 1
+    assert res.error is None and res.data is not None and res.data["recipes"] == []
+    narrate("recipe-scan :: 출력 절단은 조율자를 재시도하지 않고 바로 강등한다", res)
 
 
 async def test_조율자가_세운_계획이_조사_지시문에_반영된다(
