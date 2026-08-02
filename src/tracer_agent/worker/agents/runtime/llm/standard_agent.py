@@ -83,7 +83,7 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
     async def awrap_model_call(
         self,
         request: ModelRequest[StandardAgentContext],
-        handler: Any,
+        handler: Callable[[ModelRequest[StandardAgentContext]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
         response: ModelResponse[Any] = await handler(_with_budget(request))
         for message in response.result:

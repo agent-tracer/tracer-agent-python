@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from anthropic import APIError
@@ -21,7 +22,7 @@ class FallbackModelMiddleware(AgentMiddleware[Any, Any, Any]):
     async def awrap_model_call(
         self,
         request: ModelRequest[Any],
-        handler: Any,
+        handler: Callable[[ModelRequest[Any]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
         """primary 호출이 공급자 오류로 실패하면 대체 모델로 한 번만 재호출한다."""
         try:

@@ -10,6 +10,7 @@ import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from tracer_agent.shared.agents.chat.models import (
@@ -173,7 +174,7 @@ class ConverseNode(GraphNode):
     async def _seed(
         self,
         agent: CompiledStateGraph[Any, Any, Any, Any],
-        checkpointer: Any,
+        checkpointer: BaseCheckpointSaver[Any] | None,
         config: RunnableConfig,
         history: list[ChatHistoryMessage],
         context_prompt: str,
@@ -203,7 +204,7 @@ class ConverseNode(GraphNode):
             self._req.scopeToken or None,
         ).load()
 
-    async def _checkpointer(self) -> Any:
+    async def _checkpointer(self) -> BaseCheckpointSaver[Any] | None:
         if self._checkpoints is None:
             return None
         return await self._checkpoints.saver()

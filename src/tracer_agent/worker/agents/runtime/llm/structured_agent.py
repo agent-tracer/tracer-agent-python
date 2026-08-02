@@ -15,6 +15,7 @@ from langsmith.client import Client
 from pydantic import BaseModel
 
 from ..telemetry.disclosure import TraceSafeMetadata, disclosable_run_payload
+from .standard_agent import StandardAgentContext
 
 _LANGSMITH_RUN_NAMESPACE = UUID("90dd2ae3-e1b4-43bc-9538-f70898c147bd")
 
@@ -68,7 +69,7 @@ async def invoke_structured_agent[Response: BaseModel](
     agent: CompiledStateGraph[Any, Any, Any, Any],
     *,
     messages: list[Any],
-    context: Any,
+    context: StandardAgentContext,
     response_type: type[Response],
     recursion_limit: int,
     missing_response: str,
