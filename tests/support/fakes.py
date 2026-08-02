@@ -9,6 +9,7 @@ from langchain.tools import ToolRuntime
 from langchain_core.messages import AIMessage
 from langgraph.store.base import BaseStore
 
+from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan
 from tracer_agent.shared.agents.shared.models import ModelRateDTO
 from tracer_agent.worker.agents.runtime.pricing import ModelRates
 
@@ -68,12 +69,10 @@ _AUTO_REPORTS: dict[str, dict[str, Any]] = {
 }
 
 
-class _FakePlanner:
-    def __init__(self, plan: Any) -> None:
-        self._plan = plan
-
-    async def ainvoke(self, _messages: Any, **_kwargs: Any) -> Any:
-        return self._plan
+# 계획을 안 준 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 돈다.
+_DEFAULT_PLAN = DispatchPlan.model_validate(
+    {"probes": [{"probe": "timeline", "weight": 10, "question": "무엇을 했나"}]}
+)
 
 
 class FakeToolLoopChat:
@@ -97,16 +96,6 @@ class FakeToolLoopChat:
         self.bound_tools: list[dict[str, Any]] = []
         self.output_config: dict[str, Any] | None = None
         self.requests: list[list[Any]] = []
-
-    def with_structured_output(self, schema: Any, **_kwargs: Any) -> _FakePlanner:
-        if self.plan is not None:
-            return _FakePlanner(self.plan)
-        # 계획을 안 준 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 돈다.
-        return _FakePlanner(
-            schema.model_validate(
-                {"probes": [{"probe": "timeline", "weight": 10, "question": "무엇을 했나"}]}
-            )
-        )
 
     def bind_tools(self, tools: list[Any], **_kwargs: Any) -> FakeToolLoopChat:
         self.bound_tools = tools
@@ -159,6 +148,16 @@ class FakeToolLoopChat:
             )
             report = scripted if scripted is not None else self._auto_report(name)
             return mk_ai(tool_calls=[{"name": name, "args": report, "id": "call-probe", "type": "tool_call"}])
+        plan_tool = next(
+            (tool for tool in self.bound_tools if getattr(tool, "name", "") == "DispatchPlan"), None
+        )
+        if plan_tool is not None:
+            # 조율자 조사 계획은 턴 대본을 소비하지 않고 대역이 짠 계획을 그대로 되돌린다.
+            plan = self.plan if self.plan is not None else _DEFAULT_PLAN
+            args = plan.model_dump() if isinstance(plan, DispatchPlan) else plan
+            return mk_ai(
+                tool_calls=[{"name": plan_tool.name, "args": args, "id": "call-plan", "type": "tool_call"}]
+            )
         if not self.turns:
             raise AssertionError("no fake turn remains")
         turn = self.turns.pop(0)

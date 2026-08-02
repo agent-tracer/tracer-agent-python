@@ -321,9 +321,6 @@ async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등�
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingChat(FakeToolLoopChat):
-        def with_structured_output(self, _schema: object, **_kwargs: object) -> object:
-            return self
-
         async def ainvoke(self, _messages: list[object]) -> object:
             raise AuthenticationError(
                 "bad key",
@@ -347,9 +344,6 @@ async def test_예산_초과는_조율자를_재시도하지_않고_바로_강�
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class BudgetBlownChat(FakeToolLoopChat):
-        def with_structured_output(self, _schema: object, **_kwargs: object) -> object:
-            return self
-
         def __init__(self) -> None:
             super().__init__([])
             self.calls = 0
@@ -372,9 +366,6 @@ async def test_출력_절단은_조율자를_재시도하지_않고_바로_강�
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class TruncatedChat(FakeToolLoopChat):
-        def with_structured_output(self, _schema: object, **_kwargs: object) -> object:
-            return self
-
         def __init__(self) -> None:
             super().__init__([])
             self.calls = 0

@@ -57,7 +57,7 @@ async def run_recipe_scan(
         usage,
         node_registry(
             [
-                SurveyNode(req, usage, chat, budget, prompts["surveySystemPrompt"]),
+                SurveyNode(req, usage, chat, fallback_chat, budget, prompts["surveySystemPrompt"]),
                 ProbeNode(
                     req,
                     reader,
