@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID, uuid5
 
 from langchain_core.messages import AIMessage, BaseMessage
@@ -65,6 +65,28 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
     return config
 
 
+class StructuredAgentOutput[Response: BaseModel](TypedDict):
+    """response_format을 준 agent가 내는 출력이며 이 모듈만 그 모양을 안다."""
+
+    messages: list[BaseMessage]
+    structured_response: Response
+
+
+def narrow_agent_output[Response: BaseModel](
+    raw: object, response_type: type[Response], missing_response: str
+) -> StructuredAgentOutput[Response]:
+    """SDK의 넓은 출력을 이 호출이 요구한 응답 계약으로 좁힌다."""
+    if not isinstance(raw, dict):
+        raise ValueError("agent produced a non-object output")
+    response = raw.get("structured_response")
+    if not isinstance(response, response_type):
+        raise ValueError(missing_response)
+    messages = raw.get("messages")
+    if not isinstance(messages, list):
+        raise ValueError("agent output contains no message history")
+    return {"messages": messages, "structured_response": response}
+
+
 async def invoke_structured_agent[Response: BaseModel](
     agent: CompiledStateGraph[Any, Any, Any, Any],
     *,
@@ -75,23 +97,19 @@ async def invoke_structured_agent[Response: BaseModel](
     missing_response: str,
 ) -> StructuredAgentResult[Response]:
     """agent를 실행하고 SDK의 가변 출력에서 요구한 Pydantic 응답만 꺼낸다."""
-    raw_output: object = await agent.ainvoke(
-        {"messages": messages},
-        context=context,
-        config=recursion_config(recursion_limit),
+    output = narrow_agent_output(
+        await agent.ainvoke(
+            {"messages": messages},
+            context=context,
+            config=recursion_config(recursion_limit),
+        ),
+        response_type,
+        missing_response,
     )
-    if not isinstance(raw_output, dict):
-        raise ValueError("agent produced a non-object output")
-
-    output = raw_output
-    response = output.get("structured_response")
-    if not isinstance(response, response_type):
-        raise ValueError(missing_response)
-
-    raw_messages = output.get("messages")
-    if not isinstance(raw_messages, list):
-        raise ValueError("agent output contains no message history")
     # 넘긴 메시지 뒤에 새로 붙은 AIMessage 수가 이 호출이 실제로 그은 모델 턴이다.
-    new_messages = raw_messages[len(messages) :]
-    num_turns = sum(1 for message in new_messages if isinstance(message, AIMessage))
-    return StructuredAgentResult(response=response, messages=raw_messages, num_turns=num_turns)
+    new_messages = output["messages"][len(messages) :]
+    return StructuredAgentResult(
+        response=output["structured_response"],
+        messages=output["messages"],
+        num_turns=sum(1 for message in new_messages if isinstance(message, AIMessage)),
+    )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from langgraph.graph import END, StateGraph
 from langgraph.runtime import Runtime
@@ -33,6 +33,11 @@ class ValidationGraphContext:
     route_validation: ValidationRoute
 
 
+# LangGraph 스텁이 runtime 인자를 실은 노드 시그니처를 싣지 못하므로 이 모듈이 좁힘을 소유한다.
+def _as_graph_callable(handler: Callable[..., Any]) -> Any:
+    return handler
+
+
 def new_graph(state_schema: type[Any]) -> StateGraph[Any, Any, Any, Any]:
     """요청별 의존성을 Runtime Context로 받는 빈 그래프를 연다."""
     return StateGraph(state_schema, context_schema=ValidationGraphContext)
@@ -49,9 +54,9 @@ def observed(
     """노드를 그래프에 올리며 진입·완료·실패를 실행 궤적에 남긴다."""
     graph.add_node(
         node_name,
-        cast(Any, _dispatch(node_name)),
+        _as_graph_callable(_dispatch(node_name)),
         retry_policy=retry_policy,
-        error_handler=cast(Any, error_handler),
+        error_handler=_as_graph_callable(error_handler) if error_handler else None,
         timeout=timeout,
     )
 
@@ -62,7 +67,7 @@ def add_validation_tail(graph: StateGraph[Any, Any, Any, Any], validation_node: 
         observed(graph, node_name)
     graph.add_conditional_edges(
         validation_node,
-        cast(Any, _route),
+        _as_graph_callable(_route),
         {REPAIR: REPAIR, FINALIZE: FINALIZE, EMPTY: EMPTY},
     )
     graph.add_edge(REPAIR, validation_node)
