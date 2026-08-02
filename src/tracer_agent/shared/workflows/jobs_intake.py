@@ -13,7 +13,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from temporalio.exceptions import ApplicationError
 
-from tracer_agent.shared.agents.recipe_scan.models import scan_anchor_requirements
+from tracer_agent.shared.agents.recipe_scan.models import (
+    scan_anchor_conditions,
+    scan_anchor_requirements,
+)
 
 from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
 from ..agents.runtime.ledger import SqlSource
@@ -206,7 +209,9 @@ async def cancel_job(
 async def _scannable_anchor(anchors: ScanAnchorSource, user_id: str, job_input: RecipeScanJobInput) -> bool:
     """스캔의 앵커는 이 사용자의 뿌리 사용자 태스크이면서 끝난 것이어야 한다."""
     anchor = await anchors.find(user_id, job_input.taskId)
-    return anchor is not None and anchor.eligible(scan_anchor_requirements())
+    if anchor is None:
+        return False
+    return anchor.eligible(scan_anchor_requirements(), scan_anchor_conditions(job_input.trigger))
 
 
 async def _owns_anchor(anchors: RuleAnchorSource, user_id: str, job_input: RuleGenerationJobInput) -> bool:

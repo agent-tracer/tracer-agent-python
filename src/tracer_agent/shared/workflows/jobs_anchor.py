@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -93,13 +93,15 @@ class ScanAnchor:
     root: bool
     status: str | None
 
-    def eligible(self, requires: Mapping[str, Any]) -> bool:
-        """계약이 적은 세 조건을 모두 만족하는지 판정한다."""
-        excluded = requires["origin"]["excludes"]
-        if self.origin is not None and self.origin in excluded:
-            return False
-        if self.root is not requires["root"]["value"]:
-            return False
+    def eligible(self, requires: Mapping[str, Any], conditions: Sequence[str]) -> bool:
+        """그 표면이 요구하는 조건을 모두 만족하는지 판정한다."""
+        return all(self._satisfies(requires, name) for name in conditions)
+
+    def _satisfies(self, requires: Mapping[str, Any], name: str) -> bool:
+        if name == "origin":
+            return self.origin is None or self.origin not in requires["origin"]["excludes"]
+        if name == "root":
+            return self.root is requires["root"]["value"]
         return self.status is not None and self.status in requires["status"]["oneOf"]
 
 

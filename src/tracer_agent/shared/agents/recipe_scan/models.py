@@ -315,8 +315,21 @@ _ANCHOR_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "rec
 
 
 @lru_cache(maxsize=1)
+def _scan_anchor_contract() -> Mapping[str, Any]:
+    document = json.loads(_ANCHOR_PATH.read_text(encoding="utf-8"))
+    anchor: Mapping[str, Any] = document["anchor"]
+    return anchor
+
+
 def scan_anchor_requirements() -> Mapping[str, Any]:
     """스캔이 근거를 캘 수 있는 앵커의 자격이며 값은 계약이 소유한다."""
-    document = json.loads(_ANCHOR_PATH.read_text(encoding="utf-8"))
-    requires: Mapping[str, Any] = document["anchor"]["requires"]
+    requires: Mapping[str, Any] = _scan_anchor_contract()["requires"]
     return requires
+
+
+def scan_anchor_conditions(trigger: str | None) -> tuple[str, ...]:
+    """스캔을 부른 표면이 요구하는 조건이며 표면을 말하지 않으면 dashboard 로 본다."""
+    by_trigger: Mapping[str, Any] = _scan_anchor_contract()["byTrigger"]
+    surface = trigger if trigger is not None and trigger in by_trigger else "dashboard"
+    conditions: list[str] = by_trigger[surface]
+    return tuple(conditions)

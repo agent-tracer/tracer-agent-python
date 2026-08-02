@@ -479,3 +479,25 @@ def test_자격이_없는_앵커의_거절은_계약이_정한_코드로_나간�
         res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
 
     assert res.json()["error"]["code"] == "job.invalid-scan-anchor"
+
+
+def test_세션에서_부른_스캔은_아직_도는_태스크도_접수한다(
+    dispatch: FakeJobDispatch,
+    envelopes: FakeEnvelopes,
+    anchors: FakeRuleAnchors,
+    store: SqliteLedgerSql,
+) -> None:
+    running = ScanAnchor(id="task-1", origin="user", root=True, status="running")
+    with TestClient(app_module.create_app()) as client:
+        client.app.state.job_dispatch = dispatch
+        client.app.state.job_envelopes = envelopes
+        client.app.state.rule_anchors = anchors
+        client.app.state.scan_anchors = FakeScanAnchors(running)
+        client.app.state.execution_sql = SingleSql(store)
+
+        res = client.post(
+            PATH,
+            json={"kind": "recipe.scan", "input": {"taskId": "task-1", "trigger": "session"}},
+        )
+
+    assert res.status_code == 202
