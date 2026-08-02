@@ -1,7 +1,10 @@
-"""에이전트 실행 한 번이 태우는 모델 비용을 누적하고 상한에서 끊는다."""
+"""에이전트 실행 한 번이 태우는 모델 비용과 턴을 누적하고 상한에서 끊는다."""
 
 from __future__ import annotations
 
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from langchain_core.messages import AIMessage
@@ -9,6 +12,81 @@ from langchain_core.messages import AIMessage
 from ..errors import BudgetExceeded
 from ..pricing import ModelRates
 from .trajectory import extract_token_usage, message_identity
+
+
+@dataclass(frozen=True)
+class AgentBudgetLease:
+    """한 번의 호출에 떼어 준 턴과 달러 몫이며 그대로 노드 실행 상한으로 넘긴다."""
+
+    max_turns: int
+    max_cost_usd: float
+
+
+@dataclass(frozen=True)
+class AgentBudgetSpend:
+    """한 번의 호출이 실제로 쓴 턴과 비용이며 공급자가 보고하지 않으면 None이다."""
+
+    cost_usd: float | None
+    num_turns: int | None
+
+
+@dataclass(frozen=True)
+class _ReservedShare:
+    turns: int
+    usd: float
+
+
+_EMPTY_RESERVED_SHARE = _ReservedShare(turns=0, usd=0.0)
+
+
+def combine_leases(leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
+    """리스 여럿을 하나로 더해 턴과 달러 몫을 합친다."""
+    return AgentBudgetLease(
+        max_turns=sum(lease.max_turns for lease in leases),
+        max_cost_usd=sum(lease.max_cost_usd for lease in leases),
+    )
+
+
+def lease_shares(
+    requested_turns: Sequence[int], available_turns: int, available_usd: float
+) -> list[AgentBudgetLease]:
+    """weight 나머지 배분 규칙대로 요청 턴을 가용 턴과 달러로 나눈다."""
+    if not requested_turns:
+        return []
+    granted_turns = _clamp_turns_without_leak(requested_turns, max(available_turns, 0))
+    turns_sum = sum(granted_turns)
+    return [
+        AgentBudgetLease(
+            max_turns=turns,
+            max_cost_usd=0.0 if turns_sum == 0 else available_usd * turns / turns_sum,
+        )
+        for turns in granted_turns
+    ]
+
+
+def _clamp_turns_without_leak(requested: Sequence[int], available: int) -> list[int]:
+    """가용 턴이 요청 합에 못 미칠 때 내림에서 남는 턴을 weight가 큰 순서로 하나씩 돌려준다."""
+    total = sum(requested)
+    if total <= available:
+        return list(requested)
+
+    count = len(requested)
+    # 동률이면 인덱스가 작은 쪽이 먼저이도록 sorted의 안정성에 기대지 않고 보조 키로 명시한다.
+    rank_descending = sorted(range(count), key=lambda index: (-requested[index], index))
+
+    if count > available:
+        granted = [0] * count
+        for index in rank_descending[:available]:
+            granted[index] = 1
+        return granted
+
+    spare = max(available - count, 0)
+    over = total - count
+    granted = [1 + (math.floor(((value - 1) * spare) / over) if over > 0 else 0) for value in requested]
+    remainder = max(available - sum(granted), 0)
+    for index in rank_descending[:remainder]:
+        granted[index] += 1
+    return granted
 
 
 class ModelCallBudget(Protocol):
@@ -74,13 +152,17 @@ class ToolLoopBudget:
 
 
 class ExecutionBudget:
-    """병렬 노드까지 한 실행의 달러 상한을 함께 쓰는 장부다."""
+    """병렬 노드까지 한 실행의 달러 상한을 함께 쓰는 장부이며 팬아웃 전에 뗄 턴 원장도 갖는다."""
 
-    def __init__(self, max_cost_usd: float, rates: ModelRates) -> None:
+    def __init__(self, max_cost_usd: float, rates: ModelRates, max_turns: int | None = None) -> None:
         self._max = max_cost_usd
         self._rates = rates
         self._spent = 0.0
         self._peak = 0.0
+        self._remaining_turns = max_turns
+        self._remaining_budget_usd = max_cost_usd
+        self._reservations: dict[int, _ReservedShare] = {}
+        self._settled: set[int] = set()
 
     @property
     def spent(self) -> float:
@@ -93,6 +175,87 @@ class ExecutionBudget:
     @property
     def peak_call_cost_usd(self) -> float:
         return self._peak
+
+    @property
+    def remaining_turns(self) -> int:
+        """턴 원장이 아직 아무에게도 떼어 주지 않은 턴이다."""
+        return self._turn_ledger()
+
+    @property
+    def remaining_budget_usd(self) -> float:
+        """턴 원장이 아직 아무에게도 떼어 주지 않은 달러다."""
+        return self._remaining_budget_usd
+
+    def has_remaining_capacity(self, required_turns: int = 1) -> bool:
+        """요청한 턴과 비용 잔량을 모두 감당할 수 있는지 알린다."""
+        return self._turn_ledger() >= required_turns and self._remaining_budget_usd > 0
+
+    def reserve(self, turns: int, budget_share: float = 0.0) -> AgentBudgetLease:
+        """뒤의 리스가 침범하지 못하도록 잔량에서 먼저 턴과 몫을 떼어 별도로 쥔다."""
+        if turns < 0:
+            raise ValueError(f"turns must be >= 0, got {turns}")
+        if not (0.0 <= budget_share <= 1.0):
+            raise ValueError(f"budget_share must be in [0, 1], got {budget_share}")
+        remaining_turns = self._turn_ledger()
+        granted_turns = min(turns, remaining_turns)
+        self._remaining_turns = remaining_turns - granted_turns
+        granted_usd = self._remaining_budget_usd * budget_share
+        self._remaining_budget_usd -= granted_usd
+        lease = AgentBudgetLease(max_turns=granted_turns, max_cost_usd=granted_usd)
+        self._reservations[id(lease)] = _ReservedShare(turns=granted_turns, usd=granted_usd)
+        return lease
+
+    def lease(self, share: float) -> AgentBudgetLease:
+        """잔량의 share 몫을 떼어 그 호출의 상한으로 준다."""
+        if not (0.0 < share <= 1.0):
+            raise ValueError(f"share must be in (0, 1], got {share}")
+        return AgentBudgetLease(
+            max_turns=math.floor(self._turn_ledger() * share),
+            max_cost_usd=self._remaining_budget_usd * share,
+        )
+
+    def lease_many(self, requested_turns: Sequence[int], share: float) -> list[AgentBudgetLease]:
+        """잔량의 share 몫을 계약의 나머지 배분 규칙대로 요청 턴에 나눈다."""
+        if not (0.0 < share <= 1.0):
+            raise ValueError(f"share must be in (0, 1], got {share}")
+        if not requested_turns:
+            return []
+        available_turns = math.floor(self._turn_ledger() * share)
+        available_usd = self._remaining_budget_usd * share
+        return lease_shares(requested_turns, available_turns, available_usd)
+
+    def settle(self, lease: AgentBudgetLease, spend: AgentBudgetSpend) -> None:
+        """떼어 준 몫에 실제 지출을 대조해 잔량을 되돌리되 예약분을 두 번 빼지 않는다."""
+        key = id(lease)
+        if key in self._settled:
+            raise RuntimeError("budget lease is already settled")
+        self._settled.add(key)
+        reserved = self._reservations.get(key, _EMPTY_RESERVED_SHARE)
+
+        turns_used = spend.num_turns if spend.num_turns is not None else lease.max_turns
+        remaining_turns = self._turn_ledger()
+        self._remaining_turns = max(0, remaining_turns + reserved.turns - turns_used)
+
+        usd_used = spend.cost_usd if spend.cost_usd is not None else lease.max_cost_usd
+        self._remaining_budget_usd = max(0.0, self._remaining_budget_usd + reserved.usd - usd_used)
+
+    def combine(self, leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
+        """예약한 바닥과 잔량의 몫을 하나로 묶되 예약분을 두 번 빼지 않는다."""
+        combined = combine_leases(leases)
+        reserved_turns = 0
+        reserved_usd = 0.0
+        for one in leases:
+            reserved = self._reservations.get(id(one), _EMPTY_RESERVED_SHARE)
+            reserved_turns += reserved.turns
+            reserved_usd += reserved.usd
+        if reserved_turns > 0 or reserved_usd != 0:
+            self._reservations[id(combined)] = _ReservedShare(turns=reserved_turns, usd=reserved_usd)
+        return combined
+
+    def _turn_ledger(self) -> int:
+        if self._remaining_turns is None:
+            raise RuntimeError("execution budget has no turn ledger configured")
+        return self._remaining_turns
 
     def charge(
         self,
