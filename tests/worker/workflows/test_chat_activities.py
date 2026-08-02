@@ -24,7 +24,7 @@ from tracer_agent.shared.workflows.chat_spec import (
     GeneratedChatExecution,
     PreparedChatExecution,
 )
-from tracer_agent.worker.agents.chat.checkpoint import ChatCheckpointProvider
+from tracer_agent.worker.agents.runtime.checkpoint import GraphCheckpointProvider
 from tracer_agent.worker.workflows.chat_activities import ChatExecutionActivities
 from tracer_agent.worker.workflows.envelope import ChatExecutionEnvelope
 
@@ -143,7 +143,7 @@ def activities(store: SqliteLedgerSql) -> ChatExecutionActivities:
     return ChatExecutionActivities(
         SingleSqlSource(store),
         httpx.AsyncClient(),
-        ChatCheckpointProvider("postgresql://unused"),
+        GraphCheckpointProvider("postgresql://unused"),
         StubEnvelopes(),
         CHAT_PROMPT,
     )

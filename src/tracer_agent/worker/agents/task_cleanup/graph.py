@@ -7,6 +7,7 @@ from langgraph.types import Send
 
 from tracer_agent.shared.agents.task_cleanup.models import InspectDispatch, TaskCleanupState
 
+from ..runtime.durable_graph import DurableGraph
 from ..runtime.orchestration import allocate_cost_shares
 from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, observed
 from .nodes.decision import InvestigateNode, ValidateDecisionsNode
@@ -54,4 +55,4 @@ _graph.add_conditional_edges(
     InvestigateNode.name, _after_investigate, [InspectNode.name, ValidateDecisionsNode.name]
 )
 
-TASK_CLEANUP_GRAPH = _graph.compile()
+TASK_CLEANUP_GRAPH = DurableGraph(_graph)

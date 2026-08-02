@@ -1,4 +1,4 @@
-"""LangGraph 채팅 실행 상태를 PostgreSQL에 보존하는 체크포인터 수명을 관리한다."""
+"""LangGraph 실행 상태를 PostgreSQL에 보존하는 체크포인터 수명을 관리한다."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ from psycopg import AsyncConnection
 from ....shared.config import CHECKPOINT_SCHEMA
 
 
-class ChatCheckpointProvider:
+class GraphCheckpointProvider:
+    """한 워커 프로세스가 공유하는 Postgres 세이버 하나를 지연 생성해 쥔다."""
+
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
         self._context: AbstractAsyncContextManager[AsyncPostgresSaver] | None = None

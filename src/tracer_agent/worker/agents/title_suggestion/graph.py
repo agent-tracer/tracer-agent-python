@@ -6,6 +6,7 @@ from langgraph.graph import START
 
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionState
 
+from ..runtime.durable_graph import DurableGraph
 from ..runtime.validation_graph import add_validation_tail, new_graph, observed
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
 
@@ -15,4 +16,4 @@ add_validation_tail(_graph, ValidateCandidateNode.name)
 _graph.add_edge(START, InvestigateNode.name)
 _graph.add_edge(InvestigateNode.name, ValidateCandidateNode.name)
 
-TITLE_SUGGESTION_GRAPH = _graph.compile()
+TITLE_SUGGESTION_GRAPH = DurableGraph(_graph)

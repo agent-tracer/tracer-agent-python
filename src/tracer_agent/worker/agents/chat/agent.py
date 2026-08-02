@@ -8,6 +8,7 @@ import httpx
 
 from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, ChatState
 
+from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.client import make_chat
 from ..runtime.llm.structured_agent import recursion_config, recursion_limit_for
@@ -15,7 +16,6 @@ from ..runtime.node import node_registry
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.validation_graph import FINALIZE, ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .checkpoint import ChatCheckpointProvider
 from .drafts import DraftPublisher
 from .graph import CHAT_GRAPH
 from .nodes.converse import ConverseNode
@@ -35,7 +35,7 @@ def _build_node(
     usage: ExecutionTrace,
     *,
     streaming: bool,
-    checkpoints: ChatCheckpointProvider | None = None,
+    checkpoints: GraphCheckpointProvider | None = None,
     drafts: DraftPublisher | None = None,
     prompt: AgentPrompt,
 ) -> ConverseNode:
@@ -81,7 +81,7 @@ async def run_chat(
     http_client: httpx.AsyncClient,
     usage: ExecutionTrace,
     prompt: AgentPrompt,
-    checkpoints: ChatCheckpointProvider | None = None,
+    checkpoints: GraphCheckpointProvider | None = None,
 ) -> dict[str, Any]:
     """chat 노드를 실행 의존성과 결합해 대화 그래프를 수행한다."""
     # 창구가 있으면 진행 중인 답변을 보내야 하므로 토큰이 흐르는 모델로 조립한다.

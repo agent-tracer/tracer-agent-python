@@ -34,7 +34,7 @@ from ..shared.workflows.jobs_spec import (
     JOBS_TASK_QUEUE,
     NOTIFICATIONS_TOPIC,
 )
-from .agents.chat.checkpoint import ChatCheckpointProvider
+from .agents.runtime.checkpoint import GraphCheckpointProvider
 from .agents.shared.contract_prompt_source import ContractPromptSource
 from .sdk_metrics import open_sdk_metrics
 from .workflows.chat_activities import ChatExecutionActivities
@@ -66,7 +66,7 @@ class ChatWorkerResources:
 
     ledger: LedgerPoolProvider
     http_client: httpx.AsyncClient
-    checkpoints: ChatCheckpointProvider
+    checkpoints: GraphCheckpointProvider
     wakeup: UpdatePublisher
 
     async def close(self) -> None:
@@ -84,12 +84,14 @@ class JobWorkerResources:
     http_client: httpx.AsyncClient
     execution: LedgerPoolProvider
     notifications: UpdatePublisher
+    checkpoints: GraphCheckpointProvider
 
     async def close(self) -> None:
         """열린 연결을 모두 닫는다."""
         await self.http_client.aclose()
         await self.execution.close()
         await self.notifications.close()
+        await self.checkpoints.close()
 
 
 @asynccontextmanager
@@ -99,7 +101,7 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
     opened = ChatWorkerResources(
         ledger=LedgerPoolProvider(settings.agent_dsn()),
         http_client=http_client,
-        checkpoints=ChatCheckpointProvider(settings.checkpoint_dsn()),
+        checkpoints=GraphCheckpointProvider(settings.checkpoint_dsn()),
         wakeup=UpdatePublisher(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC),
     )
     try:
@@ -116,6 +118,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
         http_client=http_client,
         execution=LedgerPoolProvider(settings.agent_dsn()),
         notifications=UpdatePublisher(settings.kafka_brokers, NOTIFICATIONS_TOPIC),
+        checkpoints=GraphCheckpointProvider(settings.checkpoint_dsn()),
     )
     try:
         yield opened
@@ -158,6 +161,7 @@ def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobAc
         {name: source.resolve(name) for name in JOB_AGENT_NAMES},
         envelopes=JobEnvelopeClient(opened.http_client, settings.agent_api_url),
         notifier=JobStatusNotifier(opened.notifications, JOB_UPDATED_NOTIFICATION),
+        checkpoints=opened.checkpoints,
     )
 
 

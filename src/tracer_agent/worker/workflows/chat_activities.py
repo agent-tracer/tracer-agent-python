@@ -29,9 +29,9 @@ from ...shared.workflows.chat_spec import (
     PreparedChatExecution,
 )
 from ..agents.chat.agent import AGENT_NAME, run_chat
-from ..agents.chat.checkpoint import ChatCheckpointProvider
 from ..agents.chat.execution_writer import ChatExecutionWriter
 from ..agents.chat.prompts import build_system_prompt
+from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.shared.prompt_source_port import AgentPrompt
@@ -55,7 +55,7 @@ class ChatExecutionActivities:
         self,
         sql: SqlSource,
         http_client: httpx.AsyncClient,
-        checkpoints: ChatCheckpointProvider,
+        checkpoints: GraphCheckpointProvider,
         envelopes: ChatEnvelopeSource,
         prompt: AgentPrompt,
         wakeup: UpdatePublisher | None = None,
@@ -206,7 +206,7 @@ def _body(
     traces: list[ExecutionTrace],
     request: ChatRequest,
     http_client: httpx.AsyncClient,
-    checkpoints: ChatCheckpointProvider,
+    checkpoints: GraphCheckpointProvider,
     prompt: AgentPrompt,
 ) -> AgentBody:
     async def run(trace: ExecutionTrace) -> dict[str, object]:

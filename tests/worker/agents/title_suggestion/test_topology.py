@@ -8,8 +8,8 @@ from tracer_agent.worker.agents.title_suggestion.graph import TITLE_SUGGESTION_G
 
 def test_그래프의_간선_집합을_고정한다() -> None:
     print("TITLE_SUGGESTION_GRAPH 간선 집합:")
-    print(TITLE_SUGGESTION_GRAPH.get_graph().draw_ascii())
-    assert edge_lines(TITLE_SUGGESTION_GRAPH) == {
+    print(TITLE_SUGGESTION_GRAPH.compiled(None).get_graph().draw_ascii())
+    assert edge_lines(TITLE_SUGGESTION_GRAPH.compiled(None)) == {
         "__start__ → investigate",
         "investigate → validate_candidate",
         "validate_candidate ⇢ repair",

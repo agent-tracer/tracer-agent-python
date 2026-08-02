@@ -24,13 +24,13 @@ from tracer_agent.shared.agents.chat.models import (
 )
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
+from ...runtime.checkpoint import GraphCheckpointProvider
 from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import ToolLoopBudget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import recursion_limit_for
 from ...runtime.node import GraphNode
 from ...runtime.pricing import ModelRates
-from ..checkpoint import ChatCheckpointProvider
 from ..checkpointer import seed_checkpoint
 from ..context import ChatContextReader, replay_messages
 from ..drafts import DraftPublisher
@@ -59,7 +59,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         self,
         req: ChatRequest,
         http_client: httpx.AsyncClient,
-        checkpoints: ChatCheckpointProvider | None,
+        checkpoints: GraphCheckpointProvider | None,
         usage: ExecutionTrace,
         chat: BaseChatModel,
         fallback_chat: BaseChatModel | None,

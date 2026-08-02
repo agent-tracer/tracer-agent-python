@@ -9,6 +9,7 @@ from langgraph.types import Command, RetryPolicy, Send, TimeoutPolicy
 from tracer_agent.shared.agents.envelope.catalog import CATALOG
 from tracer_agent.shared.agents.recipe_scan.models import ProbeAssignment, ProbeDispatch, RecipeScanState
 
+from ..runtime.durable_graph import DurableGraph
 from ..runtime.errors import is_retryable_node_failure
 from ..runtime.llm.budget import lease_shares
 from ..runtime.timeouts import deadline_fraction_s
@@ -99,4 +100,4 @@ _graph.add_conditional_edges(
     InvestigateNode.name, _after_investigate, [ProbeNode.name, ValidateCandidateNode.name]
 )
 
-RECIPE_SCAN_GRAPH = _graph.compile()
+RECIPE_SCAN_GRAPH = DurableGraph(_graph)

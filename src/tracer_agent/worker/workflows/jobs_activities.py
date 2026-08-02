@@ -28,6 +28,7 @@ from ...shared.workflows.jobs_spec import (
     AgentJobRequest,
 )
 from ..agents.recipe_scan.agent import run_recipe_scan
+from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.completion import run_and_deliver
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
@@ -56,6 +57,7 @@ class AgentJobActivities:
         prompts: Mapping[str, AgentPrompt],
         envelopes: JobEnvelopeSource | None = None,
         notifier: JobStatusNotifier | None = None,
+        checkpoints: GraphCheckpointProvider | None = None,
     ) -> None:
         self._tracer_api_url = tracer_api_url
         self._http = http_client
@@ -63,6 +65,7 @@ class AgentJobActivities:
         self._prompts = prompts
         self._envelopes = envelopes
         self._notifier = notifier
+        self._checkpoints = checkpoints
 
     @activity.defn(name=RUN_AGENT_JOB_ACTIVITY)
     async def run(self, request: AgentJobRequest) -> None:
@@ -129,7 +132,9 @@ class AgentJobActivities:
             async def title_body(
                 trace: ExecutionTrace, req: TitleSuggestionRequest = title_req
             ) -> dict[str, object]:
-                return await run_title_suggestion(req, tracer, trace, self._prompts["title-suggestion"])
+                return await run_title_suggestion(
+                    req, tracer, trace, self._prompts["title-suggestion"], self._checkpoints
+                )
 
             await self._run_and_deliver(kind, title_req, title_body)
             return
@@ -148,7 +153,9 @@ class AgentJobActivities:
             async def cleanup_body(
                 trace: ExecutionTrace, req: TaskCleanupRequest = cleanup_req
             ) -> dict[str, object]:
-                return await run_task_cleanup(req, tracer, trace, self._prompts["task-cleanup"])
+                return await run_task_cleanup(
+                    req, tracer, trace, self._prompts["task-cleanup"], self._checkpoints
+                )
 
             await self._run_and_deliver(kind, cleanup_req, cleanup_body)
             return
@@ -157,7 +164,7 @@ class AgentJobActivities:
         async def recipe_body(
             trace: ExecutionTrace, req: RecipeScanRequest = recipe_req
         ) -> dict[str, object]:
-            return await run_recipe_scan(req, tracer, trace, self._prompts["recipe-scan"])
+            return await run_recipe_scan(req, tracer, trace, self._prompts["recipe-scan"], self._checkpoints)
 
         await self._run_and_deliver(kind, recipe_req, recipe_body)
 

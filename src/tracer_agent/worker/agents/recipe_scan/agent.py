@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanRequest
 
+from ..runtime.checkpoint import GraphCheckpointProvider
+from ..runtime.durable_graph import job_durability, with_thread
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
@@ -35,8 +39,10 @@ async def run_recipe_scan(
     tracer: TracerApiClient,
     usage: ExecutionTrace,
     prompt: AgentPrompt,
+    checkpoints: GraphCheckpointProvider | None = None,
 ) -> dict[str, Any]:
     """recipe-scan 노드를 실행 의존성과 결합해 그래프를 수행한다."""
+    saver = None if checkpoints is None else await checkpoints.saver()
     prompts = build_prompt_bundle(prompt)
     chat = make_chat(
         req.model,
@@ -118,7 +124,7 @@ async def run_recipe_scan(
         ),
         build_routes(usage, ValidateCandidateNode.name),
     )
-    final = await RECIPE_SCAN_GRAPH.ainvoke(
+    final = await RECIPE_SCAN_GRAPH.compiled(saver).ainvoke(
         {
             "task_id": req.taskId,
             "language": req.language,
@@ -139,7 +145,7 @@ async def run_recipe_scan(
             "result": None,
         },
         context=context,
-        config=recursion_config(
+        config=_execution_config(
             30,
             TraceSafeMetadata(
                 agent_name=AGENT_NAME,
@@ -147,6 +153,14 @@ async def run_recipe_scan(
                 prompt_version=prompt.version(),
                 job_id=req.jobId,
             ),
+            None if saver is None else req.jobId,
         ),
+        durability=job_durability(saver),
     )
     return final["result"] or {"recipes": [], "provenance": wire_provenance(ProvenanceCatalog())}
+
+
+def _execution_config(limit: int, trace: TraceSafeMetadata, thread_id: str | None) -> RunnableConfig:
+    """재개할 실행은 잡 하나를 열쇠로 삼고, 보존하지 않는 실행은 열쇠 없이 돈다."""
+    config = recursion_config(limit, trace)
+    return config if thread_id is None else with_thread(config, thread_id)
