@@ -40,10 +40,14 @@ def _build_node(
     prompt: AgentPrompt,
 ) -> ConverseNode:
     tokens = req.limits.maxOutputTokens
-    chat = make_chat(req.model, req.apiKey, req.deadlineMs, max_output_tokens=tokens, streaming=streaming)
+    chat = make_chat(
+        req.model, req.apiKey, req.deadlineMs, feature_max_output_tokens=tokens, streaming=streaming
+    )
     fallback_model = req.effective_fallback_model()
     fallback_chat = (
-        make_chat(fallback_model, req.apiKey, req.deadlineMs, max_output_tokens=tokens, streaming=streaming)
+        make_chat(
+            fallback_model, req.apiKey, req.deadlineMs, feature_max_output_tokens=tokens, streaming=streaming
+        )
         if fallback_model is not None
         else None
     )

@@ -39,11 +39,16 @@ async def run_task_cleanup(
         req.model,
         req.apiKey,
         req.deadlineMs,
-        max_output_tokens=req.limits.maxOutputTokens,
+        feature_max_output_tokens=req.limits.maxOutputTokens,
     )
     fallback_model = req.effective_fallback_model()
     fallback_chat = (
-        make_chat(fallback_model, req.apiKey, req.deadlineMs, max_output_tokens=req.limits.maxOutputTokens)
+        make_chat(
+            fallback_model,
+            req.apiKey,
+            req.deadlineMs,
+            feature_max_output_tokens=req.limits.maxOutputTokens,
+        )
         if fallback_model is not None
         else None
     )

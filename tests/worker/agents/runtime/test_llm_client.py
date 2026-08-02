@@ -62,3 +62,37 @@ def test_클라이언트_시간제한은_최소_1초를_보장한다(
     client.make_chat("model", "secret", 10)
 
     assert captured["timeout"] == 1.0
+
+
+def test_모델마다_다른_출력_한도가_봉투에서_온다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_chat(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(client, "ChatAnthropic", fake_chat)
+
+    client.make_chat("claude-opus-5", "secret", 2_500, 16_000)
+
+    assert captured["max_tokens"] == 32_000
+    assert captured["reasoning_effort"] == "low"
+
+
+def test_봉투에_없는_모델은_기능의_기본_출력_한도를_그대로_쓴다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_chat(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(client, "ChatAnthropic", fake_chat)
+
+    client.make_chat("claude-sonnet-4-6", "secret", 2_500, 16_000)
+
+    assert captured["max_tokens"] == 16_000
+    assert "reasoning_effort" not in captured
