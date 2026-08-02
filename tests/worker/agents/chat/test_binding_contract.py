@@ -7,13 +7,12 @@ from typing import Any
 
 from tests.support.contract import agent_tools
 from tracer_agent.shared.agents.chat.tools.bindings import (
-    GATE_CONFIRM,
-    GATE_NONE,
     LOCAL_TOOL_NAMES,
     TOOL_BINDINGS,
     ToolBinding,
     fill_path,
 )
+from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, READ_SURFACES, tool_surface
 from tracer_agent.worker.agents.chat.tools import chat_tool_declarations, tool_arg_names
 
 # 사용자 범위는 진입점을 만들 때 묶으므로 모델이 채우는 자리에는 이 이름이 설 수 없다.
@@ -28,7 +27,6 @@ def _expected(binding: ToolBinding) -> dict[str, Any]:
     return {
         "method": binding.method,
         "path": binding.path,
-        "gate": binding.gate,
         "pathArgs": list(binding.path_args),
         "query": dict(binding.query),
         "body": dict(binding.body),
@@ -50,16 +48,17 @@ def test_바인딩과_로컬_도구를_합치면_도구_표면_전체다() -> No
     assert not set(TOOL_BINDINGS) & set(LOCAL_TOOL_NAMES)
 
 
-def test_게이트가_도구_계약의_mutation과_어긋나지_않는다() -> None:
-    tools = agent_tools("chat")["tools"]
-
+def test_되읽는_표면의_도구는_본문을_싣지_않는다() -> None:
     for name, binding in TOOL_BINDINGS.items():
-        assert binding.gate == (GATE_CONFIRM if tools[name]["mutation"] else GATE_NONE)
-        # remember_fact는 gate none이지만 GET이 아닌 유일한 예외다: 확인 없이 즉시 쓰는 PUT을 쓴다.
-        if binding.method == "GET":
-            assert binding.gate == GATE_NONE
-            assert not binding.body and not binding.body_constants
-        if binding.gate == GATE_CONFIRM:
+        if tool_surface(name) not in READ_SURFACES:
+            continue
+        assert binding.method == "GET"
+        assert not binding.body and not binding.body_constants
+
+
+def test_확인을_받는_표면의_도구는_GET_을_쓰지_않는다() -> None:
+    for name, binding in TOOL_BINDINGS.items():
+        if tool_surface(name) == CONFIRM_SURFACE:
             assert binding.method != "GET"
 
 

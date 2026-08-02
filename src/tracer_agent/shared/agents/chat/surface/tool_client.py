@@ -26,8 +26,8 @@ class ChatToolFailed(RuntimeError):
     """승인된 도구 호출이 상류에서 거절되어 대기 행을 닫지 못한다."""
 
 
-def _is_agent_owned(path: str) -> bool:
-    """도구가 부르는 경로가 추적이 아니라 에이전트 서비스 자신의 것인지를 가른다."""
+def _calls_agent_upstream(path: str) -> bool:
+    """경로는 도구의 표면을 정하지 않고 그 호출이 어느 상류로 나가는지만 정한다."""
     return path.startswith("/api/agent/")
 
 
@@ -45,7 +45,7 @@ class HttpChatToolExecutor:
         call = plan_chat_tool_call(tool_name, args)
         body = {key: value for key, value in call.args.items() if key not in binding.path_args}
         body.update(binding.body_constants)
-        base_url = self._agent_base_url if _is_agent_owned(binding.path) else self._tracer_base_url
+        base_url = self._agent_base_url if _calls_agent_upstream(binding.path) else self._tracer_base_url
         response = await self._client.request(
             binding.method,
             f"{base_url}{fill_path(binding, call.args)}",

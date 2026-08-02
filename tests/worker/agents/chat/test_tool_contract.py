@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support.contract import agent_tools
+from tests.support.contract import agent_tools, conformance_case
 from tracer_agent.worker.agents.chat.tools import (
     AGENT_READ_TOOL_NAMES,
     MEMORY_TOOL_NAMES,
@@ -33,14 +33,21 @@ def test_모델에게_여는_도구_이름이_계약과_같다() -> None:
     assert set(_langchain_tools()) == set(_contract()["tools"])
 
 
-def test_mutation_분할이_계약과_같다() -> None:
-    tools = _contract()["tools"]
-    mutation = {name for name, spec in tools.items() if spec["mutation"]}
+def test_표면_분할이_적합성이_적은_목록과_같다() -> None:
+    declared = conformance_case("chat.tools")["tools"]
 
-    assert set(WRITE_TOOL_NAMES) == mutation
-    assert set(READ_TOOL_NAMES) | set(AGENT_READ_TOOL_NAMES) | set(MEMORY_TOOL_NAMES) == set(tools) - mutation
-    assert set(MEMORY_TOOL_NAMES) == {"recall_facts"}
-    assert set(AGENT_READ_TOOL_NAMES) == {"get_job"}
+    assert set(READ_TOOL_NAMES) == set(declared["read"])
+    assert set(AGENT_READ_TOOL_NAMES) == set(declared["agentRead"])
+    assert set(MEMORY_TOOL_NAMES) == set(declared["memory"])
+    assert set(WRITE_TOOL_NAMES) == set(declared["confirm"])
+
+
+def test_한_도구가_두_표면에_함께_서지_않는다() -> None:
+    tools = _contract()["tools"]
+    grouped = [*READ_TOOL_NAMES, *AGENT_READ_TOOL_NAMES, *MEMORY_TOOL_NAMES, *WRITE_TOOL_NAMES]
+
+    assert len(grouped) == len(set(grouped))
+    assert set(grouped) == set(tools)
 
 
 def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출한다() -> None:

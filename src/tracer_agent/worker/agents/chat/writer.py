@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BINDINGS
+from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, tool_surface
 
 from .reader import scoped_headers, unwrap_envelope
 
@@ -44,8 +44,7 @@ class ChatWriteClient:
 
     async def propose(self, tool_name: str, args: dict[str, object]) -> ChatProposalResult:
         """쓰기 도구 호출 하나를 실행하지 않고 확인 대기 행으로 세운다."""
-        binding = TOOL_BINDINGS[tool_name]
-        if binding.gate != GATE_CONFIRM:
+        if tool_surface(tool_name) != CONFIRM_SURFACE:
             raise ValueError(f"{tool_name} is not a write tool")
         path = CONFIRMATIONS_PATH.replace("{threadId}", self._thread_id)
         response = await self._client.post(

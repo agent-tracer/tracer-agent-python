@@ -9,6 +9,7 @@ from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool, StructuredTool
 
 from tracer_agent.shared.agents.chat.models import ProposedWrite
+from tracer_agent.shared.agents.chat.tools.surface import recall_tool_name
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.telemetry.spans import tool_span
@@ -139,21 +140,23 @@ def _proposal_tool(
 
 
 def _recall_tool(descriptions: dict[str, str], agent_name: str) -> StructuredTool:
+    name = recall_tool_name()
+
     async def run(runtime: ToolRuntime, **_kwargs: Any) -> str:
-        async with tool_span("recall_facts", agent_name=agent_name, parameters={}):
+        async with tool_span(name, agent_name=agent_name, parameters={}):
             store = runtime.store
             if store is None:
-                return TOOL_FAILED.format(tool="recall_facts", reason=MEMORY_BACKEND_MISSING)
+                return TOOL_FAILED.format(tool=name, reason=MEMORY_BACKEND_MISSING)
             try:
                 items = await store.asearch(MEMORY_NAMESPACE, limit=RECALL_LIMIT)
             except ChatMemoryUnavailable as failure:
-                return TOOL_FAILED.format(tool="recall_facts", reason=str(failure))
+                return TOOL_FAILED.format(tool=name, reason=str(failure))
             facts = [{KEY_FIELD: item.key, **item.value} for item in items]
             return for_model(json.dumps({FACTS_FIELD: facts}, ensure_ascii=False))
 
-    return _structured("recall_facts", descriptions, run)
+    return _structured(name, descriptions, run)
 
 
 def _assert_memory_names() -> None:
-    if set(MEMORY_TOOL_NAMES) != {"recall_facts"}:
+    if set(MEMORY_TOOL_NAMES) != {recall_tool_name()}:
         raise ValueError("chat memory tool names drifted from the contract")

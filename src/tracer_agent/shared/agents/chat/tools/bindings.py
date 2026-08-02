@@ -7,9 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from urllib.parse import quote
 
-GATE_NONE = "none"
-GATE_CONFIRM = "confirm"
-
 _PLACEHOLDER = re.compile(r"\{([^}]+)\}")
 
 
@@ -19,7 +16,6 @@ class ToolBinding:
 
     method: str
     path: str
-    gate: str
     path_args: tuple[str, ...] = ()
     query: Mapping[str, str] = field(default_factory=dict)
     body: Mapping[str, str] = field(default_factory=dict)
@@ -35,7 +31,6 @@ def _get(path: str, *, path_args: tuple[str, ...] = (), query: tuple[str, ...] =
     return ToolBinding(
         method="GET",
         path=path,
-        gate=GATE_NONE,
         path_args=path_args,
         query={name: name for name in query},
     )
@@ -52,7 +47,6 @@ def _write(
     return ToolBinding(
         method=method,
         path=path,
-        gate=GATE_CONFIRM,
         path_args=path_args,
         body=dict(body or {}),
         body_constants=dict(body_constants or {}),
@@ -138,7 +132,6 @@ TOOL_BINDINGS: dict[str, ToolBinding] = {
     "remember_fact": ToolBinding(
         method="PUT",
         path="/api/agent/chat/memories/{key}",
-        gate=GATE_CONFIRM,
         path_args=("key",),
         body=_same("content"),
     ),

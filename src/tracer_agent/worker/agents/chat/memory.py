@@ -6,11 +6,16 @@ from dataclasses import dataclass
 
 import httpx
 
-from tracer_agent.shared.agents.chat.tools.bindings import GATE_NONE, TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.surface import (
+    MEMORY_SURFACE,
+    recall_tool_name,
+    tool_surface,
+)
 
 from .reader import scoped_headers, unwrap_envelope
 
-RECALL_TOOL = "recall_facts"
+RECALL_TOOL = recall_tool_name()
 
 
 @dataclass(frozen=True)
@@ -43,8 +48,8 @@ class ChatMemoryClient:
 
     async def _call(self, tool_name: str, args: dict[str, object]) -> ChatMemoryResult:
         binding = TOOL_BINDINGS[tool_name]
-        if binding.gate != GATE_NONE:
-            raise ValueError(f"{tool_name} does not read without a gate")
+        if tool_surface(tool_name) != MEMORY_SURFACE:
+            raise ValueError(f"{tool_name} is not a memory tool")
         url = f"{self._base_url}{fill_path(binding, args)}"
         headers = scoped_headers(self._user_id, self._scope_token)
         body = {wire: args[arg] for arg, wire in binding.body.items() if args.get(arg) is not None}

@@ -11,24 +11,19 @@ from tracer_agent.shared.agents.chat.surface.tool_calls import (
     ChatToolArgsInvalid,
     plan_chat_tool_call,
 )
-from tracer_agent.shared.agents.chat.tools.bindings import GATE_CONFIRM, TOOL_BINDINGS
+from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, tool_names_on
 
 
 def test_확인_대기_안내가_계약과_같다() -> None:
     assert agent_tools("chat")["proposalNote"] == PROPOSAL_NOTE
 
 
-def test_계약이_mutation으로_적은_도구만_계획을_갖는다() -> None:
+def test_확인을_받는_표면의_도구만_계획을_갖는다() -> None:
     contract = agent_tools("chat")["tools"]
-    mutations = {name for name, spec in contract.items() if spec["mutation"]}
+    confirmed = {name for name, spec in contract.items() if spec["surface"] == CONFIRM_SURFACE}
 
-    assert mutations == CONFIRMABLE_TOOLS
-
-
-def test_확인_게이트가_걸린_도구만_계획을_갖는다() -> None:
-    gated = {name for name, binding in TOOL_BINDINGS.items() if binding.gate == GATE_CONFIRM}
-
-    assert gated == CONFIRMABLE_TOOLS
+    assert confirmed == CONFIRMABLE_TOOLS
+    assert set(tool_names_on(CONFIRM_SURFACE)) == CONFIRMABLE_TOOLS
 
 
 def test_필수_인자가_없으면_계획을_세우지_않는다() -> None:

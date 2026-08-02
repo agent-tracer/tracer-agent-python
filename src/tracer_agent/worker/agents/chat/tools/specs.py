@@ -2,29 +2,21 @@
 
 from __future__ import annotations
 
-import json
 import keyword
 from collections.abc import Mapping
-from functools import lru_cache
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, create_model
 
-from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS
+from tracer_agent.shared.agents.chat.tools.surface import (
+    AGENT_READ_SURFACE,
+    CONFIRM_SURFACE,
+    MEMORY_SURFACE,
+    READ_SURFACE,
+    chat_tool_declarations,
+    tool_names_on,
+)
 from tracer_agent.shared.agents.shared.models import TrimmedStr
-
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-CHAT_TOOLS_PATH = Path(__file__).resolve().parents[6] / "contract" / "agent" / "chat" / "tool.json"
-
-MEMORY_TOOL_NAMES: tuple[str, ...] = ("recall_facts",)
-
-
-@lru_cache(maxsize=1)
-def chat_tool_declarations() -> Mapping[str, Mapping[str, Any]]:
-    """도구 이름마다 mutation 여부와 인자 선언을 낸다."""
-    declared = json.loads(CHAT_TOOLS_PATH.read_text(encoding="utf-8"))["tools"]
-    return {str(name): dict(tool) for name, tool in declared.items()}
 
 
 def tool_arg_names(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -35,27 +27,11 @@ def tool_arg_names(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return required, optional
 
 
-def _is_agent_owned(name: str) -> bool:
-    """도구가 부르는 경로가 추적이 아니라 에이전트 서비스 자신의 것인지를 가른다."""
-    return TOOL_BINDINGS[name].path.startswith("/api/agent/")
-
-
-def _is_mutation(name: str) -> bool:
-    return bool(chat_tool_declarations()[name]["mutation"])
-
-
-def _read_names(agent_owned: bool) -> tuple[str, ...]:
-    return tuple(
-        name
-        for name in chat_tool_declarations()
-        if not _is_mutation(name) and name not in MEMORY_TOOL_NAMES and _is_agent_owned(name) is agent_owned
-    )
-
-
-READ_TOOL_NAMES: tuple[str, ...] = _read_names(agent_owned=False)
-# 게이트 없이 되읽되 원장이 에이전트 서비스에 있어 기점이 다른 도구 이름이다.
-AGENT_READ_TOOL_NAMES: tuple[str, ...] = _read_names(agent_owned=True)
-WRITE_TOOL_NAMES: tuple[str, ...] = tuple(name for name in chat_tool_declarations() if _is_mutation(name))
+READ_TOOL_NAMES: tuple[str, ...] = tool_names_on(READ_SURFACE)
+# 확인 없이 되읽되 원장이 에이전트 서비스에 있어 기점이 다른 도구 이름이다.
+AGENT_READ_TOOL_NAMES: tuple[str, ...] = tool_names_on(AGENT_READ_SURFACE)
+MEMORY_TOOL_NAMES: tuple[str, ...] = tool_names_on(MEMORY_SURFACE)
+WRITE_TOOL_NAMES: tuple[str, ...] = tool_names_on(CONFIRM_SURFACE)
 
 
 def _enum_annotation(values: list[str]) -> Any:
