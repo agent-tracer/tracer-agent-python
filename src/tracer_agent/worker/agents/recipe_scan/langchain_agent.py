@@ -21,7 +21,11 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
-from ..runtime.llm.standard_agent import StandardAgentContext, StandardAgentMiddleware
+from ..runtime.llm.standard_agent import (
+    StandardAgentContext,
+    StandardAgentMiddleware,
+    context_editing_middleware,
+)
 
 
 def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddleware:
@@ -51,6 +55,8 @@ def build_recipe_agent(
         # 시스템 프롬프트와 도구 선언이 턴마다 같으므로 그 둘이 캐시 접두사가 된다.
         AnthropicPromptCachingMiddleware(ttl="1h"),
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="error"),
+        # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
+        context_editing_middleware(),
         StandardAgentMiddleware(),
         _tool_retry(transient_errors),
     ]

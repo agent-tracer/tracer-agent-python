@@ -180,7 +180,7 @@ async def test_사실과_요약은_시스템_메시지_밖에_붙는다(monkeypa
 async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다(monkeypatch: pytest.MonkeyPatch) -> None:
     # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 죽는다.
     _first, before = await _system_content(monkeypatch, ["정리했습니다"], summary="요약 A", facts=[])
-    chat, after = await _system_content(
+    _chat, after = await _system_content(
         monkeypatch,
         [[{"name": "search_tasks", "args": {"query": "x"}}], "정리했습니다"],
         summary="요약 B",
@@ -188,5 +188,3 @@ async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로
     )
 
     assert before == after
-    # 시스템 하나에 최근 도구 결과 둘을 더해도 공급자 상한인 네 경계를 넘지 않는다.
-    assert 0 < chat.cached_blocks() <= 4

@@ -183,16 +183,6 @@ class FakeToolLoopChat:
             )
         return mk_ai(content=_json.dumps(turn, ensure_ascii=False))
 
-    def cached_blocks(self) -> int:
-        """마지막 요청에서 캐시 경계가 붙은 블록 수다."""
-        last = self.requests[-1] if self.requests else []
-        found = 0
-        for message in last:
-            content = getattr(message, "content", None)
-            if isinstance(content, list):
-                found += sum(1 for block in content if isinstance(block, dict) and "cache_control" in block)
-        return found
-
 
 TRACER_API_URL = "http://tracer-api.test"
 

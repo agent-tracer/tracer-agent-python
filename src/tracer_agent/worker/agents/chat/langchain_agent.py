@@ -19,7 +19,11 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
-from ..runtime.llm.standard_agent import StandardAgentContext, StandardAgentMiddleware
+from ..runtime.llm.standard_agent import (
+    StandardAgentContext,
+    StandardAgentMiddleware,
+    context_editing_middleware,
+)
 
 
 def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddleware:
@@ -51,6 +55,8 @@ def build_chat_agent(
         AnthropicPromptCachingMiddleware(ttl="1h"),
         # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 갈라진다.
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end"),
+        # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
+        context_editing_middleware(),
         StandardAgentMiddleware(serialize_tools=True),
         _tool_retry(transient_errors),
     ]

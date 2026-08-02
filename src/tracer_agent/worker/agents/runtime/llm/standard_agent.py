@@ -9,6 +9,8 @@ from typing import Any, cast
 
 from langchain.agents.middleware import (
     AgentMiddleware,
+    ClearToolUsesEdit,
+    ContextEditingMiddleware,
     ModelRequest,
     ModelResponse,
     ToolCallRequest,
@@ -22,6 +24,24 @@ from .budget import ModelCallBudget
 from .trajectory import is_truncated
 
 BUDGET_NOTICE = "You have used {used} of {total} tool-calling turns; converge as you approach the limit."
+
+# 이 토큰 수를 넘는 실행에서 오래된 도구 결과를 정리한다.
+CONTEXT_EDITING_TRIGGER_TOKENS = 100_000
+# 정리 대상에서 최근 도구 결과 이만큼은 남긴다.
+CONTEXT_EDITING_KEEP_TOOL_RESULTS = 2
+
+
+def context_editing_middleware() -> ContextEditingMiddleware:
+    """메시지 꼬리의 오래된 도구 결과만 비워 캐시 경계와 겹치지 않는 맥락 정리 미들웨어를 만든다."""
+    return ContextEditingMiddleware(
+        edits=[
+            ClearToolUsesEdit(
+                trigger=CONTEXT_EDITING_TRIGGER_TOKENS,
+                keep=CONTEXT_EDITING_KEEP_TOOL_RESULTS,
+            )
+        ]
+    )
+
 
 FINALIZE_STRUCTURED_DIRECTIVE = (
     "The investigation budget is exhausted. Stop calling tools and produce the final structured "
@@ -110,7 +130,7 @@ def tool_context[ContextT: StandardAgentContext](
 # noinspection PyTypeChecker
 def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[StandardAgentContext]:
     context = request.runtime.context
-    messages = cache_tool_messages(request.messages)
+    messages = request.messages
     if not context.budget.landing:
         spent = dict(request.state).get("run_model_call_count", 0)
         used = spent if isinstance(spent, int) else 0
@@ -124,35 +144,3 @@ def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[St
         messages=[*messages, HumanMessage(content=directive)],
         tools=[],
     )
-
-
-def cache_tool_messages(messages: list[Any]) -> list[Any]:
-    """원본을 바꾸지 않고 최근 도구 결과 두 개에만 캐시 경계를 둔다."""
-    copied = list(messages)
-    tool_indexes = [index for index, message in enumerate(copied) if isinstance(message, ToolMessage)]
-    keep = set(tool_indexes[-2:])
-    for index in tool_indexes:
-        message = copied[index]
-        block: dict[Any, Any] = {"type": "text", "text": _message_text(message)}
-        if index in keep:
-            block["cache_control"] = {"type": "ephemeral"}
-        content: list[str | dict[Any, Any]] = [block]
-        copied[index] = ToolMessage(
-            content=content,
-            name=message.name,
-            tool_call_id=message.tool_call_id,
-        )
-    return copied
-
-
-def _message_text(message: ToolMessage) -> str:
-    if isinstance(message.content, str):
-        return message.content
-    texts: list[str] = []
-    for block in message.content:
-        if not isinstance(block, dict) or block.get("type") != "text":
-            continue
-        text = block.get("text")
-        if isinstance(text, str):
-            texts.append(text)
-    return "".join(texts)
