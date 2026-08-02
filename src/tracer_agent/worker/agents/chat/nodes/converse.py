@@ -14,15 +14,12 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from tracer_agent.shared.agents.chat.models import (
-    ChatFact,
     ChatHistoryMessage,
     ChatRequest,
-    ChatResult,
     ChatState,
     ConverseUpdate,
     ProposedWrite,
 )
-from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
 from ...runtime.checkpoint import GraphCheckpointProvider
 from ...runtime.execution.trace import ExecutionTrace
@@ -32,7 +29,7 @@ from ...runtime.llm.structured_agent import recursion_limit_for
 from ...runtime.node import GraphNode
 from ...runtime.pricing import ModelRates
 from ..checkpointer import seed_checkpoint
-from ..context import ChatContextReader, replay_messages
+from ..context import replay_messages
 from ..drafts import DraftPublisher
 from ..langchain_agent import build_chat_agent
 from ..memory import ChatMemoryClient
@@ -41,6 +38,7 @@ from ..reader import ChatReadClient
 from ..store import ChatMemoryStore
 from ..tools import build_chat_registry
 from ..writer import ChatWriteClient
+from .settle import message_text
 
 # 읽기 도구는 HTTP만 타므로 연결 계열 오류만 일시적이며 도메인 응답은 재시도하지 않는다.
 TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
@@ -87,14 +85,10 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             if self._drafts is None
             else await self._invoke_with_drafts(prepared, self._drafts)
         )
-        result = ChatResult(
-            assistantText=redact_text(_final_text(messages), stage=RedactionStage.OUTPUT),
-            proposedWrites=prepared.proposals,
-        )
         return {
             "messages": messages,
             "model_cost_usd": prepared.budget.spent,
-            "result": result.model_dump(mode="json"),
+            "proposals": prepared.proposals,
         }
 
     async def _invoke(self, prepared: _PreparedTurn) -> list[Any]:
@@ -116,7 +110,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             if mode == "messages":
                 message = chunk[0]
                 if isinstance(message, AIMessage):
-                    await drafts.push(_text(message.content))
+                    await drafts.push(message_text(message.content))
                     for call in message.tool_calls:
                         await drafts.push_tool(str(call.get("name", "")))
             elif mode == "updates" and isinstance(chunk, dict):
@@ -126,7 +120,6 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
 
     async def _prepare(self, state: ChatState) -> _PreparedTurn:
         proposals: list[ProposedWrite] = []
-        messages, summary, facts = await self._context(state)
         checkpointer = await self._checkpointer()
         registry = build_chat_registry(
             self._read_client(),
@@ -160,8 +153,10 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             max_model_turns=self._req.limits.maxTurns,
         )
         config = self._config()
-        context_prompt = build_context_prompt(self._language_directives[state["language"]], summary, facts)
-        messages_in = await self._seed(agent, checkpointer, config, messages, context_prompt)
+        context_prompt = build_context_prompt(
+            self._language_directives[state["language"]], state["summary"], state["facts"]
+        )
+        messages_in = await self._seed(agent, checkpointer, config, state["history"], context_prompt)
         return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
 
     def _config(self) -> RunnableConfig:
@@ -191,18 +186,6 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         if not context_prompt.strip():
             return messages
         return [*messages, HumanMessage(content=context_prompt)]
-
-    async def _context(self, state: ChatState) -> tuple[list[ChatHistoryMessage], str | None, list[ChatFact]]:
-        if not self._req.agentApiBaseUrl or self._req.messages:
-            return self._req.messages, state["summary"], state["facts"]
-        return await ChatContextReader(
-            self._http_client,
-            self._req.agentApiBaseUrl,
-            self._req.userId,
-            self._req.threadId,
-            self._req.executionId,
-            self._req.scopeToken or None,
-        ).load()
 
     async def _checkpointer(self) -> BaseCheckpointSaver[Any] | None:
         if self._checkpoints is None:
@@ -264,28 +247,6 @@ class _PreparedTurn:
     context: StandardAgentContext
     budget: ToolLoopBudget
     proposals: list[ProposedWrite]
-
-
-def _final_text(messages: list[Any]) -> str:
-    for message in reversed(messages):
-        if isinstance(message, AIMessage) and not message.tool_calls:
-            text = _text(message.content)
-            if text:
-                return text
-    return ""
-
-
-def _text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = [
-            block["text"]
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)
-        ]
-        return "".join(parts)
-    return ""
 
 
 def _appended_messages(update: dict[str, Any]) -> list[Any]:

@@ -15,7 +15,7 @@ from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest, DraftCallback
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
-from tracer_agent.worker.agents.chat.nodes.converse import _final_text
+from tracer_agent.worker.agents.chat.nodes.settle import final_text
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 
 
@@ -126,7 +126,7 @@ def test_최종_답변은_도구_호출이_없는_마지막_어시스턴트_텍�
         AIMessage(content="최종 답변"),
     ]
 
-    assert _final_text(messages) == "최종 답변"
+    assert final_text(messages) == "최종 답변"
 
 
 async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() -> None:

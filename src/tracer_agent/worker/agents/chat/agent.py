@@ -19,6 +19,8 @@ from ..shared.prompt_source_port import AgentPrompt
 from .drafts import DraftPublisher
 from .graph import CHAT_GRAPH, CHAT_NODE_NAMES
 from .nodes.converse import ConverseNode
+from .nodes.load_context import LoadContextNode
+from .nodes.settle import SettleNode
 from .prompts import build_system_prompt
 
 AGENT_NAME = "chat"
@@ -70,8 +72,10 @@ def _initial_state(req: ChatRequest) -> ChatState:
         "language": req.language,
         "summary": req.summary,
         "facts": req.facts,
+        "history": [],
         "messages": [],
         "model_cost_usd": 0.0,
+        "proposals": [],
         "result": None,
     }
 
@@ -96,7 +100,17 @@ async def run_chat(
         prompt=prompt,
     )
     context = ValidationGraphContext(
-        AGENT_NAME, usage, NodeRegistry({ConverseNode.name: node}, CHAT_NODE_NAMES), _no_validation
+        AGENT_NAME,
+        usage,
+        NodeRegistry(
+            {
+                LoadContextNode.name: LoadContextNode(req, http_client),
+                ConverseNode.name: node,
+                SettleNode.name: SettleNode(),
+            },
+            CHAT_NODE_NAMES,
+        ),
+        _no_validation,
     )
     final = await CHAT_GRAPH.ainvoke(
         _initial_state(req),

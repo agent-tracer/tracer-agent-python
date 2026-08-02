@@ -128,11 +128,25 @@ class ChatResult(BaseModel):
     proposedWrites: list[ProposedWrite] = Field(default_factory=list)
 
 
+class LoadContextUpdate(TypedDict):
+    """문맥 적재 노드가 갱신하는 상태 부분집합이다."""
+
+    history: list[ChatHistoryMessage]
+    summary: str | None
+    facts: list[ChatFact]
+
+
 class ConverseUpdate(TypedDict):
     """대화 노드가 갱신하는 상태 부분집합이다."""
 
     messages: list[BaseMessage]
     model_cost_usd: float
+    proposals: list[ProposedWrite]
+
+
+class SettleUpdate(TypedDict):
+    """종결 노드가 갱신하는 상태 부분집합이다."""
+
     result: dict[str, object]
 
 
@@ -140,7 +154,11 @@ class ChatState(TypedDict):
     language: Language
     summary: str | None
     facts: list[ChatFact]
+    # 문맥 적재가 되살린 이 턴의 재생 이력이며 대화가 이것으로 시작한다.
+    history: list[ChatHistoryMessage]
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
     model_cost_usd: float
+    # 대화가 세운 확인 대기 행이며 종결이 결과에 인용한다.
+    proposals: list[ProposedWrite]
     result: dict[str, object] | None
