@@ -43,7 +43,9 @@ async def run_title_suggestion(
     checkpoints: GraphCheckpointProvider | None = None,
 ) -> dict[str, Any]:
     """title-suggestion 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    saver = None if checkpoints is None else await checkpoints.saver()
+    # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
+    resume_key = req.jobId
+    saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
     prompts = build_prompt_bundle(prompt)
     chat = make_chat(
         req.model,
@@ -122,7 +124,7 @@ async def run_title_suggestion(
                 prompt_version=prompt.version(),
                 job_id=req.jobId,
             ),
-            None if saver is None else req.jobId,
+            resume_key,
         ),
         durability=job_durability(saver),
     )
@@ -130,6 +132,6 @@ async def run_title_suggestion(
 
 
 def _execution_config(limit: int, trace: TraceSafeMetadata, thread_id: str | None) -> RunnableConfig:
-    """재개할 실행은 잡 하나를 열쇠로 삼고, 보존하지 않는 실행은 열쇠 없이 돈다."""
+    """재개할 실행은 잡 하나를 열쇠로 삼고, 열쇠를 모르는 실행은 보존하지 않는다."""
     config = recursion_config(limit, trace)
     return config if thread_id is None else with_thread(config, thread_id)

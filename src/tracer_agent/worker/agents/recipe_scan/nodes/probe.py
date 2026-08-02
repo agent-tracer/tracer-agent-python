@@ -136,6 +136,7 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
                     response_type=ProbeReport,
                     recursion_limit=recursion_limit_for(payload.max_turns),
                     missing_response=f"{assignment.probe} probe produced no structured report",
+                    call_id=f"{req.jobId}:probe:{assignment.probe}",
                 ),
                 timeout=wall_clock_s,
             )

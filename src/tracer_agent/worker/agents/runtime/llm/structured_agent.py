@@ -65,6 +65,14 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
     return config
 
 
+def _call_config(recursion_limit: int, call_id: str | None) -> RunnableConfig:
+    """부모 그래프가 실행 상태를 보존하면 이 호출도 자기 열쇠를 갖는다."""
+    config = recursion_config(recursion_limit)
+    if call_id is None:
+        return config
+    return {**config, "configurable": {"thread_id": call_id}}
+
+
 class StructuredAgentOutput[Response: BaseModel](TypedDict):
     """response_format을 준 agent가 내는 출력이며 이 모듈만 그 모양을 안다."""
 
@@ -95,13 +103,14 @@ async def invoke_structured_agent[Response: BaseModel](
     response_type: type[Response],
     recursion_limit: int,
     missing_response: str,
+    call_id: str | None = None,
 ) -> StructuredAgentResult[Response]:
     """agent를 실행하고 SDK의 가변 출력에서 요구한 Pydantic 응답만 꺼낸다."""
     output = narrow_agent_output(
         await agent.ainvoke(
             {"messages": messages},
             context=context,
-            config=recursion_config(recursion_limit),
+            config=_call_config(recursion_limit, call_id),
         ),
         response_type,
         missing_response,

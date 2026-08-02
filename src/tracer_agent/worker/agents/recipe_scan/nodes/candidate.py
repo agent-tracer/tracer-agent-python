@@ -113,6 +113,7 @@ class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[RecipeScanState, Upd
             response_type=RecipeDraft,
             recursion_limit=recursion_limit_for(lease.max_turns),
             missing_response=f"{self._agent_name} produced no structured output",
+            call_id=f"{self._req.jobId}:{self.name}",
         )
         return result.response, result.messages, catalog, result.num_turns, budget.delta
 
