@@ -1,6 +1,6 @@
 # tracer-agent-python
 
-에이전트 서비스의 Python 구현입니다. FastAPI가 대화·잡·평가 실행의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 LangGraph를 실행합니다. 실행 원장은 이 서비스가 소유하며, 실행에 필요한 기록은 추적 API를 HTTP로 읽고 산출물도 같은 경로로 되돌려 보냅니다.
+에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 LangGraph를 실행합니다. 실행 원장은 이 서비스가 소유하며, 실행에 필요한 기록은 추적 API를 HTTP로 읽고 산출물도 같은 경로로 되돌려 보냅니다.
 
 같은 계약을 만족하는 TypeScript 구현이 따로 있고 배포에서 어느 이미지를 올리느냐로 둘 중 하나가 선택됩니다. TypeScript 구현이 계약의 정본이며, 두 구현체 사이에 지금 남아 있는 차이는 계약 저장소의 `conformance/cases/divergence.json`이 갖습니다. 계약을 함께 만족한다는 사실이 모든 동작이 같다는 뜻은 아닙니다.
 
@@ -11,7 +11,9 @@
 - recipe scan, task cleanup, rule generation, title suggestion 에이전트
 - 대화 도구 확인·초안·재생·장기기억 API
 - 잡 접수·취소·이력·단계 조회 API
-- 설정·프롬프트 등록부·평가 표면
+- 로컬 실행기가 잡을 가져가고 되돌리는 리스 창구
+- 자격 증명이 답과 초안과 도구 결과로 새지 않도록 가리는 절차
+- 설정 표면
 - OpenTelemetry와 선택적 LangSmith 연동
 
 ## 아키텍처

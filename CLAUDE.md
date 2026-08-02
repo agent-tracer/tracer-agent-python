@@ -4,7 +4,7 @@
 
 ## 저장소 역할
 
-FastAPI가 대화·잡·평가 실행의 접수와 조회와 취소와 스트림을 제공합니다. Temporal 워커는 chat·jobs·generate 큐를 각각 소비합니다. 실행 원장은 이 서비스가 소유하며 추적 데이터와 산출물은 추적 API의 공개 HTTP 경로만 사용합니다.
+FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공합니다. Temporal 워커는 chat·jobs·generate 큐를 각각 소비합니다. 실행 원장은 이 서비스가 소유하며 추적 데이터와 산출물은 추적 API의 공개 HTTP 경로만 사용합니다.
 
 LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. TypeScript 구현이 계약의 정본이며 두 구현체의 현재 차이는 `contract/conformance/cases/divergence.json`에서 확인합니다. 모든 동작이 같다고 가정하지 않습니다.
 
@@ -36,6 +36,7 @@ uv run tracer-agent-worker generate
 - `src/tracer_agent/worker/agents`는 대화·레시피·정리·제목 에이전트를 제공합니다.
 - `src/tracer_agent/worker/workflows`는 Temporal 워크플로와 액티비티를 제공합니다.
 - API 필드와 응답 봉투는 계약의 camelCase 규칙을 유지합니다.
+- 접수와 조회의 거절은 계약이 정한 상태와 코드로 냅니다. FastAPI의 자동 검증에 맡기면 계약이 정한 400 대신 422가 나갑니다.
 - `shared`·`agents`·`workflows` 경계와 금지된 상대 import 규칙을 지킵니다.
 - LangGraph 체크포인트와 계약 원장을 직접 결합하지 않습니다.
 - 환경변수·시계·난수는 설정과 런타임 경계에서 읽습니다.
@@ -47,6 +48,9 @@ uv run tracer-agent-worker generate
 - 새 동작은 테스트와 적합성 케이스와 구현을 함께 갱신합니다.
 - 추적 API는 공개 경로만 쓰고 추적 데이터베이스나 OpenSearch에 직접 접근하지 않습니다.
 - 구현 차이는 예외 목록으로 숨기지 않고 `divergence.json`과 함께 갱신합니다.
+- 잡 리스 창구는 `x-monitor-lease-owner`를 요구하며 쥔 실행기만 종결하거나 반납합니다. 리스 수명은 계약의 `wire/job.kinds.json`이 갖습니다.
+- 가리는 절차와 실행 자격의 모양은 `agent/shared/`의 계약을 읽어 씁니다. 두 구현체가 같은 입력에 같은 글자를 내야 하므로 언어의 기본 동작에 맡기지 않습니다.
+- 프롬프트 캐시 경계는 미들웨어가 놓습니다. 시스템 메시지에는 턴마다 같은 것만 두고 바뀌는 것은 메시지 꼬리에 붙입니다.
 - `LANGSMITH_TRACING`은 명시적으로 켠 경우에만 사용합니다.
 - 운영 프로파일의 설정 암호화 키를 개발 기본값으로 두지 않습니다.
 - 테스트 없는 워크플로·에이전트·유스케이스를 추가하지 않습니다.
