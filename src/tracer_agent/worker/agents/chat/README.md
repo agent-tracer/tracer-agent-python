@@ -39,6 +39,8 @@ sequenceDiagram
     N-->>A: ChatResult + proposedWrites
 ```
 
+대화 그래프 자체는 체크포인터 없이 컴파일되고 `converse` 안쪽의 LangChain agent만 체크포인트를 갖는다. 실행 하나를 다시 태우는 일은 Temporal 액티비티가 맡고, 그 액티비티 안에서 끝난 도구 루프를 다시 태우지 않는 일만 체크포인트가 맡는다. 잡 축은 `DurableGraph`로 그래프 자체를 보존하므로 두 축의 재개 경계가 다르다.
+
 `executionId`가 LangGraph checkpoint의 `thread_id`가 된다. 요청에 `messages`가 없고 `agentApiBaseUrl`이 있으면 replay API에서 이력을 조회한다. summary와 facts는 시스템 prompt가 아니라 신뢰 경계를 가진 HumanMessage로 메시지 꼬리에 배치한다.
 
 ## 노드와 이동
@@ -105,15 +107,17 @@ chat.assistant.system
 
 `build_chat_agent`는 다음 정책을 순서대로 조립한다.
 
-1. `AnthropicPromptCachingMiddleware(ttl="1h")`
-2. `ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end")`
-3. `context_editing_middleware()` — 100,000 token부터 오래된 도구 결과를 정리하고 최근 2개를 보존한다
-4. `StandardAgentMiddleware(serialize_tools=True)` — 공유 장부를 사용하는 도구 호출을 직렬화한다
+1. `TurnLimitMiddleware(run_limit=max_turns, exit_behavior="end")` — 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
+2. `context_editing_middleware()` — 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 보존한다
+3. `StandardAgentMiddleware(serialize_tools=True)` — 공유 장부를 사용하는 도구 호출을 직렬화한다
+4. `PromptCacheMiddleware(ttl="1h")` — 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다
 5. `ToolRetryMiddleware` — `httpx.TransportError`, `ConnectionError`, `TimeoutError`를 최대 2회 재시도한다
 6. 선택적 `FallbackModelMiddleware`
 7. `model_retry_middleware()` — Anthropic 과부하·속도 제한·연결 오류를 같은 모델로 최대 2회 재시도한다
 
-Fallback은 같은 모델 재시도가 소진된 뒤에만 호출한다. 예산 초과·출력 절단·취소는 재시도나 fallback 대상이 아니다. 최종 `ChatResult`는 redaction된 `assistantText`와 `proposedWrites`를 포함한다.
+캐시 경계는 남은 몫을 알리는 꼬리가 붙은 뒤에 놓이므로 그 꼬리 앞에서 멈춘다. 꼬리는 호출마다 다시 쓰이므로 경계가 그 위에 놓이면 다음 호출이 그 항목을 읽지 못한다.
+
+Fallback은 같은 모델 재시도가 소진된 뒤에만 호출한다. 예산 초과·출력 절단·취소는 재시도나 fallback 대상이 아니다. 최종 `ChatResult`는 redaction된 `assistantText`와 `proposedWrites`를 포함한다. 도구를 더 부르려던 참에 상한이나 예산으로 루프가 끊기면 마무리한 답이 없으므로 모델이 마지막으로 쓴 본문을 답으로 낸다.
 
 관련 구현은 [graph.py](graph.py), [nodes/converse.py](nodes/converse.py), [langchain_agent.py](langchain_agent.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py)에 있다.
 

@@ -106,22 +106,22 @@ Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이
 
 | 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
 | --- | --- | --- | --- |
-| 프롬프트 캐시 | `AnthropicPromptCachingMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언을 캐시 접두사로 유지한다 |
-| 모델 호출 상한 | `ModelCallLimitMiddleware` | 전체 | `max_turns + 2` 호출 상한을 적용한다 |
-| 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 오래된 도구 결과를 정리하고 최근 2개를 유지한다 |
+| 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | 계약이 정한 `maxTurns` 를 그대로 호출 상한으로 적용한다 |
+| 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
 | 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
+| 프롬프트 캐시 | `PromptCacheMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다 |
 | 도구 재시도 | `ToolRetryMiddleware` | Chat·Recipe Scan·Task Cleanup | 선언된 일시 오류를 최대 2회 재시도한다 |
-| 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | `anthropic.APIError`에 대해서만 대체 모델을 1회 호출한다 |
+| 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | 과부하·속도 제한·연결 오류에서만 대체 모델을 1회 호출한다 |
 | 모델 재시도 | `model_retry_middleware()` | Chat·Recipe Scan | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
 
 ```mermaid
 flowchart LR
-    REQ[ModelRequest] --> CACHE[Prompt cache]
-    CACHE --> LIMIT[Model call limit]
+    REQ[ModelRequest] --> LIMIT[Model call limit]
     LIMIT --> EDIT[Context editing]
     EDIT --> STANDARD[StandardAgentMiddleware]
-    STANDARD --> TOOL_RETRY[Tool retry]
-    TOOL_RETRY --> FALLBACK{provider APIError?}
+    STANDARD --> CACHE[Prompt cache boundary]
+    CACHE --> TOOL_RETRY[Tool retry]
+    TOOL_RETRY --> FALLBACK{provider transient error?}
     FALLBACK -- 아니오 --> MODEL_RETRY[Same-model retry]
     FALLBACK -- 예 --> ALT[Fallback model]
     MODEL_RETRY --> PRIMARY[Primary model]
@@ -129,7 +129,11 @@ flowchart LR
     PRIMARY --> RESULT
 ```
 
-`FallbackModelMiddleware`는 예산 초과·출력 절단·취소를 fallback 대상으로 바꾸지 않는다. `model_retry_middleware`도 정의된 공급자 일시 오류 범위 밖의 예외를 재시도하지 않는다. 이 경계는 예산·출력·취소 상태가 상위 실행기로 전달되도록 한다.
+캐시 경계가 실행 표준화보다 안쪽에 서는 이유는 남은 몫을 알리는 꼬리가 붙은 뒤에야 그 꼬리 앞에 경계를 놓을 수 있기 때문이다. 꼬리는 호출마다 다시 쓰이므로 그 위에 경계를 놓으면 다음 호출의 앞부분이 달라져 그 항목을 다시 읽지 못한다. 맥락 정리가 비우는 자리는 경계 안쪽이므로 정리가 도는 호출은 접두사를 다시 쓴다.
+
+`FallbackModelMiddleware`는 예산 초과·출력 절단·취소를 fallback 대상으로 바꾸지 않으며, 요청 자체가 틀린 오류도 대체 모델에서 같은 답이 오므로 넘기지 않는다. `model_retry_middleware`도 정의된 공급자 일시 오류 범위 밖의 예외를 재시도하지 않는다. 이 경계는 예산·출력·취소 상태가 상위 실행기로 전달되도록 한다.
+
+`TurnLimitMiddleware`는 상한에 닿은 대화 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다. 남기면 최종 답변을 고르는 자리가 그 문구를 답으로 본다.
 
 모델이 답의 밀도를 스스로 정하도록 실행 표준화가 호출마다 쓴 턴과 총량을 메시지 꼬리에 붙이고, 예산이 다하면 조사 도구를 거두고 마무리 지시만 남긴다. 두 문구는 `runtime/llm/pacing.py`가 계약의 `agent/shared/execution.budget.json`에서 읽으므로 구현체가 문장을 소유하지 않는다.
 
@@ -205,6 +209,8 @@ flowchart TD
     START -->|취소가 아닌 오류| FAIL[failAgentJob]
 ```
 
+잡의 생성 액티비티가 다시 태워지면 `prior_spend`가 체크포인트에서 앞선 시도의 달러와 턴을 읽어 `ExecutionBudget`에 실어 준다. 상한은 실행 하나에 한 번만 열리므로 예약과 배분은 남은 잔량에서 이루어진다.
+
 세 잡 종류가 `agentJobWorkflow` 하나를 함께 쓰고 단계마다 자기 액티비티를 갖는다.
 준비는 도메인 문맥만 모으고 자격은 생성 액티비티가 실행 직전에 봉투로 받는다. 준비의 산출은
 워크플로 이력에 남으므로 자격이 그 자리에 실리면 이력이 자격을 갖게 된다.
@@ -224,7 +230,7 @@ Chat도 스레드 워크플로와 실행 워크플로를 따로 두고 준비·�
 | HTTP 봉투와 본문 해석 | `shared/agents/shared/wire.py` |
 | 시각 표현과 되읽기 | `shared/agents/shared/instant.py` |
 | 도구 재시도·모델 재시도 미들웨어 | `runtime/llm/retry.py` |
-| 재개 열쇠를 실은 실행 설정 | `runtime/durable_graph.py` |
+| 재개 열쇠와 앞선 시도의 지출 | `runtime/durable_graph.py` |
 | 잡 하나의 조립·실행·배달 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |
 | 노드가 함께 받는 실행 의존성 | 에이전트별 `deps.py` |
 | LangChain 표준 실행 체인 | `runtime/llm/standard_agent.py` |
