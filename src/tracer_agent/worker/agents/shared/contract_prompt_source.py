@@ -14,8 +14,8 @@ from .prompt_source_port import AgentPrompt, PromptSlot, PromptTemplate
 CONTRACT_ROOT = Path(__file__).resolve().parents[5] / "contract"
 
 _LANGUAGE_DIRECTIVE = "languageDirective"
-# 값이 아니라 조율자가 부를 도구 이름이라 상한이 아니라 오케스트레이션 절이 갖는다.
-_COORDINATOR_PLACEHOLDER = "checkCitationsTool"
+# 조율자가 부를 도구는 값이 아니라 이름이라 상한이 아니라 오케스트레이션 절이 갖는다.
+_TOOL_PLACEHOLDER_SUFFIX = "Tool"
 
 
 class ContractPromptUnavailable(RuntimeError):
@@ -65,10 +65,15 @@ class ContractPromptSource:
 
 def _placeholder_values(tools: Mapping[str, Any]) -> Mapping[str, str]:
     values = {name: str(value) for name, value in tools.get("limits", {}).items()}
-    coordinator = tools.get("orchestration", {}).get("coordinatorTools", [])
-    if coordinator:
-        values[_COORDINATOR_PLACEHOLDER] = str(coordinator[0])
+    for name in tools.get("orchestration", {}).get("coordinatorTools", []):
+        values[_tool_placeholder(str(name))] = str(name)
     return values
+
+
+def _tool_placeholder(tool_name: str) -> str:
+    """snake_case 도구 이름을 프롬프트가 부르는 자리표시자 이름으로 옮긴다."""
+    head, *rest = tool_name.split("_")
+    return head + "".join(part.capitalize() for part in rest) + _TOOL_PLACEHOLDER_SUFFIX
 
 
 def _joined(lines: list[str]) -> str:

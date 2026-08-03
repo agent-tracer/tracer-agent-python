@@ -8,6 +8,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
+from .llm.structured_agent import recursion_config
+from .telemetry.disclosure import TraceSafeMetadata
+
 # 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 입도는 노드 하나면 충분하다.
 _JOB_DURABILITY: Literal["sync", "async", "exit"] = "async"
 
@@ -59,3 +62,9 @@ async def resume_input[StateT](
 def with_thread(config: RunnableConfig, thread_id: str) -> RunnableConfig:
     """재시도가 같은 열쇠로 와야 앞선 노드를 다시 태우지 않으므로 잡 하나를 재개의 범위로 잡는다."""
     return {**config, "configurable": {"thread_id": thread_id}}
+
+
+def execution_config(limit: int, trace: TraceSafeMetadata, thread_id: str | None) -> RunnableConfig:
+    """재개할 실행은 잡 하나를 열쇠로 삼고, 열쇠를 모르는 실행은 보존하지 않는다."""
+    config = recursion_config(limit, trace)
+    return config if thread_id is None else with_thread(config, thread_id)
