@@ -5,7 +5,7 @@ from __future__ import annotations
 from tracer_agent.shared.agents.chat.models import ChatFact
 
 from ..shared.prompt_source_port import AgentPrompt
-from ..shared.safety_policy import SAFETY_POLICY
+from .safety_policy import SAFETY_POLICY
 
 SYSTEM_TEMPLATE = "chat.assistant.system"
 

@@ -11,8 +11,8 @@ from tracer_agent.worker.agents.chat.context import (
     replay_messages,
 )
 from tracer_agent.worker.agents.chat.prompts import build_context_prompt, build_system_prompt
+from tracer_agent.worker.agents.chat.safety_policy import SAFETY_POLICY
 from tracer_agent.worker.agents.shared.contract_prompt_source import ContractPromptSource
-from tracer_agent.worker.agents.shared.safety_policy import SAFETY_POLICY
 
 PROMPT = ContractPromptSource().resolve("chat")
 
