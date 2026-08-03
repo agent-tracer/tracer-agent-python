@@ -8,9 +8,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
-from ...shared.wire import SuccessEnvelope, error_responses
+from ...shared.wire import SuccessEnvelope, error_responses, ok
 from ..intake.ids import generate_ulid
-from .envelope import ok, read_payload
+from .envelope import read_payload
 from .ledger import ChatSurfaceLedger
 from .models import RememberFactBody
 from .views import memory_dto

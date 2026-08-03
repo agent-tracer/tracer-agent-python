@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -14,7 +13,7 @@ from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql, UserId
 from ..runtime.ledger import SqlSource
-from ..shared.wire import SuccessEnvelope, error_responses
+from ..shared.wire import SuccessEnvelope, error_responses, read_body, validation_details
 from .catalog import knows_model, model_options
 from .models import (
     MODEL_SETTING_KEY,
@@ -66,13 +65,13 @@ async def put_setting(
     """설정 하나를 쓰며 모델 설정은 단가를 아는 값만 받는다."""
     if not is_setting_key(key):
         return _error_envelope(*INVALID_REQUEST)
-    body = await _read_body(request)
+    body = await read_body(request)
     if body is None:
         return _error_envelope(*INVALID_REQUEST)
     try:
         payload = PutSettingPayload.model_validate(body)
     except ValidationError as invalid:
-        return _error_envelope(*INVALID_REQUEST, details=_details(invalid))
+        return _error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
     if key == MODEL_SETTING_KEY and not knows_model(payload.value):
         unpriced = [{"loc": ["value"], "type": UNPRICED_MODEL_TYPE, "model": payload.value}]
         return _error_envelope(*INVALID_REQUEST, details=unpriced)
@@ -106,15 +105,3 @@ def _error_envelope(status: int, code: str, message: str, details: Any = None) -
     if details is not None:
         error["details"] = details
     return JSONResponse(status_code=status, content={"ok": False, "error": error})
-
-
-async def _read_body(request: Request) -> dict[str, Any] | None:
-    try:
-        body = json.loads(await request.body() or b"null")
-    except json.JSONDecodeError:
-        return None
-    return body if isinstance(body, dict) else None
-
-
-def _details(invalid: ValidationError) -> Any:
-    return json.loads(invalid.json(include_url=False, include_context=False, include_input=False))

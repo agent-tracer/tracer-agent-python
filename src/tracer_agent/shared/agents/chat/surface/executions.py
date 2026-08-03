@@ -6,10 +6,10 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
-from ...shared.wire import SuccessEnvelope, error_responses
+from ...shared.wire import SuccessEnvelope, error_responses, ok
 from ..intake.turn import ChatIntakeRejected
 from .access import owned_execution, owned_thread
-from .envelope import ok, rejection
+from .envelope import rejection
 from .ledger import PENDING, ChatSurfaceLedger
 from .replay import ChatReplayMessageMissing, build_chat_replay
 from .threads import CHAT_THREAD_PATH

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import time
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql
-from ..shared.wire import SuccessEnvelope, error_responses
+from ..shared.wire import SuccessEnvelope, error_envelope, error_responses, read_body, validation_details
 from .catalog import CATALOG, CHAT_KIND, JOB_KINDS
 from .grants import issue_draft_grant
 from .issue import chat_envelope, job_envelope
@@ -92,13 +91,13 @@ async def issue_job_execution_envelope(
     """이 잡 종류와 사용자가 쓸 모델과 자격과 단가와 한도를 낸다."""
     if kind not in JOB_KINDS:
         return error_envelope(*INVALID_REQUEST)
-    body = await _read_body(request)
+    body = await read_body(request)
     if body is None:
         return error_envelope(*INVALID_REQUEST)
     try:
         payload = JobEnvelopeBody.model_validate(body)
     except ValidationError as invalid:
-        return error_envelope(*INVALID_REQUEST, details=_details(invalid))
+        return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
 
     api_key = await _api_key(credentials, payload.userId)
     if api_key is None:
@@ -111,23 +110,3 @@ async def issue_job_execution_envelope(
 async def _api_key(credentials: ModelCredentialSource, user_id: str) -> str | None:
     stored = await credentials.api_key(user_id)
     return stored if stored else None
-
-
-def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
-    """실패 사유를 계약이 정한 오류 봉투로 적는다."""
-    error: dict[str, Any] = {"code": code, "message": message}
-    if details is not None:
-        error["details"] = details
-    return JSONResponse(status_code=status, content={"ok": False, "error": error})
-
-
-async def _read_body(request: Request) -> dict[str, Any] | None:
-    try:
-        body = json.loads(await request.body() or b"null")
-    except json.JSONDecodeError:
-        return None
-    return body if isinstance(body, dict) else None
-
-
-def _details(invalid: ValidationError) -> Any:
-    return json.loads(invalid.json(include_url=False, include_context=False, include_input=False))

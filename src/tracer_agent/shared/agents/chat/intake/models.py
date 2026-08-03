@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...runtime.ledger import SqlRow
+from ...shared.instant import opt_iso
 from ...shared.models import Language, TrimmedStr
 
 ModelName = Annotated[TrimmedStr, Field(min_length=1)]
@@ -45,7 +45,7 @@ def message_dto(row: SqlRow) -> dict[str, Any]:
         "content": row["content"],
         "toolCalls": row["tool_calls"],
         "toolCallId": row["tool_call_id"],
-        "createdAt": iso(row["created_at"]),
+        "createdAt": opt_iso(row["created_at"]),
     }
 
 
@@ -65,16 +65,8 @@ def execution_dto(row: SqlRow) -> dict[str, Any]:
         "numTurns": row["num_turns"],
         "stopReason": row["stop_reason"],
         "error": row["error"],
-        "createdAt": iso(row["created_at"]),
-        "updatedAt": iso(row["updated_at"]),
-        "startedAt": iso(row["started_at"]),
-        "completedAt": iso(row["completed_at"]),
+        "createdAt": opt_iso(row["created_at"]),
+        "updatedAt": opt_iso(row["updated_at"]),
+        "startedAt": opt_iso(row["started_at"]),
+        "completedAt": opt_iso(row["completed_at"]),
     }
-
-
-def iso(value: datetime | None) -> str | None:
-    """시각을 자바스크립트 Date가 내는 밀리초 세 자리 UTC 문자열로 적는다."""
-    if value is None:
-        return None
-    moment = value.astimezone(UTC)
-    return f"{moment.strftime('%Y-%m-%dT%H:%M:%S')}.{moment.microsecond // 1000:03d}Z"

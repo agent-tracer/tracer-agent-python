@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...runtime.ledger import LedgerSql
-from ...shared.wire import SuccessEnvelope, error_responses
+from ...shared.wire import SuccessEnvelope, error_responses, ok
 from ..dependencies import Dispatch
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.ids import generate_ulid
@@ -17,7 +17,7 @@ from ..intake.router import CHAT_THREADS_PATH
 from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from .access import owned_thread
-from .envelope import CREATED_STATUS, ok, read_payload, rejection
+from .envelope import CREATED_STATUS, read_payload, rejection
 from .ledger import ChatSurfaceLedger
 from .models import ThreadTitleBody
 from .views import message_dto, thread_dto

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..shared.instant import iso
 
 SettingKey = Literal[
     "anthropic.api_key",
@@ -70,9 +72,3 @@ def setting_view(key: str, value: str, updated_at: datetime) -> dict[str, Any]:
         "hasValue": True,
         "updatedAt": iso(updated_at),
     }
-
-
-def iso(value: datetime) -> str:
-    """시각을 자바스크립트 Date가 내는 밀리초 세 자리 UTC 문자열로 적는다."""
-    moment = value.astimezone(UTC)
-    return f"{moment.strftime('%Y-%m-%dT%H:%M:%S')}.{moment.microsecond // 1000:03d}Z"

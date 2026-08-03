@@ -16,9 +16,20 @@ REDACTION_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "s
 # 계약이 자격의 몸통에 허용한 글자는 영문자와 숫자와 세 구분자다.
 _BODY_CHARACTERS = frozenset(ascii_letters + digits + "-_.")
 
-_DISCARD = "discard"
-_KEYS = "keys"
-_VALUES = "values"
+
+class SuspectAction(StrEnum):
+    """걸린 payload 를 자리마다 어떻게 하는지다."""
+
+    DISCARD = "discard"
+    REDACT = "redact"
+
+
+class Inspected(StrEnum):
+    """자리가 payload 의 어느 쪽을 보는지다."""
+
+    KEYS = "keys"
+    VALUES = "values"
+
 
 type RedactableScalar = str | int | float | bool | None
 type RedactableValue = RedactableScalar | Mapping[str, RedactableValue] | Sequence[RedactableValue]
@@ -50,43 +61,46 @@ def marker() -> str:
 
 @lru_cache(maxsize=1)
 def _key_words() -> tuple[str, ...]:
-    return tuple(_folded_key(str(word)) for word in _rules()[_KEYS]["words"])
+    return tuple(_folded_key(str(word)) for word in _rules()[Inspected.KEYS]["words"])
 
 
 @lru_cache(maxsize=1)
 def _value_words() -> tuple[str, ...]:
-    return tuple(_lower_ascii(str(word)) for word in _rules()[_VALUES]["words"])
+    return tuple(_lower_ascii(str(word)) for word in _rules()[Inspected.VALUES]["words"])
 
 
 @lru_cache(maxsize=1)
 def _minimum_body_length() -> int:
-    return int(_rules()[_VALUES]["requiresTrailingBody"]["minLength"])
+    return int(_rules()[Inspected.VALUES]["requiresTrailingBody"]["minLength"])
 
 
 @lru_cache(maxsize=1)
 def _skips_space_between() -> bool:
-    return bool(_rules()[_VALUES]["requiresTrailingBody"]["skipSpaceBetween"])
+    return bool(_rules()[Inspected.VALUES]["requiresTrailingBody"]["skipSpaceBetween"])
 
 
 @lru_cache(maxsize=len(RedactionStage))
-def _stage_rule(stage: RedactionStage) -> tuple[str, frozenset[str]]:
+def _stage_rule(stage: RedactionStage) -> tuple[SuspectAction, frozenset[Inspected]]:
     declared: dict[str, Any] = _rules()["stages"][stage.value]
-    return str(declared["onSuspect"]), frozenset(str(name) for name in declared["inspects"])
+    return (
+        SuspectAction(declared["onSuspect"]),
+        frozenset(Inspected(name) for name in declared["inspects"]),
+    )
 
 
 def discards(stage: RedactionStage) -> bool:
     """이 자리가 걸린 payload 를 통째로 내보내지 않는지 낸다."""
-    return _stage_rule(stage)[0] == _DISCARD
+    return _stage_rule(stage)[0] is SuspectAction.DISCARD
 
 
 def inspects_keys(stage: RedactionStage) -> bool:
     """이 자리가 key 의 이름을 보는지 낸다."""
-    return _KEYS in _stage_rule(stage)[1]
+    return Inspected.KEYS in _stage_rule(stage)[1]
 
 
 def inspects_values(stage: RedactionStage) -> bool:
     """이 자리가 값의 모양을 보는지 낸다."""
-    return _VALUES in _stage_rule(stage)[1]
+    return Inspected.VALUES in _stage_rule(stage)[1]
 
 
 def _lower_ascii(text: str) -> str:

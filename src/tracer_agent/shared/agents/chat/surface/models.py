@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ...shared.json_view import JsonObject
 from ...shared.models import TrimmedStr
 
 
@@ -23,7 +24,7 @@ class ProposeToolBody(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     toolName: TrimmedStr = Field(min_length=1, max_length=100)
-    args: dict[str, object] = Field(default_factory=dict)
+    args: JsonObject = Field(default_factory=dict)
 
 
 class DecideToolBody(BaseModel):

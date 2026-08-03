@@ -7,11 +7,13 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+from ...shared.env import env_flag
+
 
 def configure_observability() -> Callable[[], None]:
     """환경 설정에 따라 OTLP 공급자를 구성하고 종료 함수를 돌려준다."""
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if not otlp_endpoint or os.getenv("OTEL_SDK_DISABLED") == "true":
+    if not otlp_endpoint or env_flag("OTEL_SDK_DISABLED"):
         return _noop
 
     try:

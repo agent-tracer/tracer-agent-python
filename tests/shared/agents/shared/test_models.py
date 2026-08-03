@@ -14,6 +14,7 @@ def _request(**overrides: object) -> AgentExecutionRequest:
         "apiKey": "sk-test",
         "modelRates": WIRE_MODEL_RATES,
         "limits": WIRE_LIMITS,
+        "userId": "user-1",
         "completionCallback": _COMPLETION,
     }
     values.update(overrides)

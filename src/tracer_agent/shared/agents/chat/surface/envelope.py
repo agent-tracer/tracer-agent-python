@@ -1,24 +1,25 @@
-"""대화 창구가 내는 성공과 실패 봉투와 본문 해석을 한자리에서 소유한다."""
+"""대화 창구가 거절을 계약이 정한 봉투로 적고 본문을 자기 모델로 해석한다."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
-from ..intake.router import INVALID_REQUEST, error_envelope
+from ...shared.wire import error_envelope, read_body, validation_details
+from ..intake.router import INVALID_REQUEST
 from ..intake.turn import ChatIntakeRejected
 
-OK_STATUS = 200
 CREATED_STATUS = 201
 
-
-def ok(data: Any, status: int = OK_STATUS) -> JSONResponse:
-    """실은 것을 계약이 정한 성공 봉투에 담는다."""
-    return JSONResponse(status_code=status, content={"ok": True, "data": data})
+__all__ = [
+    "CREATED_STATUS",
+    "invalid_request",
+    "read_payload",
+    "rejection",
+]
 
 
 def rejection(rejected: ChatIntakeRejected) -> JSONResponse:
@@ -33,15 +34,10 @@ def invalid_request(details: Any = None) -> JSONResponse:
 
 async def read_payload[Payload: BaseModel](request: Request, model: type[Payload]) -> Payload | JSONResponse:
     """요청 본문을 모델로 해석하고 어긋나면 거절 봉투를 낸다."""
-    try:
-        body = json.loads(await request.body() or b"null")
-    except json.JSONDecodeError:
-        return invalid_request()
-    if not isinstance(body, dict):
+    body = await read_body(request)
+    if body is None:
         return invalid_request()
     try:
         return model.model_validate(body)
     except ValidationError as invalid:
-        return invalid_request(
-            json.loads(invalid.json(include_url=False, include_context=False, include_input=False))
-        )
+        return invalid_request(validation_details(invalid))

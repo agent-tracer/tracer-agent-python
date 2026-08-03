@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ...runtime.ledger import SqlRow
-from ..intake.models import execution_dto, iso, message_dto
+from ...shared.instant import opt_iso
+from ...shared.json_view import JsonObject
+from ..intake.models import execution_dto, message_dto
 
 __all__ = [
     "confirmation_dto",
     "execution_dto",
-    "iso",
     "memory_dto",
     "message_dto",
     "step_dto",
@@ -32,7 +31,7 @@ _OPTIONAL_STEP_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def thread_dto(row: SqlRow) -> dict[str, Any]:
+def thread_dto(row: SqlRow) -> JsonObject:
     """스레드 한 행을 목록과 상세와 생성과 개명이 함께 내는 표현으로 바꾼다."""
     return {
         "id": row["id"],
@@ -40,14 +39,14 @@ def thread_dto(row: SqlRow) -> dict[str, Any]:
         "title": row["title"],
         "summary": row["summary"],
         "backend": row["backend"],
-        "createdAt": iso(row["created_at"]),
-        "updatedAt": iso(row["updated_at"]),
+        "createdAt": opt_iso(row["created_at"]),
+        "updatedAt": opt_iso(row["updated_at"]),
     }
 
 
-def step_dto(row: SqlRow) -> dict[str, Any]:
+def step_dto(row: SqlRow) -> JsonObject:
     """궤적 한 줄을 값이 있는 자리만 실은 표현으로 바꾼다."""
-    step: dict[str, Any] = {
+    step: JsonObject = {
         "seq": row["seq"],
         "attempt": row["attempt"],
         "role": row["role"],
@@ -61,11 +60,11 @@ def step_dto(row: SqlRow) -> dict[str, Any]:
     return step
 
 
-def confirmation_dto(row: SqlRow) -> dict[str, Any]:
+def confirmation_dto(row: SqlRow) -> JsonObject:
     """승인을 기다리는 도구 호출 한 행을 표현으로 바꾼다."""
     return {"id": row["id"], "toolName": row["tool_name"], "args": row["args"] or {}}
 
 
-def memory_dto(row: SqlRow) -> dict[str, Any]:
+def memory_dto(row: SqlRow) -> JsonObject:
     """사용자 장기기억 한 줄을 표현으로 바꾼다."""
-    return {"key": row["key"], "content": row["content"], "updatedAt": iso(row["updated_at"])}
+    return {"key": row["key"], "content": row["content"], "updatedAt": opt_iso(row["updated_at"])}

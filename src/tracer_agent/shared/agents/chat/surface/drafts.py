@@ -9,13 +9,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql
-from ...shared.wire import SuccessEnvelope, error_responses
+from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, ok
 from ..dependencies import Updates
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.cancel import UpdateSignal
-from ..intake.router import error_envelope
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
-from .envelope import ok, read_payload
+from .envelope import read_payload
 from .models import DraftCheckpointBody
 
 CHAT_DRAFTS_PATH = "/api/agent/chat/executions/{execution_id}/drafts"

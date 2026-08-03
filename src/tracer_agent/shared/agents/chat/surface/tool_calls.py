@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+
+from ...shared.json_view import JsonObject, JsonValue
 
 
 class ChatToolArgsInvalid(ValueError):
@@ -15,11 +16,11 @@ class ChatToolArgsInvalid(ValueError):
 class ChatToolCall:
     """도구 인자 하나를 실제 호출 인자와 결과 문장으로 옮긴 것이다."""
 
-    args: dict[str, Any]
-    describe: Callable[[Any], str]
+    args: JsonObject
+    describe: Callable[[JsonValue], str]
 
 
-def plan_chat_tool_call(tool_name: str, args: dict[str, Any]) -> ChatToolCall:
+def plan_chat_tool_call(tool_name: str, args: JsonObject) -> ChatToolCall:
     """승인된 도구 호출 하나의 요청 인자와 결과 문장을 만든다."""
     plan = _PLANS.get(tool_name)
     if plan is None:
@@ -27,58 +28,58 @@ def plan_chat_tool_call(tool_name: str, args: dict[str, Any]) -> ChatToolCall:
     return plan(args)
 
 
-def _plain(args: dict[str, Any], sentence: str) -> ChatToolCall:
+def _plain(args: JsonObject, sentence: str) -> ChatToolCall:
     return ChatToolCall(args=args, describe=lambda _data: sentence)
 
 
-def _req(args: dict[str, Any], key: str) -> str:
+def _req(args: JsonObject, key: str) -> str:
     value = args.get(key)
     if not isinstance(value, str) or not value:
         raise ChatToolArgsInvalid(f"{key} is required")
     return value
 
 
-def _opt(args: dict[str, Any], key: str) -> str | None:
+def _opt(args: JsonObject, key: str) -> str | None:
     value = args.get(key)
     return value if isinstance(value, str) and value else None
 
 
-def _present(**values: str | None) -> dict[str, Any]:
+def _present(**values: str | None) -> JsonObject:
     return {key: value for key, value in values.items() if value is not None}
 
 
-def _object(args: dict[str, Any], key: str) -> dict[str, Any]:
+def _object(args: JsonObject, key: str) -> JsonObject:
     value = args.get(key)
     if not isinstance(value, dict):
         raise ChatToolArgsInvalid(f"{key} must be an object")
     return value
 
 
-def _id_list(args: dict[str, Any], key: str) -> list[str]:
+def _id_list(args: JsonObject, key: str) -> list[str]:
     value = args.get(key)
     if not isinstance(value, list):
         raise ChatToolArgsInvalid(f"{key} must be a list")
     return [text for text in (_id_text(one) for one in value) if text]
 
 
-def _id_text(value: Any) -> str:
+def _id_text(value: JsonValue) -> str:
     if isinstance(value, str):
         return value.strip()
     return str(value) if isinstance(value, int | float) and not isinstance(value, bool) else ""
 
 
-def _reevaluated(data: Any) -> int:
+def _reevaluated(data: JsonValue) -> int:
     value = data.get("reevaluated") if isinstance(data, dict) else None
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
-def _job_field(data: Any, field: str) -> str:
+def _job_field(data: JsonValue, field: str) -> str:
     job = data.get("job") if isinstance(data, dict) else None
     value = job.get(field) if isinstance(job, dict) else None
     return value if isinstance(value, str) else ""
 
 
-def _update_task(args: dict[str, Any]) -> ChatToolCall:
+def _update_task(args: JsonObject) -> ChatToolCall:
     task_id = _req(args, "taskId")
     title = _opt(args, "title")
     status = _opt(args, "status")
@@ -99,7 +100,7 @@ def _stated(status: str | None) -> str:
     return "" if status is None else f"status={status}"
 
 
-def _create_memo(args: dict[str, Any]) -> ChatToolCall:
+def _create_memo(args: JsonObject) -> ChatToolCall:
     task_id = _req(args, "taskId")
     return _plain(
         {"taskId": task_id, "body": _req(args, "body"), **_present(eventId=_opt(args, "eventId"))},
@@ -107,7 +108,7 @@ def _create_memo(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _create_rule(args: dict[str, Any]) -> ChatToolCall:
+def _create_rule(args: JsonObject) -> ChatToolCall:
     task_id = _req(args, "taskId")
     name = _req(args, "name")
     return _plain(
@@ -122,10 +123,10 @@ def _create_rule(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _update_rule(args: dict[str, Any]) -> ChatToolCall:
+def _update_rule(args: JsonObject) -> ChatToolCall:
     rule_id = _req(args, "ruleId")
     expectation = args.get("expectation")
-    body: dict[str, Any] = _present(
+    body: JsonObject = _present(
         name=_opt(args, "name"), severity=_opt(args, "severity"), rationale=_opt(args, "rationale")
     )
     if expectation is not None:
@@ -133,7 +134,7 @@ def _update_rule(args: dict[str, Any]) -> ChatToolCall:
     return _plain({"ruleId": rule_id, **body}, f"Updated rule {rule_id}.")
 
 
-def _approve_rule(args: dict[str, Any]) -> ChatToolCall:
+def _approve_rule(args: JsonObject) -> ChatToolCall:
     rule_id = _req(args, "ruleId")
     return ChatToolCall(
         args={"ruleId": rule_id},
@@ -141,7 +142,7 @@ def _approve_rule(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _reevaluate_rule(args: dict[str, Any]) -> ChatToolCall:
+def _reevaluate_rule(args: JsonObject) -> ChatToolCall:
     rule_id = _req(args, "ruleId")
     return ChatToolCall(
         args={"ruleId": rule_id},
@@ -149,7 +150,7 @@ def _reevaluate_rule(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _create_tag(args: dict[str, Any]) -> ChatToolCall:
+def _create_tag(args: JsonObject) -> ChatToolCall:
     name = _req(args, "name")
     return _plain(
         {"name": name, **_present(color=_opt(args, "color"), description=_opt(args, "description"))},
@@ -157,7 +158,7 @@ def _create_tag(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _update_tag(args: dict[str, Any]) -> ChatToolCall:
+def _update_tag(args: JsonObject) -> ChatToolCall:
     tag_id = _req(args, "tagId")
     return _plain(
         {
@@ -172,13 +173,16 @@ def _update_tag(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _set_task_tags(args: dict[str, Any]) -> ChatToolCall:
+def _set_task_tags(args: JsonObject) -> ChatToolCall:
     task_id = _req(args, "taskId")
     tag_ids = _id_list(args, "tagIds")
-    return _plain({"taskId": task_id, "tagIds": tag_ids}, f"Set {len(tag_ids)} tag(s) on task {task_id}.")
+    return _plain(
+        {"taskId": task_id, "tagIds": list(tag_ids)},
+        f"Set {len(tag_ids)} tag(s) on task {task_id}.",
+    )
 
 
-def _enqueue_job(args: dict[str, Any]) -> ChatToolCall:
+def _enqueue_job(args: JsonObject) -> ChatToolCall:
     kind = _req(args, "kind")
     return ChatToolCall(
         args={"kind": kind, "input": _object(args, "input")},
@@ -188,15 +192,15 @@ def _enqueue_job(args: dict[str, Any]) -> ChatToolCall:
     )
 
 
-def _one_id(key: str, sentence: str) -> Callable[[dict[str, Any]], ChatToolCall]:
-    def plan(args: dict[str, Any]) -> ChatToolCall:
+def _one_id(key: str, sentence: str) -> Callable[[JsonObject], ChatToolCall]:
+    def plan(args: JsonObject) -> ChatToolCall:
         value = _req(args, key)
         return _plain({key: value}, sentence.format(value))
 
     return plan
 
 
-_PLANS: dict[str, Callable[[dict[str, Any]], ChatToolCall]] = {
+_PLANS: dict[str, Callable[[JsonObject], ChatToolCall]] = {
     "update_task": _update_task,
     "archive_task": _one_id("taskId", "Archived task {}."),
     "unarchive_task": _one_id("taskId", "Unarchived task {}."),

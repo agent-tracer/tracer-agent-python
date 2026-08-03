@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from .axis import AGENT_BACKEND, AgentAxis
+from .json_view import JsonObject
 
 
 def _strip(value: object) -> object:
@@ -112,6 +113,8 @@ class AgentExecutionEnvelope(BaseModel):
 class AgentExecutionRequest(AgentExecutionEnvelope):
     """HTTP로 접수돼 결과를 완료 창구로 배달받는 실행 봉투다."""
 
+    # 조회 범위를 정하는 값이라 도메인 입력이며 멱등 해시에 함께 든다.
+    userId: TrimmedStr = Field(min_length=1)
     # 접수 스스로 진행 상황을 조회로 되읽는 호출은 완료 창구가 필요 없다.
     completionCallback: CompletionCallback | None = None
 
@@ -143,7 +146,7 @@ OrchestrationEventKind = Literal[
 class AgentStepToolCall(BaseModel):
     id: str
     name: str
-    args: dict[str, object]
+    args: JsonObject
 
 
 class AgentStepDTO(BaseModel):
@@ -171,6 +174,9 @@ class AgentErrorDTO(BaseModel):
     summary: str
 
 
+ObservationStatus = Literal["succeeded", "failed", "cancelled"]
+
+
 class ObservationUsageDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
     inputTokens: int = Field(ge=0)
@@ -187,7 +193,7 @@ class ModelCallObservationDTO(BaseModel):
     providerRequestId: str | None
     modelRequested: TrimmedStr
     modelActual: str | None
-    status: Literal["succeeded", "failed", "cancelled"]
+    status: ObservationStatus
     durationMs: int = Field(ge=0)
     usage: ObservationUsageDTO
     costUsd: float | None = Field(default=None, ge=0)
@@ -201,7 +207,7 @@ class ToolCallObservationDTO(BaseModel):
     attemptId: TrimmedStr
     toolCallId: TrimmedStr
     toolName: TrimmedStr
-    status: Literal["succeeded", "failed", "cancelled"]
+    status: ObservationStatus
     durationMs: int = Field(ge=0)
     errorType: str | None
 
@@ -227,7 +233,7 @@ class AgentRunObservationDTO(BaseModel):
     modelActual: str | None
     promptVersion: TrimmedStr
     toolContractVersion: TrimmedStr
-    status: Literal["succeeded", "failed", "cancelled"]
+    status: ObservationStatus
     durationMs: int = Field(ge=0)
     usage: ObservationUsageDTO
     costUsd: float | None = Field(default=None, ge=0)
