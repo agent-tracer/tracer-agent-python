@@ -28,14 +28,14 @@ class Test미들웨어순서:
         ):
             assert kinds.index("StandardAgentMiddleware") < kinds.index("PromptCacheMiddleware")
 
-    def test_모델에게_알리는_총량과_실제_상한이_같다(self) -> None:
-        # 총량보다 상한이 크면 계약이 실행 전체의 턴 총량이라고 적은 값이 상한이 아니게 된다.
+    def test_상한은_알리는_총량보다_마무리_몫만큼_넉넉하다(self) -> None:
+        # 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 딱 맞추면 산출을 낼 자리가 없다.
         for middleware in (
             recipe_middleware(_TRANSIENT, max_turns=4),
             chat_middleware(_TRANSIENT, max_turns=4),
         ):
             limit = next(one for one in middleware if isinstance(one, ModelCallLimitMiddleware))
-            assert limit.run_limit == 4
+            assert limit.run_limit == 6
 
     def test_맥락_정리가_비용_장부보다_안쪽에_선다(self) -> None:
         for kinds in (

@@ -106,10 +106,11 @@ Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이
 
 | 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
 | --- | --- | --- | --- |
-| 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | 계약이 정한 `maxTurns` 를 그대로 호출 상한으로 적용한다 |
+| 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | `maxTurns + 2` 를 호출 상한으로 적용한다 |
 | 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
 | 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
 | 프롬프트 캐시 | `PromptCacheMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다 |
+| 산출 복구 | `StructuredOutputRepairMiddleware` | 잡 셋 | 공급자가 강제하지 않는 제약에 걸린 산출을 사유와 함께 한 번 되먹인다 |
 | 도구 재시도 | `ToolRetryMiddleware` | Chat·Recipe Scan·Task Cleanup | 선언된 일시 오류를 최대 2회 재시도한다 |
 | 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | 과부하·속도 제한·연결 오류에서만 대체 모델을 1회 호출한다 |
 | 모델 재시도 | `model_retry_middleware()` | Chat·Recipe Scan | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |

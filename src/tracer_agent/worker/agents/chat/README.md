@@ -107,7 +107,7 @@ chat.assistant.system
 
 `build_chat_agent`는 다음 정책을 순서대로 조립한다.
 
-1. `TurnLimitMiddleware(run_limit=max_turns, exit_behavior="end")` — 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
+1. `TurnLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end")` — 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
 2. `context_editing_middleware()` — 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 보존한다
 3. `StandardAgentMiddleware(serialize_tools=True)` — 공유 장부를 사용하는 도구 호출을 직렬화한다
 4. `PromptCacheMiddleware(ttl="1h")` — 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다

@@ -33,7 +33,7 @@ def chat_middleware(
     """chat agent의 미들웨어를 안쪽부터 바깥쪽 순서로 세운다."""
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
-        TurnLimitMiddleware(run_limit=max_turns, exit_behavior="end"),
+        TurnLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end"),
         # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
         context_editing_middleware(),
         StandardAgentMiddleware(serialize_tools=True),

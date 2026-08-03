@@ -18,6 +18,7 @@ from ..runtime.llm.fallback import FallbackModelMiddleware
 from ..runtime.llm.prompt_cache import PromptCacheMiddleware
 from ..runtime.llm.retry import tool_retry_middleware
 from ..runtime.llm.standard_agent import StandardAgentMiddleware
+from ..runtime.llm.structured_repair import StructuredOutputRepairMiddleware
 from .tools import CleanupToolContext
 
 
@@ -34,8 +35,10 @@ def build_cleanup_agent(
     """표준 도구 실행과 구조화 출력을 갖춘 task-cleanup agent를 컴파일한다."""
     system = SystemMessage(content=system_prompt)
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
-        ModelCallLimitMiddleware(run_limit=max_turns, exit_behavior="error"),
+        ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="error"),
         StandardAgentMiddleware(serialize_tools=True),
+        # 공급자는 길이와 개수 같은 제약을 강제하지 않으므로 걸린 산출을 한 번 되먹인다.
+        StructuredOutputRepairMiddleware(),
         # 남은 몫을 알리는 꼬리가 붙은 뒤에 서야 경계를 그 꼬리 앞에 놓을 수 있다.
         PromptCacheMiddleware(ttl="1h"),
         tool_retry_middleware(transient_errors),
