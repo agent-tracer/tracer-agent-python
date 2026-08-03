@@ -2,11 +2,39 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from langchain_anthropic import ChatAnthropic
+
+from tracer_agent.shared.agents.shared.models import AgentExecutionEnvelope
 
 from .envelope import model_envelope
 
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
+
+
+@dataclass(frozen=True)
+class ChatPair:
+    """이 실행이 부를 모델과, 공급자 오류 한 번을 대신 받을 모델이다."""
+
+    primary: ChatAnthropic
+    fallback: ChatAnthropic | None
+
+
+def make_chat_pair(req: AgentExecutionEnvelope, *, streaming: bool = False) -> ChatPair:
+    """실행 봉투가 정한 모델과 한도로 이 실행이 쓸 클라이언트 짝을 만든다."""
+
+    def chat(model: str) -> ChatAnthropic:
+        return make_chat(
+            model,
+            req.apiKey,
+            req.deadlineMs,
+            feature_max_output_tokens=req.limits.maxOutputTokens,
+            streaming=streaming,
+        )
+
+    fallback_model = req.effective_fallback_model()
+    return ChatPair(chat(req.model), None if fallback_model is None else chat(fallback_model))
 
 
 def make_chat(

@@ -311,6 +311,11 @@ class SharedToolLoopBudget:
         self._landed = False
 
     @property
+    def agent_name(self) -> str:
+        """이 도구 루프가 관측과 계측에 싣는 이름이다."""
+        return self._agent
+
+    @property
     def spent(self) -> float:
         return self._execution.spent
 

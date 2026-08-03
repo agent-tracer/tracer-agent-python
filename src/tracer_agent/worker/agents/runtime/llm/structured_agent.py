@@ -14,6 +14,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langsmith.client import Client
 from pydantic import BaseModel
 
+from tracer_agent.shared.agents.shared.env import env_flag
+
 from ..telemetry.disclosure import TraceSafeMetadata, disclosable_run_payload
 from .standard_agent import StandardAgentContext
 
@@ -49,9 +51,9 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
         stable_identity = f"{trace.agent_name}:{logical_execution}:{trace.attempt_id}"
         config["run_id"] = uuid5(_LANGSMITH_RUN_NAMESPACE, stable_identity)
 
-    if os.environ.get("LANGSMITH_TRACING") == "true":
+    if env_flag("LANGSMITH_TRACING"):
         # 공개 프로파일도 계약의 trace 자리를 지나고, 그 외 프로파일은 원문 자체를 보내지 않는다.
-        discloses_payloads = os.environ.get("LANGSMITH_HIDE_INPUTS") == "false"
+        discloses_payloads = not env_flag("LANGSMITH_HIDE_INPUTS", default=True)
         client = Client(
             hide_inputs=disclosable_run_payload if discloses_payloads else True,
             hide_outputs=disclosable_run_payload if discloses_payloads else True,

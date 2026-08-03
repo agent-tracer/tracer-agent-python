@@ -5,10 +5,10 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from opentelemetry import trace
-from opentelemetry.trace import SpanKind, Status, StatusCode
+from opentelemetry.context import Context
+from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
 from .attributes import (
     GEN_AI_OPERATION,
@@ -27,8 +27,8 @@ async def invoke_agent_span(
     job_id: str | None,
     agent_name: str,
     model: str | None,
-    parent_context: Any = None,
-) -> AsyncIterator[Any]:
+    parent_context: Context | None = None,
+) -> AsyncIterator[Span]:
     """에이전트 호출을 부모 문맥과 연결된 스팬으로 감싼다."""
     attrs = build_invoke_agent_attributes(job_id=job_id, agent_name=agent_name, model=model)
     tracer = trace.get_tracer(_TRACER_NAME)
@@ -56,7 +56,7 @@ async def tool_span(
     *,
     agent_name: str,
     parameters: object | None = None,
-) -> AsyncIterator[Any]:
+) -> AsyncIterator[Span]:
     """도구 호출을 스팬과 실행 시간 메트릭으로 감싼다."""
     started = time.monotonic()
     span_attrs = build_tool_span_attributes(tool_name, agent_name, parameters=parameters)
@@ -84,7 +84,7 @@ async def tool_span(
             record_tool_duration(time.monotonic() - started, duration_attrs)
 
 
-def mark_span_error(span: Any, subtype: str | None, summary: str) -> None:
+def mark_span_error(span: Span, subtype: str | None, summary: str) -> None:
     """정규화된 오류를 스팬 상태와 속성에 기록한다."""
     if subtype is None:
         return

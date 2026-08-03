@@ -9,6 +9,8 @@ from typing import Any, ClassVar
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
+from tracer_agent.shared.agents.shared.json_view import JsonObject
+
 from .telemetry.spans import tool_span
 
 
@@ -38,7 +40,7 @@ class ToolRegistry:
         self._by_name = {tool.name: tool for tool in self._tools}
         self._agent_name = agent_name
 
-    async def invoke(self, name: str, raw_args: dict[str, Any]) -> str:
+    async def invoke(self, name: str, raw_args: JsonObject) -> str:
         """모델이 고른 도구를 인자 검증과 스팬 뒤 실행하고 근거를 남긴다."""
         tool = self._by_name[name]
         args = tool.args_model.model_validate(raw_args)
