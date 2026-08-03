@@ -137,6 +137,16 @@ uv run python contract/conformance/runner/verify.py http://127.0.0.1:8800
 
 CI는 의존성 동기화, Ruff, mypy, 주석·내부 의존 검사, pytest, 계약 적합성, 이미지 빌드를 수행합니다.
 
+### 품질 회귀
+
+`tests/quality/golden`의 골든 사례가 recipe-scan·task-cleanup·title-suggestion의 출력과 궤적을 검증 가능한 성질로 고정합니다. 판정기는 각 에이전트의 결정적 검증기를 그대로 불러 인용의 근거를 확인하고, 궤적이 밟은 노드와 도구 호출 횟수와 예산 소모를 함께 셉니다.
+
+```bash
+uv run pytest tests/quality -q -s
+```
+
+기본은 대역 모델이며 네트워크를 쓰지 않습니다. 실제 모델로 같은 사례를 돌리려면 `TRACER_QUALITY_LIVE_MODEL=1`과 `ANTHROPIC_API_KEY`를 함께 설정합니다. 켜지 않으면 실제 모델 묶음은 건너뜁니다.
+
 ## 저장소 구조
 
 ```text

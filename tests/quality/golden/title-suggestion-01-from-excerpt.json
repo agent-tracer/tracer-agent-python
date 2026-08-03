@@ -1,0 +1,65 @@
+{
+  "id": "title-suggestion-01-from-excerpt",
+  "agent": "title-suggestion",
+  "behavior": "대화 발췌만으로 도구 없이 현재 제목과 다른 후보 둘을 낸다",
+  "sources": {
+    "events": [],
+    "rules": []
+  },
+  "input": {
+    "taskId": "task-1",
+    "language": "ko",
+    "model": "claude-haiku-4-5",
+    "context": {
+      "title": "Untitled",
+      "status": "completed",
+      "workspacePath": "/workspace/project",
+      "totalEventCount": 300,
+      "totalTurnCount": 25,
+      "truncated": true,
+      "turns": [
+        {
+          "turnIndex": 1,
+          "askedText": "인증 미들웨어의 토큰 누수를 고쳐줘",
+          "assistantText": "회귀 테스트를 추가하고 누수를 수정했습니다."
+        }
+      ]
+    }
+  },
+  "script": {
+    "turns": [
+      {
+        "suggestions": [
+          {
+            "title": "인증 토큰 누수 수정",
+            "rationale": "누수 수정이 핵심 작업이다."
+          },
+          {
+            "title": "인증 회귀 테스트 추가",
+            "rationale": "회귀 검증을 함께 추가했다."
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "deterministicValidation": "pass",
+    "minResults": 2,
+    "maxResults": 3,
+    "visitsNodes": [
+      "investigate",
+      "validate_candidate",
+      "finalize"
+    ],
+    "avoidsNodes": [
+      "repair",
+      "empty"
+    ],
+    "maxToolCalls": 0,
+    "maxCostUsd": 0.001,
+    "promptMentions": [
+      "Untitled",
+      "인증 미들웨어의 토큰 누수를 고쳐줘"
+    ]
+  }
+}

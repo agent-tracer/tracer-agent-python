@@ -1,0 +1,125 @@
+{
+  "id": "task-cleanup-01-cites-inspected-events",
+  "agent": "task-cleanup",
+  "behavior": "검토자가 읽은 후보와 노출된 빈 껍데기를 수리 없이 함께 제안한다",
+  "sources": {
+    "events": [
+      {
+        "id": "event-1",
+        "seq": 1,
+        "title": "의미 없는 활동"
+      }
+    ],
+    "rules": [],
+    "candidates": [
+      {
+        "id": "task-1",
+        "visibleTitle": "제목 task-1",
+        "status": "running",
+        "lastEventAt": null,
+        "hasEvents": true,
+        "activeChildCount": 0,
+        "candidateReasons": [
+          "stale"
+        ]
+      },
+      {
+        "id": "task-2",
+        "visibleTitle": "제목 task-2",
+        "status": "running",
+        "lastEventAt": null,
+        "hasEvents": false,
+        "activeChildCount": 0,
+        "candidateReasons": [
+          "no-events"
+        ]
+      }
+    ]
+  },
+  "input": {
+    "maxSuggestions": 5,
+    "scannedAt": "2026-07-14T00:00:00Z",
+    "language": "ko",
+    "model": "claude-sonnet-4-6"
+  },
+  "script": {
+    "workerTurns": {
+      "Call list_candidate_tasks": [
+        [
+          {
+            "name": "list_candidate_tasks",
+            "args": {}
+          }
+        ],
+        {
+          "inspect": [
+            {
+              "taskId": "task-1",
+              "weight": 2
+            }
+          ]
+        }
+      ],
+      "Task to judge: task-1": [
+        [
+          {
+            "name": "get_task_events",
+            "args": {
+              "taskId": "task-1"
+            }
+          }
+        ],
+        {
+          "taskId": "task-1",
+          "archivable": true,
+          "reason": "의미 있는 작업이 없다",
+          "citedEventIds": [
+            "event-1"
+          ]
+        }
+      ]
+    },
+    "turns": [
+      {
+        "suggestions": [
+          {
+            "kind": "archive",
+            "taskId": "task-1",
+            "rationale": "의미 있는 작업이 없다",
+            "evidenceEventIds": [
+              "event-1"
+            ]
+          },
+          {
+            "kind": "archive",
+            "taskId": "task-2",
+            "rationale": "이벤트가 하나도 없다",
+            "evidenceEventIds": []
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "deterministicValidation": "pass",
+    "minResults": 2,
+    "maxResults": 5,
+    "visitsNodes": [
+      "triage",
+      "inspect",
+      "investigate",
+      "validate_decisions",
+      "finalize"
+    ],
+    "avoidsNodes": [
+      "repair",
+      "empty"
+    ],
+    "maxToolCalls": 2,
+    "maxCostUsd": 0.007,
+    "promptMentions": [
+      "Call list_candidate_tasks",
+      "Task to judge: task-1"
+    ]
+  }
+}

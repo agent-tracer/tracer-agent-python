@@ -15,6 +15,9 @@ METRIC_NAME = "gen_ai.invoke_agent.duration"
 _READER = InMemoryMetricReader()
 metrics.set_meter_provider(MeterProvider(metric_readers=[_READER]))
 
+# 같은 리더가 프로세스의 모든 실행을 모으므로 이 모듈만 쓰는 모델 이름으로 자기 기록을 가려낸다.
+_MODEL = "claude"
+
 
 def _points_for(agent_name: str) -> list[Any]:
     data = _READER.get_metrics_data()
@@ -28,6 +31,7 @@ def _points_for(agent_name: str) -> list[Any]:
         if metric.name == METRIC_NAME
         for point in metric.data.data_points
         if dict(point.attributes).get("gen_ai.agent.name") == agent_name
+        and dict(point.attributes).get("gen_ai.request.model") == _MODEL
     ]
 
 
@@ -35,7 +39,7 @@ def _points_for(agent_name: str) -> list[Any]:
 async def test_에이전트_호출이_끝나면_실행_시간을_기록한다() -> None:
     from tracer_agent.worker.agents.runtime.telemetry.spans import invoke_agent_span
 
-    async with invoke_agent_span(job_id="job-1", agent_name="title-suggestion", model="claude"):
+    async with invoke_agent_span(job_id="job-1", agent_name="title-suggestion", model=_MODEL):
         pass
 
     points = _points_for("title-suggestion")
@@ -48,7 +52,7 @@ async def test_실패한_호출은_오류_종류를_속성으로_남긴다() -> 
     from tracer_agent.worker.agents.runtime.telemetry.spans import invoke_agent_span
 
     with pytest.raises(ValueError):
-        async with invoke_agent_span(job_id="job-2", agent_name="task-cleanup", model="claude"):
+        async with invoke_agent_span(job_id="job-2", agent_name="task-cleanup", model=_MODEL):
             raise ValueError("멈춤")
 
     points = _points_for("task-cleanup")
@@ -60,7 +64,7 @@ async def test_실패한_호출은_오류_종류를_속성으로_남긴다() -> 
 async def test_성공한_호출에는_오류_종류를_싣지_않는다() -> None:
     from tracer_agent.worker.agents.runtime.telemetry.spans import invoke_agent_span
 
-    async with invoke_agent_span(job_id="job-3", agent_name="recipe-scan", model="claude"):
+    async with invoke_agent_span(job_id="job-3", agent_name="recipe-scan", model=_MODEL):
         pass
 
     assert "error.type" not in dict(_points_for("recipe-scan")[0].attributes)

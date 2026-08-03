@@ -1,0 +1,47 @@
+{
+  "id": "recipe-scan-03-no-specialists-stays-empty",
+  "agent": "recipe-scan",
+  "behavior": "띄울 전문가가 없으면 원장을 한 번도 조회하지 않고 빈 결과로 끝난다",
+  "sources": {
+    "events": [
+      {
+        "id": "event-1",
+        "seq": 1,
+        "turnId": "turn-1",
+        "title": "인증 인덱스를 추가한다"
+      }
+    ],
+    "rules": []
+  },
+  "input": {
+    "taskId": "t1",
+    "language": "ko",
+    "model": "claude-sonnet-4-6"
+  },
+  "script": {
+    "plan": {
+      "probes": []
+    },
+    "turns": []
+  },
+  "expect": {
+    "deterministicValidation": "pass",
+    "maxResults": 0,
+    "includesAnchorTask": true,
+    "visitsNodes": [
+      "survey",
+      "empty"
+    ],
+    "avoidsNodes": [
+      "probe",
+      "investigate",
+      "repair",
+      "finalize"
+    ],
+    "maxToolCalls": 0,
+    "maxCostUsd": 0.002,
+    "promptMentions": [
+      "t1"
+    ]
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "id": "recipe-scan-02-repairs-invented-rule",
+  "agent": "recipe-scan",
+  "behavior": "장부에 없는 규칙 ID를 인용한 첫 초안을 한 번 수리해 유효한 후보로 확정한다",
+  "sources": {
+    "events": [
+      {
+        "id": "event-1",
+        "seq": 1,
+        "turnId": "turn-1",
+        "title": "인증 인덱스를 추가한다"
+      }
+    ],
+    "rules": [
+      {
+        "id": "rule-1",
+        "name": "Bash 검증 규칙",
+        "taskId": "t1",
+        "anchorEventId": "event-1"
+      }
+    ]
+  },
+  "input": {
+    "taskId": "t1",
+    "language": "ko",
+    "model": "claude-sonnet-4-6"
+  },
+  "script": {
+    "plan": {
+      "probes": [
+        {
+          "probe": "timeline",
+          "weight": 5,
+          "question": "무엇을 했나"
+        },
+        {
+          "probe": "rules",
+          "weight": 3,
+          "question": "어떤 규칙이 걸렸나"
+        }
+      ]
+    },
+    "workerTurns": {
+      "무엇을 했나": [
+        [
+          {
+            "name": "get_task_events",
+            "args": {
+              "taskId": "t1"
+            }
+          }
+        ],
+        {
+          "probe": "timeline",
+          "verdict": "인덱스 추가 작업을 확인했다",
+          "excerpts": [
+            {
+              "taskId": "t1",
+              "eventId": "event-1",
+              "text": "인증 인덱스 추가"
+            }
+          ],
+          "exhausted": false
+        }
+      ],
+      "어떤 규칙이 걸렸나": [
+        [
+          {
+            "name": "list_rules",
+            "args": {
+              "taskId": "t1"
+            }
+          }
+        ],
+        {
+          "probe": "rules",
+          "verdict": "규칙 하나가 적용된다",
+          "excerpts": [],
+          "exhausted": false
+        }
+      ]
+    },
+    "turns": [
+      {
+        "recipes": [
+          {
+            "title": "Add auth index",
+            "intent": "인증 인덱스 추가",
+            "description": "인증 테이블에 인덱스를 더한다",
+            "summary_md": "- 인덱스를 추가한다",
+            "request": "사용자가 인덱스 추가 작업을 recipe로 만들라고 했다.",
+            "corrections": [],
+            "pitfalls": [],
+            "governing_rules": [
+              "invented-rule"
+            ],
+            "contributing_slices": [
+              {
+                "taskId": "t1",
+                "turnIds": [
+                  "turn-1"
+                ],
+                "eventIds": [
+                  "event-1"
+                ]
+              }
+            ],
+            "rationale": "같은 절차가 반복될 수 있다"
+          }
+        ]
+      },
+      {
+        "recipes": [
+          {
+            "title": "Add auth index",
+            "intent": "인증 인덱스 추가",
+            "description": "인증 테이블에 인덱스를 더한다",
+            "summary_md": "- 인덱스를 추가한다",
+            "request": "사용자가 인덱스 추가 작업을 recipe로 만들라고 했다.",
+            "corrections": [],
+            "pitfalls": [],
+            "governing_rules": [
+              "rule-1"
+            ],
+            "contributing_slices": [
+              {
+                "taskId": "t1",
+                "turnIds": [
+                  "turn-1"
+                ],
+                "eventIds": [
+                  "event-1"
+                ]
+              }
+            ],
+            "rationale": "같은 절차가 반복될 수 있다"
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "deterministicValidation": "pass",
+    "minResults": 1,
+    "maxResults": 4,
+    "includesAnchorTask": true,
+    "visitsNodes": [
+      "survey",
+      "probe",
+      "investigate",
+      "validate_candidate",
+      "repair",
+      "finalize"
+    ],
+    "avoidsNodes": [
+      "empty"
+    ],
+    "maxToolCalls": 2,
+    "maxCostUsd": 0.009,
+    "promptMentions": [
+      "timeline (weight 5): 무엇을 했나",
+      "rules (weight 3): 어떤 규칙이 걸렸나"
+    ]
+  }
+}

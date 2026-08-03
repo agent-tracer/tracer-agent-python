@@ -1,0 +1,102 @@
+{
+  "id": "task-cleanup-02-drops-uninspected-task",
+  "agent": "task-cleanup",
+  "behavior": "아무도 열어 보지 않은 이벤트 후보 제안은 수리를 거쳐 버려진다",
+  "sources": {
+    "events": [],
+    "rules": [],
+    "candidates": [
+      {
+        "id": "task-1",
+        "visibleTitle": "제목 task-1",
+        "status": "running",
+        "lastEventAt": null,
+        "hasEvents": true,
+        "activeChildCount": 0,
+        "candidateReasons": [
+          "stale"
+        ]
+      },
+      {
+        "id": "task-2",
+        "visibleTitle": "제목 task-2",
+        "status": "running",
+        "lastEventAt": null,
+        "hasEvents": false,
+        "activeChildCount": 0,
+        "candidateReasons": [
+          "no-events"
+        ]
+      }
+    ]
+  },
+  "input": {
+    "maxSuggestions": 5,
+    "scannedAt": "2026-07-14T00:00:00Z",
+    "language": "ko",
+    "model": "claude-sonnet-4-6"
+  },
+  "script": {
+    "workerTurns": {
+      "Call list_candidate_tasks": [
+        [
+          {
+            "name": "list_candidate_tasks",
+            "args": {}
+          }
+        ],
+        {
+          "inspect": [
+            {
+              "taskId": "task-2",
+              "weight": 1
+            }
+          ]
+        }
+      ],
+      "Task to judge: task-2": [
+        {
+          "taskId": "task-2",
+          "archivable": true,
+          "reason": "이벤트가 하나도 없다",
+          "citedEventIds": []
+        }
+      ]
+    },
+    "turns": [
+      {
+        "suggestions": [
+          {
+            "kind": "archive",
+            "taskId": "task-1",
+            "rationale": "근거 없이 제안한다",
+            "evidenceEventIds": []
+          }
+        ]
+      },
+      {
+        "suggestions": []
+      }
+    ]
+  },
+  "expect": {
+    "deterministicValidation": "pass",
+    "maxResults": 0,
+    "visitsNodes": [
+      "triage",
+      "inspect",
+      "investigate",
+      "validate_decisions",
+      "repair"
+    ],
+    "avoidsNodes": [
+      "finalize"
+    ],
+    "maxToolCalls": 1,
+    "maxCostUsd": 0.007,
+    "promptMentions": [
+      "Call list_candidate_tasks",
+      "Task to judge: task-2"
+    ]
+  }
+}
