@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import pytest
-
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, TASK_CLEANUP_PROMPT
@@ -82,22 +80,21 @@ def _reviewer(task_id: str, report: dict[str, object], *, read: bool = True) -> 
 
 
 async def _run(
-    _chat: FakeToolLoopChat, ledger: FakeTracerApi, *candidates: dict[str, object]
+    chat: FakeToolLoopChat, ledger: FakeTracerApi, *candidates: dict[str, object]
 ) -> AgentResponse:
     req = _request(*candidates)
+    chats = ChatPair(chat, None)  # type: ignore[arg-type]
     return await execute(
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT),  # type: ignore[arg-type],
+        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
 
 
-async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함께_제안한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함께_제안한다() -> None:
     ledger = FakeTracerApi(_event_rows("event-1"))
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     worker_turns = {
@@ -133,7 +130,6 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -152,7 +148,7 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
     narrate("task-cleanup :: 검토자가 읽은 후보와 노출된 빈 껍데기를 조율자가 함께 제안한다", res)
 
 
-async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_선별자가_노출하지_않은_후보는_버린다() -> None:
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=False)]
     worker_turns = {
@@ -179,7 +175,6 @@ async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch:
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -189,9 +184,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch:
     narrate("task-cleanup :: 선별자가 노출한 적 없는 후보 제안은 검증에서 버려진다", res)
 
 
-async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받지_않는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받지_않는다() -> None:
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     # 선별자는 빈 껍데기 task-2만 배정하고, 조율자가 아무도 읽지 않은 task-1을 멋대로 제안한다.
@@ -219,7 +212,6 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -229,9 +221,7 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
     narrate("task-cleanup :: 검토자가 읽지 않은 이벤트 후보는 조율자가 제안해도 버려진다", res)
 
 
-async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_없이도_받는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_없이도_받는다() -> None:
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True)]
     worker_turns = {
@@ -256,7 +246,6 @@ async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -265,11 +254,10 @@ async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_�
     narrate("task-cleanup :: 검토자가 읽었더니 이벤트가 없던 후보는 인용 없이도 제안으로 받는다", res)
 
 
-async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다() -> None:
     ledger = FakeTracerApi()
     candidates: list[dict[str, object]] = []
     chat = FakeToolLoopChat([{"suggestions": []}])
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -277,9 +265,7 @@ async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다(monk
     narrate("task-cleanup :: 도구를 한 번도 부르지 않으면 빈 결과로 끝난다", res)
 
 
-async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열어보고_완주한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열어보고_완주한다() -> None:
     ledger = FakeTracerApi(_event_rows("event-1"))
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=True)]
     archivable = {"archivable": True, "reason": "의미 있는 활동이 없다", "citedEventIds": ["event-1"]}
@@ -310,7 +296,6 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -329,9 +314,7 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
     narrate("task-cleanup :: 조율자가 재파견을 요청하면 후보를 한 번 더 열어보고 완주한다", res)
 
 
-async def test_후보_하나가_무너져도_그래프가_완주하고_나머지가_합쳐진다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_후보_하나가_무너져도_그래프가_완주하고_나머지가_합쳐진다() -> None:
     class OneInspectFails(FakeToolLoopChat):
         async def ainvoke(self, messages: list[Any]) -> Any:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
@@ -343,7 +326,6 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
 
     plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
     chat = OneInspectFails([{"suggestions": []}], report={"TriagePlan": plan})
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(
         chat,
@@ -360,10 +342,9 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
     narrate("task-cleanup :: 후보 하나의 조사가 무너져도 그래프는 완주하고 나머지 보고가 합쳐진다", res)
 
 
-async def test_고른_후보만_각자_예산으로_병렬_조사된다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_고른_후보만_각자_예산으로_병렬_조사된다() -> None:
     plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
     chat = FakeToolLoopChat([{"suggestions": []}], report={"TriagePlan": plan})
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(
         chat,

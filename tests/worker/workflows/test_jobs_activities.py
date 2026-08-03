@@ -24,10 +24,7 @@ from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest
-from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
-from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
-from tracer_agent.worker.agents.title_suggestion import agent as title_mod
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities, merge_envelope
 
 _COMPLETION_CALLBACK = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
@@ -99,12 +96,15 @@ def http() -> CapturingCompletionClient:
 
 
 async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
-    )
-    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        PooledSql(FakeLedgerPool()),
+        JOB_PROMPTS,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
+    )  # type: ignore[arg-type]
     payload = {
         "model": "claude-haiku-4-5",
         "apiKey": "sk-test",
@@ -124,14 +124,15 @@ async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
 
 
 async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        cleanup_mod,
-        "make_chat_pair",
-        lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
-    )
-    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        PooledSql(FakeLedgerPool()),
+        JOB_PROMPTS,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
+    )  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
         "apiKey": "sk-test",
@@ -151,12 +152,15 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
 
 
 async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"recipes": []}]), None)
-    )
-    activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        PooledSql(FakeLedgerPool()),
+        JOB_PROMPTS,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"recipes": []}]), None),
+    )  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
         "apiKey": "sk-test",
@@ -174,15 +178,16 @@ async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
 
 
 async def test_실행_식별자가_있으면_원장에_종료_상태와_비용과_관측이_남는다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
-    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e1")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS
+        TRACER_API_URL,
+        http,
+        _StaticSql(execution_sql),
+        JOB_PROMPTS,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -210,16 +215,18 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
 
 
 async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를_당겨온다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
-    )
     envelopes = FakeEnvelopeSource()
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e2")
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS, envelopes=envelopes
+        TRACER_API_URL,
+        http,
+        _StaticSql(execution_sql),
+        JOB_PROMPTS,
+        envelopes=envelopes,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -349,16 +356,19 @@ class CapturingNotifier:
 
 
 async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
-    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e6")
     notifier = CapturingNotifier()
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+        TRACER_API_URL,
+        http,
+        _StaticSql(execution_sql),
+        JOB_PROMPTS,
+        None,
+        notifier,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
     )
     payload = {
         "model": "claude-haiku-4-5",
@@ -388,18 +398,19 @@ async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
 
 
 async def test_태스크에_매이지_않은_잡은_태스크_식별자를_싣지_않는다(
-    http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
+    http: CapturingCompletionClient,
 ) -> None:
-    monkeypatch.setattr(
-        cleanup_mod,
-        "make_chat_pair",
-        lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
-    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e7")
     notifier = CapturingNotifier()
     activities = AgentJobActivities(  # type: ignore[arg-type]
-        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+        TRACER_API_URL,
+        http,
+        _StaticSql(execution_sql),
+        JOB_PROMPTS,
+        None,
+        notifier,
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
     )
     payload = {
         "model": "claude-sonnet-4-6",

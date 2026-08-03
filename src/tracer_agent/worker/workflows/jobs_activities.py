@@ -30,6 +30,7 @@ from ..agents.runtime.execution.completion import run_and_deliver
 from ..agents.runtime.execution.runner import execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.job_agent import JobAgent
+from ..agents.runtime.llm.client import ChatPair, make_chat_pair
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient
 from ..agents.shared.prompt_source_port import AgentPrompt
@@ -55,6 +56,7 @@ class AgentJobActivities:
         envelopes: JobEnvelopeSource | None = None,
         notifier: JobStatusNotifier | None = None,
         checkpoints: GraphCheckpointProvider | None = None,
+        make_chats: Callable[[AgentExecutionRequest], ChatPair] = make_chat_pair,
     ) -> None:
         self._tracer_api_url = tracer_api_url
         self._http = http_client
@@ -63,6 +65,7 @@ class AgentJobActivities:
         self._envelopes = envelopes
         self._notifier = notifier
         self._checkpoints = checkpoints
+        self._make_chats = make_chats
 
     @activity.defn(name=RUN_AGENT_JOB_ACTIVITY)
     async def run(self, request: AgentJobRequest) -> None:
@@ -123,7 +126,9 @@ class AgentJobActivities:
         req = await job.prepare(payload, tracer)
 
         async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:
-            return await job.run(req, tracer, trace, self._prompts[kind], self._checkpoints)
+            return await job.run(
+                req, tracer, trace, self._prompts[kind], self._checkpoints, self._make_chats(req)
+            )
 
         await self._run_and_deliver(job, req, body)
 

@@ -42,11 +42,9 @@ def _request(**overrides: Any) -> ChatRequest:
     return ChatRequest.model_validate(values)
 
 
-async def _run(
-    monkeypatch: pytest.MonkeyPatch, turns: list[Any], **overrides: Any
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+async def _run(turns: list[Any], **overrides: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     posted: list[dict[str, Any]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -57,14 +55,12 @@ async def _run(
 
     req = _request(**overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        result = await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
+        result = await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
     return result, posted
 
 
-async def test_접수된_실행은_누적_답변을_창구로_되돌려_보낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result, posted = await _run(monkeypatch, ["정리했습니다"])
+async def test_접수된_실행은_누적_답변을_창구로_되돌려_보낸다() -> None:
+    result, posted = await _run(["정리했습니다"])
 
     assert posted, "누적 답변이 최소 한 번은 창구로 나가야 한다"
     assert [body["draftSeq"] for body in posted] == sorted(body["draftSeq"] for body in posted)
@@ -74,10 +70,10 @@ async def test_접수된_실행은_누적_답변을_창구로_되돌려_보낸�
     assert result["assistantText"] != ""
 
 
-async def test_서버가_종결을_알리면_실행을_더_끌지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_서버가_종결을_알리면_실행을_더_끌지_않는다() -> None:
     # 취소 레지스트리는 프로세스 로컬이라 다른 인스턴스에서 돈 실행에는 닿지 않는다.
     chat = FakeToolLoopChat(["한참 답하는 중"])
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
 
     def handle(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"stored": False, "terminal": True})
@@ -85,21 +81,18 @@ async def test_서버가_종결을_알리면_실행을_더_끌지_않는다(monk
     req = _request()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         with pytest.raises(ChatExecutionClosed):
-            await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
+            await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
 
 
-async def test_창구가_없으면_draft를_보내지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
-    result, posted = await _run(monkeypatch, ["정리했습니다"], draftCallback=None)
+async def test_창구가_없으면_draft를_보내지_않는다() -> None:
+    result, posted = await _run(["정리했습니다"], draftCallback=None)
 
     assert posted == []
     assert result["assistantText"] != ""
 
 
-async def test_접수된_실행의_결과가_제안_쓰기를_실행_없이_담아_낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_접수된_실행의_결과가_제안_쓰기를_실행_없이_담아_낸다() -> None:
     result, _posted = await _run(
-        monkeypatch,
         [
             [{"name": "archive_task", "args": {"taskId": "task-1"}}],
             "task-1 아카이브를 제안했고 승인을 기다립니다.",
@@ -153,20 +146,17 @@ async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() ->
     assert [body["draftSeq"] for body in posted] == [1, 2]
 
 
-async def _system_content(
-    monkeypatch: pytest.MonkeyPatch, turns: list[Any], **overrides: Any
-) -> tuple[FakeToolLoopChat, list[Any]]:
+async def _system_content(turns: list[Any], **overrides: Any) -> tuple[FakeToolLoopChat, list[Any]]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     req = _request(draftCallback=None, **overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
-        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
+        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
     return chat, list(chat.requests[0][0].content)
 
 
-async def test_사실과_요약은_시스템_메시지_밖에_붙는다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_사실과_요약은_시스템_메시지_밖에_붙는다() -> None:
     chat, content = await _system_content(
-        monkeypatch,
         ["정리했습니다"],
         summary="앞선 대화 요약",
         facts=[{"key": "editor", "content": "vim을 쓴다"}],
@@ -178,11 +168,10 @@ async def test_사실과_요약은_시스템_메시지_밖에_붙는다(monkeypa
     assert "vim을 쓴다" in 보낸것 and "앞선 대화 요약" in 보낸것
 
 
-async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다() -> None:
     # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 끝나는다.
-    _first, before = await _system_content(monkeypatch, ["정리했습니다"], summary="요약 A", facts=[])
+    _first, before = await _system_content(["정리했습니다"], summary="요약 A", facts=[])
     _chat, after = await _system_content(
-        monkeypatch,
         [[{"name": "search_tasks", "args": {"query": "x"}}], "정리했습니다"],
         summary="요약 B",
         facts=[{"key": "editor", "content": "vim을 쓴다"}],
@@ -191,12 +180,10 @@ async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로
     assert before == after
 
 
-async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선두에만_연속으로_온다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선두에만_연속으로_온다() -> None:
     # 지난 이력의 human·ai 메시지 뒤에 맥락을 시스템으로 붙이면 Anthropic이 메시지 순서를 거절한다.
     chat = FakeToolLoopChat(["정리했습니다"])
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     req = _request(
         messages=[
             {"role": "user", "content": "task-1 상태 알려줘"},
@@ -209,7 +196,7 @@ async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선�
     )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
-        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
+        await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
 
     보낸것 = chat.requests[0]
     타입들 = [message.type for message in 보낸것]

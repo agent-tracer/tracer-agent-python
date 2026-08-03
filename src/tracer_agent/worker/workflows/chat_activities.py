@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -35,6 +36,7 @@ from ..agents.chat.prompts import build_system_prompt
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.runner import AgentBody, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
+from ..agents.runtime.llm.client import ChatPair
 from ..agents.shared.prompt_source_port import AgentPrompt
 from .chat_turn import (
     canceled_turn,
@@ -60,6 +62,7 @@ class ChatExecutionActivities:
         envelopes: ChatEnvelopeSource,
         prompt: AgentPrompt,
         wakeup: UpdatePublisher | None = None,
+        make_chats: Callable[[ChatRequest], ChatPair] | None = None,
     ) -> None:
         self._sql = sql
         self._http = http_client
@@ -68,6 +71,7 @@ class ChatExecutionActivities:
         self._wakeup = wakeup
         self._prompt = prompt
         self._system_prompt = build_system_prompt(prompt)
+        self._make_chats = make_chats
 
     @activity.defn(name=NEXT_EXECUTION_ACTIVITY)
     async def next_execution(self, thread_id: str) -> str | None:
@@ -104,7 +108,7 @@ class ChatExecutionActivities:
                 AGENT_NAME,
                 request.model,
                 request.deadlineMs,
-                _body(traces, request, self._http, self._checkpoints, self._prompt),
+                _body(traces, request, self._http, self._checkpoints, self._prompt, self._make_chats),
                 None,
                 None,
                 f"{prepared.execution_id}:{attempt}",
@@ -209,10 +213,13 @@ def _body(
     http_client: httpx.AsyncClient,
     checkpoints: GraphCheckpointProvider,
     prompt: AgentPrompt,
+    make_chats: Callable[[ChatRequest], ChatPair] | None,
 ) -> AgentBody:
+    chats = None if make_chats is None else make_chats(request)
+
     async def run(trace: ExecutionTrace) -> JsonObject:
         # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 보관해 둔다.
         traces.append(trace)
-        return await run_chat(request, http_client, trace, prompt, checkpoints)
+        return await run_chat(request, http_client, trace, prompt, checkpoints, chats)
 
     return run

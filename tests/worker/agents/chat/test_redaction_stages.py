@@ -91,26 +91,22 @@ def _request() -> ChatRequest:
     )
 
 
-async def _answer(monkeypatch: pytest.MonkeyPatch, text: str) -> str:
-    monkeypatch.setattr(
-        chat_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([text]), None)
-    )
+async def _answer(text: str) -> str:
+    chats = ChatPair(FakeToolLoopChat([text]), None)  # type: ignore[arg-type]
     transport = httpx.MockTransport(chat_confirmation_response)
     async with httpx.AsyncClient(transport=transport) as client:
-        result = await chat_mod.run_chat(_request(), client, ExecutionTrace(), CHAT_PROMPT)
+        result = await chat_mod.run_chat(_request(), client, ExecutionTrace(), CHAT_PROMPT, None, chats)
     return str(result["assistantText"])
 
 
-async def test_모델의_답에_실린_자격은_사용자에게_나가기_전에_가려진다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    answer = await _answer(monkeypatch, f"토큰은 {_CREDENTIAL} 입니다")
+async def test_모델의_답에_실린_자격은_사용자에게_나가기_전에_가려진다() -> None:
+    answer = await _answer(f"토큰은 {_CREDENTIAL} 입니다")
 
     assert _CREDENTIAL not in answer
     assert f"토큰은 {_MARKER} 입니다" in answer
 
 
-async def test_자격이_없는_답은_그대로_사용자에게_나간다(monkeypatch: pytest.MonkeyPatch) -> None:
-    answer = await _answer(monkeypatch, "정리했습니다")
+async def test_자격이_없는_답은_그대로_사용자에게_나간다() -> None:
+    answer = await _answer("정리했습니다")
 
     assert "정리했습니다" in answer

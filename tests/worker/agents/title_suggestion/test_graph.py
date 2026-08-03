@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import pytest
-
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, TITLE_SUGGESTION_PROMPT
@@ -72,30 +70,29 @@ def _request(**overrides: Any) -> TitleSuggestionRequest:
 
 
 async def _run(
-    monkeypatch: pytest.MonkeyPatch,
     turns: list[Any],
     ledger: FakeTracerApi | None = None,
     **request_overrides: Any,
 ) -> tuple[FakeToolLoopChat, AgentResponse, FakeTracerApi]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(title_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     req = _request(**request_overrides)
     fake_ledger = ledger or FakeTracerApi()
     result = await execute(
         "title-suggestion",
         req.model,
         req.deadlineMs,
-        lambda usage: title_mod.run_title_suggestion(req, fake_ledger, usage, TITLE_SUGGESTION_PROMPT),
+        lambda usage: title_mod.run_title_suggestion(
+            req, fake_ledger, usage, TITLE_SUGGESTION_PROMPT, None, chats
+        ),
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
     return chat, result, fake_ledger
 
 
-async def test_대화_발췌로_충분하면_도구를_부르지_않고_제목을_낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _chat, res, ledger = await _run(monkeypatch, [_SUGGESTIONS])
+async def test_대화_발췌로_충분하면_도구를_부르지_않고_제목을_낸다() -> None:
+    _chat, res, ledger = await _run([_SUGGESTIONS])
 
     assert res.error is None
     assert ledger.calls == []
@@ -106,23 +103,21 @@ async def test_대화_발췌로_충분하면_도구를_부르지_않고_제목�
     narrate("title-suggestion :: 대화 발췌만으로 도구 없이 제목을 낸다", res)
 
 
-async def test_현재_제목이_적절하면_빈_결과를_낸다(monkeypatch: pytest.MonkeyPatch) -> None:
-    _chat, res, _ledger = await _run(monkeypatch, [{"suggestions": []}])
+async def test_현재_제목이_적절하면_빈_결과를_낸다() -> None:
+    _chat, res, _ledger = await _run([{"suggestions": []}])
 
     assert res.error is None and res.data == {"suggestions": []}
     narrate("title-suggestion :: 현재 제목이 이미 적절하면 빈 제안을 낸다", res)
 
 
-async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다() -> None:
     ledger = FakeTracerApi(_EVENT_ROWS)
     turns: list[Any] = [
         [{"name": "get_task_events", "args": {"taskId": "task-1"}}],
         _SUGGESTIONS,
     ]
 
-    _chat, res, fake_ledger = await _run(monkeypatch, turns, ledger)
+    _chat, res, fake_ledger = await _run(turns, ledger)
 
     assert res.error is None
     # 조회는 그 태스크의 타임라인 창구 하나로 좁혀지고 읽기 방향과 상한을 인자로 싣는다.
@@ -132,9 +127,7 @@ async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다
     narrate("title-suggestion :: 발췌가 부족하면 태스크 이벤트를 직접 읽는다", res)
 
 
-async def test_현재_제목을_되풀이한_후보는_한_번_수정한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_현재_제목을_되풀이한_후보는_한_번_수정한다() -> None:
     repeated = {
         "suggestions": [
             {"title": "Untitled", "rationale": "현재 제목을 그대로 되풀이한다."},
@@ -142,7 +135,7 @@ async def test_현재_제목을_되풀이한_후보는_한_번_수정한다(
         ]
     }
 
-    _chat, res, _ledger = await _run(monkeypatch, [repeated, _SUGGESTIONS])
+    _chat, res, _ledger = await _run([repeated, _SUGGESTIONS])
 
     assert res.error is None
     assert [item["title"] for item in res.data["suggestions"]] == [
@@ -154,22 +147,18 @@ async def test_현재_제목을_되풀이한_후보는_한_번_수정한다(
     narrate("title-suggestion :: 현재 제목을 되풀이한 후보는 한 번 수정한다", res)
 
 
-async def test_수정_후에도_후보가_유효하지_않으면_빈_결과를_낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_수정_후에도_후보가_유효하지_않으면_빈_결과를_낸다() -> None:
     invalid = {"suggestions": [{"title": "Untitled", "rationale": "여전히 현재 제목이다."}]}
 
-    _chat, res, _ledger = await _run(monkeypatch, [invalid, invalid])
+    _chat, res, _ledger = await _run([invalid, invalid])
 
     assert res.error is None and res.data == {"suggestions": []}
     assert sum(step.eventKind == "validation.failed" for step in res.steps) == 2
     narrate("title-suggestion :: 수정 후에도 후보가 유효하지 않으면 빈 결과를 낸다", res)
 
 
-async def test_단가를_모르는_모델은_내부_예산을_우회하지_못한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _chat, res, _ledger = await _run(monkeypatch, [_SUGGESTIONS], model="claude-custom-alias")
+async def test_단가를_모르는_모델은_내부_예산을_우회하지_못한다() -> None:
+    _chat, res, _ledger = await _run([_SUGGESTIONS], model="claude-custom-alias")
 
     assert res.error is not None
     assert "cannot enforce its internal budget" in res.error.summary

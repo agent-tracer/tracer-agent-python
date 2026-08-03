@@ -68,22 +68,20 @@ def _request() -> RecipeScanRequest:
     )
 
 
-async def test_같은_열쇠로_다시_실행하면_끝난_노드를_다시_태우지_않는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_같은_열쇠로_다시_실행하면_끝난_노드를_다시_태우지_않는다() -> None:
     chat = _FailOnceChat([{"recipes": []}, {"recipes": []}], plan=_PLAN)
-    monkeypatch.setattr(recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     checkpoints = _SharedSaver()
     req = _request()
 
     with pytest.raises(RuntimeError):
         await recipe_mod.run_recipe_scan(  # type: ignore[arg-type]
-            req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints
+            req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints, chats
         )
     after_first = chat.plan_calls
 
     await recipe_mod.run_recipe_scan(  # type: ignore[arg-type]
-        req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints
+        req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints, chats
     )
 
     assert after_first == 1, "첫 시도가 계획을 한 번 세웠어야 한다"

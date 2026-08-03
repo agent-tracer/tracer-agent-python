@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 from langchain_core.messages import HumanMessage
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeTracerApi, mk_ai
@@ -154,22 +153,22 @@ def _request() -> TaskCleanupRequest:
     )
 
 
-async def _run(_chat: GreedyChat, ledger: FakeTracerApi) -> Any:
+async def _run(chat: GreedyChat, ledger: FakeTracerApi) -> Any:
     req = _request()
+    chats = ChatPair(chat, None)  # type: ignore[arg-type]
     return await execute(
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT),  # type: ignore[arg-type],
+        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
 
 
-async def test_예산을_다_써도_모은_근거로_결론을_낸다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_예산을_다_써도_모은_근거로_결론을_낸다() -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
     ledger = FakeTracerApi()
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger)
 
@@ -177,9 +176,8 @@ async def test_예산을_다_써도_모은_근거로_결론을_낸다(monkeypatc
     assert res.data["suggestions"] == _DRAFT["suggestions"]
 
 
-async def test_턴_사용량을_매_턴_알려준다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_턴_사용량을_매_턴_알려준다() -> None:
     chat = GreedyChat()
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     await _run(chat, FakeTracerApi())
 
@@ -188,9 +186,8 @@ async def test_턴_사용량을_매_턴_알려준다(monkeypatch: pytest.MonkeyP
     assert "used 1 of" in chat.notices[1]
 
 
-async def test_비용_상한에_닿기_전에_결론을_받아낸다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_비용_상한에_닿기_전에_결론을_받아낸다() -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, FakeTracerApi())
 
@@ -200,11 +197,8 @@ async def test_비용_상한에_닿기_전에_결론을_받아낸다(monkeypatch
     assert FINALIZE_STRUCTURED_DIRECTIVE in chat.notices[-1]
 
 
-async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남긴다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남긴다() -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     await _run(chat, FakeTracerApi())
 
@@ -212,13 +206,11 @@ async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남�
     assert chat.tools_per_call[-1] == ["InspectReport"]
 
 
-async def test_착지했는지를_응답에_실어_보낸다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_착지했는지를_응답에_실어_보낸다() -> None:
     expensive = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(expensive, None))
     landed = await _run(expensive, FakeTracerApi())
 
     cheap = GreedyChat()
-    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(cheap, None))
     unlanded = await _run(cheap, FakeTracerApi())
 
     # 턴을 다 써 끝난 실행과 예산이 다해 종료한 실행을 서버가 구분해 답할 수 있어야 한다.
@@ -267,11 +259,9 @@ class _GreedyConversation:
         )
 
 
-async def test_대화는_예산이_바닥나도_자유_텍스트로_끝내라는_지시를_받는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_대화는_예산이_바닥나도_자유_텍스트로_끝내라는_지시를_받는다() -> None:
     conversation = _GreedyConversation()
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(conversation, None))
+    chats = ChatPair(conversation, None)
     request = ChatRequest.model_validate(
         {
             "model": "claude-sonnet-4-6",
@@ -286,7 +276,7 @@ async def test_대화는_예산이_바닥나도_자유_텍스트로_끝내라는
         }
     )
 
-    result = await chat_mod.run_chat(request, None, ExecutionTrace(), CHAT_PROMPT)  # type: ignore[arg-type]
+    result = await chat_mod.run_chat(request, None, ExecutionTrace(), CHAT_PROMPT, None, chats)  # type: ignore[arg-type]
 
     assert FINALIZE_TEXT_DIRECTIVE in conversation.notices[-1]
     assert FINALIZE_STRUCTURED_DIRECTIVE not in conversation.notices[-1]

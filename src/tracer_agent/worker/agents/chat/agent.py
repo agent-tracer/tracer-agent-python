@@ -10,7 +10,7 @@ from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, Chat
 
 from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.llm.client import make_chat_pair
+from ..runtime.llm.client import ChatPair, make_chat_pair
 from ..runtime.llm.structured_agent import recursion_config, recursion_limit_for
 from ..runtime.node import NodeRegistry
 from ..runtime.routes import FINALIZE
@@ -41,15 +41,16 @@ def _build_node(
     checkpoints: GraphCheckpointProvider | None = None,
     drafts: DraftPublisher | None = None,
     prompt: AgentPrompt,
+    chats: ChatPair | None = None,
 ) -> ConverseNode:
-    chats = make_chat_pair(req, streaming=streaming)
+    pair = chats or make_chat_pair(req, streaming=streaming)
     return ConverseNode(
         req,
         http_client,
         checkpoints,
         usage,
-        chats.primary,
-        chats.fallback,
+        pair.primary,
+        pair.fallback,
         agent_name=AGENT_NAME,
         drafts=drafts,
         system_prompt=build_system_prompt(prompt),
@@ -76,6 +77,7 @@ async def run_chat(
     usage: ExecutionTrace,
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,
+    chats: ChatPair | None = None,
 ) -> dict[str, Any]:
     """chat 노드를 실행 의존성과 결합해 대화 그래프를 수행한다."""
     # 창구가 있으면 진행 중인 답변을 보내야 하므로 토큰이 흐르는 모델로 조립한다.
@@ -88,6 +90,7 @@ async def run_chat(
         checkpoints=checkpoints,
         drafts=drafts,
         prompt=prompt,
+        chats=chats,
     )
     context = ValidationGraphContext(
         AGENT_NAME,

@@ -16,7 +16,7 @@ from ..runtime.durable_graph import execution_config, job_durability, resume_inp
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.job_agent import JobAgent
 from ..runtime.llm.budget import ExecutionBudget
-from ..runtime.llm.client import make_chat_pair
+from ..runtime.llm.client import ChatPair, make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
@@ -51,6 +51,7 @@ async def run_recipe_scan(
     usage: ExecutionTrace,
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,
+    chats: ChatPair | None = None,
 ) -> dict[str, Any]:
     """recipe-scan 노드를 실행 의존성과 결합해 그래프를 수행한다."""
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
@@ -67,7 +68,7 @@ async def run_recipe_scan(
         reader=RecipeLedgerReader(tracer),
         search=RecipeSearchReader(tracer),
         usage=usage,
-        chats=make_chat_pair(req),
+        chats=chats or make_chat_pair(req),
         budget=budget,
         prompts=build_prompt_bundle(prompt),
         prompt=prompt,

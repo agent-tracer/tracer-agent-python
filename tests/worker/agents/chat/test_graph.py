@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import pytest
 
 from tests.support.chat_api import FakeChatMemoryApi
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
@@ -39,13 +38,12 @@ def _request(**overrides: Any) -> ChatRequest:
 
 
 async def _run(
-    monkeypatch: pytest.MonkeyPatch,
     turns: list[Any],
     memory: FakeChatMemoryApi | None = None,
     **overrides: Any,
 ) -> AgentResponse:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, **overrides)
     transport = httpx.MockTransport((memory or FakeChatMemoryApi()).handle)
     async with httpx.AsyncClient(transport=transport) as client:
@@ -53,17 +51,14 @@ async def _run(
             "chat",
             req.model,
             req.deadlineMs,
-            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
             prompt_version=CONTRACT_VERSION,
             tool_contract_version=CONTRACT_VERSION,
         )
 
 
-async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변이_나온다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변이_나온다() -> None:
     result = await _run(
-        monkeypatch,
         [
             [{"name": "archive_task", "args": {"taskId": "task-1"}}],
             "task-1 아카이브를 제안했고 승인을 기다립니다.",
@@ -85,12 +80,9 @@ async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변�
     assert data["assistantText"] != ""
 
 
-async def test_remember_fact는_승인_대기로_서고_기억_API를_건드리지_않는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_remember_fact는_승인_대기로_서고_기억_API를_건드리지_않는다() -> None:
     memory = FakeChatMemoryApi()
     result = await _run(
-        monkeypatch,
         [
             [{"name": "remember_fact", "args": {"key": "lang", "content": "한국어를 쓴다"}}],
             "기억했습니다.",
@@ -117,14 +109,13 @@ def _replay_handler(replay: dict[str, Any] | None, memory: FakeChatMemoryApi) ->
 
 
 async def _run_replay(
-    monkeypatch: pytest.MonkeyPatch,
     replay: dict[str, Any] | None,
     turns: list[Any],
     memory: FakeChatMemoryApi | None = None,
     **overrides: Any,
 ) -> tuple[AgentResponse, FakeToolLoopChat]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     # 봉투에 이력이 없어야 그래프가 서버 재생 API를 문맥의 출처로 삼는다.
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[], **overrides)
     transport = httpx.MockTransport(_replay_handler(replay, memory or FakeChatMemoryApi()))
@@ -133,18 +124,15 @@ async def _run_replay(
             "chat",
             req.model,
             req.deadlineMs,
-            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
             prompt_version=CONTRACT_VERSION,
             tool_contract_version=CONTRACT_VERSION,
         )
     return response, chat
 
 
-async def test_서버가_재생해_준_지난_이력_위에서_턴을_잇는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_서버가_재생해_준_지난_이력_위에서_턴을_잇는다() -> None:
     result, chat = await _run_replay(
-        monkeypatch,
         {
             "messages": [
                 {"role": "user", "content": "task-1 만들어줘"},
@@ -167,11 +155,10 @@ async def test_서버가_재생해_준_지난_이력_위에서_턴을_잇는다(
     assert "그거 뭐였지?" in seen
 
 
-async def test_recall_facts는_기억_API가_든_사실을_되읽는다(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_recall_facts는_기억_API가_든_사실을_되읽는다() -> None:
     memory = FakeChatMemoryApi()
     memory.facts["lang"] = "한국어를 쓴다"
     result, chat = await _run_replay(
-        monkeypatch,
         {
             "messages": [{"role": "user", "content": "내가 뭘 쓴다고 했지?"}],
             "summary": None,
@@ -193,10 +180,8 @@ async def test_recall_facts는_기억_API가_든_사실을_되읽는다(monkeypa
     assert (result.data or {})["assistantText"] != ""
 
 
-async def test_이력을_못_읽으면_빈_이력으로_모델을_부르지_않는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result, chat = await _run_replay(monkeypatch, None, ["아무 말이나 합니다."])
+async def test_이력을_못_읽으면_빈_이력으로_모델을_부르지_않는다() -> None:
+    result, chat = await _run_replay(None, ["아무 말이나 합니다."])
 
     narrate("chat :: 이력을 못 읽으면 모델을 부르지 않고 실행이 실패한다", result)
     assert chat.requests == []
@@ -204,9 +189,7 @@ async def test_이력을_못_읽으면_빈_이력으로_모델을_부르지_않�
     assert result.error is not None
 
 
-async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의_읽기는_추적_주소로_간다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의_읽기는_추적_주소로_간다() -> None:
     chat = FakeToolLoopChat(
         [
             [{"name": "get_task", "args": {"taskId": "task-1"}}],
@@ -215,7 +198,7 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
             "정리했습니다.",
         ]
     )
-    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     seen: list[tuple[str, str]] = []
     memory = FakeChatMemoryApi()
 
@@ -235,7 +218,7 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
             "chat",
             req.model,
             req.deadlineMs,
-            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT),
+            lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
             prompt_version=CONTRACT_VERSION,
             tool_contract_version=CONTRACT_VERSION,
         )

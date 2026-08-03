@@ -12,11 +12,12 @@ from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from ..shared.prompt_source_port import AgentPrompt
 from .checkpoint import GraphCheckpointProvider
 from .execution.trace import ExecutionTrace
+from .llm.client import ChatPair
 from .tracer_client import TracerApiClient
 
 type JobPrepare[RequestT] = Callable[[JsonObject, TracerApiClient], Awaitable[RequestT]]
 type JobRun[RequestT] = Callable[
-    [RequestT, TracerApiClient, ExecutionTrace, AgentPrompt, GraphCheckpointProvider | None],
+    [RequestT, TracerApiClient, ExecutionTrace, AgentPrompt, GraphCheckpointProvider | None, ChatPair | None],
     Awaitable[dict[str, JsonValue]],
 ]
 type JobDeliver = Callable[[TracerApiClient, str, JsonObject], Awaitable[None]]

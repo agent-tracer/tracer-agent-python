@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import pytest
 from anthropic import AuthenticationError
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
@@ -119,29 +118,26 @@ def _evidence_probes() -> dict[str, list[Any]]:
 
 
 async def _run(
-    monkeypatch: pytest.MonkeyPatch,
     chat: FakeToolLoopChat,
     ledger: FakeTracerApi | None = None,
 ) -> AgentResponse:
     req = _request()
-    monkeypatch.setattr(recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
+    chats = ChatPair(chat, None)
     fake_ledger = ledger if ledger is not None else _default_ledger()
     return await execute(
         "recipe-scan",
         req.model,
         req.deadlineMs,
-        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage, RECIPE_SCAN_PROMPT),
+        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage, RECIPE_SCAN_PROMPT, None, chats),
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
 
 
-async def test_전문가가_모은_장부로_조율자가_후보를_낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_전문가가_모은_장부로_조율자가_후보를_낸다() -> None:
     chat = FakeToolLoopChat([{"recipes": [_recipe()]}], plan=_EVIDENCE_PLAN, worker_turns=_evidence_probes())
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None
     assert res.data is not None and res.data["recipes"][0]["title"] == "Add migration"
@@ -153,13 +149,11 @@ async def test_전문가가_모은_장부로_조율자가_후보를_낸다(
     narrate("recipe-scan :: 전문가가 모은 장부로 조율자가 후보를 낸다", res)
 
 
-async def test_도구를_한_번도_부르지_않아도_빈_결과로_끝난다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_도구를_한_번도_부르지_않아도_빈_결과로_끝난다() -> None:
     chat = FakeToolLoopChat([{"recipes": []}])
     ledger = _default_ledger()
 
-    res = await _run(monkeypatch, chat, ledger)
+    res = await _run(chat, ledger)
 
     assert res.error is None and res.data["recipes"] == []
     # 도구를 부르지 않았으니 원장을 한 번도 조회하지 않는다.
@@ -167,14 +161,12 @@ async def test_도구를_한_번도_부르지_않아도_빈_결과로_끝난다(
     narrate("recipe-scan :: 도구를 한 번도 부르지 않아도 빈 결과로 끝난다", res)
 
 
-async def test_띄울_전문가가_없으면_조율자를_부르지_않고_빈_결과로_끝난다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_띄울_전문가가_없으면_조율자를_부르지_않고_빈_결과로_끝난다() -> None:
     # 조율자 턴 대본을 비워 두어, 조사가 조율자에게 닿으면 그 자리에서 실패하게 한다.
     chat = FakeToolLoopChat([], plan=DispatchPlan())
     ledger = _default_ledger()
 
-    res = await _run(monkeypatch, chat, ledger)
+    res = await _run(chat, ledger)
 
     assert res.error is None and res.data["recipes"] == []
     assert not any(step.nodeName in {"probe", "investigate"} for step in res.steps)
@@ -183,9 +175,7 @@ async def test_띄울_전문가가_없으면_조율자를_부르지_않고_빈_�
     narrate("recipe-scan :: 띄울 전문가가 없으면 조율자를 부르지 않고 빈 결과로 끝난다", res)
 
 
-async def test_도구가_돌려주지_않은_ID는_한_번_수정한_뒤_검증한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_도구가_돌려주지_않은_ID는_한_번_수정한_뒤_검증한다() -> None:
     invalid = _recipe(governing_rules=["invented-rule"])
     chat = FakeToolLoopChat(
         [{"recipes": [invalid]}, {"recipes": [_recipe()]}],
@@ -193,7 +183,7 @@ async def test_도구가_돌려주지_않은_ID는_한_번_수정한_뒤_검증�
         worker_turns=_evidence_probes(),
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None and res.data is not None
     assert res.data["recipes"][0]["governing_rules"] == ["rule-1"]
@@ -203,9 +193,7 @@ async def test_도구가_돌려주지_않은_ID는_한_번_수정한_뒤_검증�
     narrate("recipe-scan :: 도구가 돌려주지 않은 ID는 한 번 수정한 뒤 검증한다", res)
 
 
-async def test_수정_후에도_ID가_거짓이면_후보를_버린다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_수정_후에도_ID가_거짓이면_후보를_버린다() -> None:
     invalid = _recipe(contributing_slices=[{"taskId": "t1", "turnIds": [], "eventIds": ["ghost"]}])
     chat = FakeToolLoopChat(
         [
@@ -215,16 +203,14 @@ async def test_수정_후에도_ID가_거짓이면_후보를_버린다(
         ]
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None and res.data["recipes"] == []
     assert sum(step.eventKind == "validation.failed" for step in res.steps) == 2
     narrate("recipe-scan :: 수정 후에도 ID가 거짓이면 후보를 버린다", res)
 
 
-async def test_서로_다른_turn은_각각의_후보로_남는다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_서로_다른_turn은_각각의_후보로_남는다() -> None:
     second = _recipe(
         title="Add dashboard",
         contributing_slices=[{"taskId": "t1", "turnIds": ["turn-2"], "eventIds": ["event-2"]}],
@@ -233,16 +219,14 @@ async def test_서로_다른_turn은_각각의_후보로_남는다(
         [{"recipes": [_recipe(), second]}], plan=_EVIDENCE_PLAN, worker_turns=_evidence_probes()
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None and res.data is not None
     assert [recipe["title"] for recipe in res.data["recipes"]] == ["Add migration", "Add dashboard"]
     narrate("recipe-scan :: 서로 다른 turn은 각각의 후보로 남는다", res)
 
 
-async def test_같은_turn을_두_후보가_주장하면_수정을_요구한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_같은_turn을_두_후보가_주장하면_수정을_요구한다() -> None:
     duplicate = _recipe(title="Add dashboard")
     chat = FakeToolLoopChat(
         [{"recipes": [_recipe(), duplicate]}, {"recipes": [_recipe()]}],
@@ -250,7 +234,7 @@ async def test_같은_turn을_두_후보가_주장하면_수정을_요구한다(
         worker_turns=_evidence_probes(),
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None and res.data is not None
     assert [recipe["title"] for recipe in res.data["recipes"]] == ["Add migration"]
@@ -272,16 +256,14 @@ _REDISPATCH_QUESTION = "다른 태스크에도 있나"
 _REDISPATCH = [{"probe": "repetition", "weight": 2, "question": _REDISPATCH_QUESTION}]
 
 
-async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_부르고_완주한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_부르고_완주한다() -> None:
     chat = FakeToolLoopChat(
         [{"recipes": [], "redispatch": _REDISPATCH}, {"recipes": [_recipe()]}],
         plan=_EVIDENCE_PLAN,
         worker_turns={**_evidence_probes(), **_redispatch_probe(_REDISPATCH_QUESTION)},
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None and res.data is not None
     assert [recipe["title"] for recipe in res.data["recipes"]] == ["Add migration"]
@@ -297,16 +279,14 @@ async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_�
     narrate("recipe-scan :: 조율자가 재파견을 요청하면 전문가를 한 번 더 부르고 완주한다", res)
 
 
-async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝낸다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝낸다() -> None:
     chat = FakeToolLoopChat(
         [{"recipes": [], "redispatch": _REDISPATCH}, {"recipes": [], "redispatch": _REDISPATCH}],
         plan=_EVIDENCE_PLAN,
         worker_turns={**_evidence_probes(), **_redispatch_probe(_REDISPATCH_QUESTION)},
     )
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     # 두 번째 재파견 요청은 상한(1회)을 넘어 무시되고 가진 것(빈 후보)으로 끝난다.
     assert res.error is None and res.data["recipes"] == []
@@ -318,9 +298,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
     narrate("recipe-scan :: 재파견 상한을 넘긴 두 번째 요청은 무시하고 끝낸다", res)
 
 
-async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등하고_잡은_성공한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등하고_잡은_성공한다() -> None:
     class FailingChat(FakeToolLoopChat):
         async def ainvoke(self, _messages: list[object]) -> object:
             raise AuthenticationError(
@@ -331,7 +309,7 @@ async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등�
 
     chat = FailingChat([])
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     # 재시도 대상이 아닌 실패는 조율자를 빈 계획으로 낮추고 잡은 성공한다.
     assert res.error is None and res.data is not None and res.data["recipes"] == []
@@ -341,9 +319,7 @@ async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등�
     narrate("recipe-scan :: 조율자 모델 호출이 무너지면 빈 계획으로 강등하고 잡은 성공한다", res)
 
 
-async def test_예산_초과는_조율자를_재시도하지_않고_바로_강등한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_예산_초과는_조율자를_재시도하지_않고_바로_강등한다() -> None:
     class BudgetBlownChat(FakeToolLoopChat):
         def __init__(self) -> None:
             super().__init__([])
@@ -355,7 +331,7 @@ async def test_예산_초과는_조율자를_재시도하지_않고_바로_강�
 
     chat = BudgetBlownChat()
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     # 재시도했다면 한 번보다 많이 불렸을 것이다.
     assert chat.calls == 1
@@ -363,9 +339,7 @@ async def test_예산_초과는_조율자를_재시도하지_않고_바로_강�
     narrate("recipe-scan :: 예산 초과는 조율자를 재시도하지 않고 바로 강등한다", res)
 
 
-async def test_출력_절단은_조율자를_재시도하지_않고_바로_강등한다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_출력_절단은_조율자를_재시도하지_않고_바로_강등한다() -> None:
     class TruncatedChat(FakeToolLoopChat):
         def __init__(self) -> None:
             super().__init__([])
@@ -377,20 +351,18 @@ async def test_출력_절단은_조율자를_재시도하지_않고_바로_강�
 
     chat = TruncatedChat()
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert chat.calls == 1
     assert res.error is None and res.data is not None and res.data["recipes"] == []
     narrate("recipe-scan :: 출력 절단은 조율자를 재시도하지 않고 바로 강등한다", res)
 
 
-async def test_조율자가_세운_계획이_조사_지시문에_반영된다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_조율자가_세운_계획이_조사_지시문에_반영된다() -> None:
     plan = DispatchPlan(probes=[{"probe": "rules", "weight": 3, "question": "어떤 규칙이 걸렸나"}])  # type: ignore[list-item]
     chat = FakeToolLoopChat([{"recipes": []}], plan=plan)
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None
     sent = " ".join(
@@ -402,9 +374,7 @@ async def test_조율자가_세운_계획이_조사_지시문에_반영된다(
     narrate("recipe-scan :: 조율자가 세운 계획이 조사 지시문에 반영된다", res)
 
 
-async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈다() -> None:
     plan = DispatchPlan(
         probes=[
             {"probe": "timeline", "weight": 4, "question": "무엇을 했나"},  # type: ignore[list-item]
@@ -413,7 +383,7 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
     )
     chat = FakeToolLoopChat([{"recipes": []}], plan=plan)
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     assert res.error is None
     # 전문가는 자기 근거 원천의 도구만 가진다.
@@ -427,9 +397,7 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
     narrate("recipe-scan :: 계획한 전문가들이 각자 도구만 쥐고 병렬로 돈다", res)
 
 
-async def test_전문가_하나가_무너져도_그래프가_완주하고_나머지가_합쳐진다(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_전문가_하나가_무너져도_그래프가_완주하고_나머지가_합쳐진다() -> None:
     class OneProbeFails(FakeToolLoopChat):
         async def ainvoke(self, messages: list[object]) -> object:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
@@ -446,7 +414,7 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     )
     chat = OneProbeFails([{"recipes": []}], plan=plan)
 
-    res = await _run(monkeypatch, chat)
+    res = await _run(chat)
 
     # 한 전문가가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
     assert res.error is None and res.data["recipes"] == []
