@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, TypedDict
 from uuid import UUID, uuid5
 
@@ -54,17 +55,20 @@ def recursion_config(limit: int, trace: TraceSafeMetadata | None = None) -> Runn
     if env_flag("LANGSMITH_TRACING"):
         # 공개 프로파일도 계약의 trace 자리를 지나고, 그 외 프로파일은 원문 자체를 보내지 않는다.
         discloses_payloads = not env_flag("LANGSMITH_HIDE_INPUTS", default=True)
-        client = Client(
-            hide_inputs=disclosable_run_payload if discloses_payloads else True,
-            hide_outputs=disclosable_run_payload if discloses_payloads else True,
-        )
-        tracer = LangChainTracer(
-            project_name=os.environ.get("LANGSMITH_PROJECT", "default"),
-            client=client,
-        )
-        config["callbacks"] = [tracer]
+        project = os.environ.get("LANGSMITH_PROJECT", "default")
+        config["callbacks"] = [_tracer(discloses_payloads=discloses_payloads, project=project)]
 
     return config
+
+
+@lru_cache(maxsize=4)
+def _tracer(*, discloses_payloads: bool, project: str) -> LangChainTracer:
+    """추적 창구로 나가는 연결을 프로파일마다 하나만 열어 실행마다 다시 열지 않는다."""
+    client = Client(
+        hide_inputs=disclosable_run_payload if discloses_payloads else True,
+        hide_outputs=disclosable_run_payload if discloses_payloads else True,
+    )
+    return LangChainTracer(project_name=project, client=client)
 
 
 def _call_config(recursion_limit: int, call_id: str | None) -> RunnableConfig:

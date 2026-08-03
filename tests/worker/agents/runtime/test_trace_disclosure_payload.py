@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 import pytest
 
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
+from tracer_agent.worker.agents.runtime.llm import structured_agent
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_config
 from tracer_agent.worker.agents.runtime.telemetry.disclosure import TraceSafeMetadata
 
@@ -33,6 +34,8 @@ def _trace() -> TraceSafeMetadata:
 @pytest.fixture(autouse=True)
 def _capture_client(monkeypatch: pytest.MonkeyPatch) -> None:
     _CapturingClient.captured = []
+    # 추적 창구 연결은 프로파일마다 한 번만 열리므로 이 검사가 그 기억을 비우고 시작한다.
+    structured_agent._tracer.cache_clear()  # noqa: SLF001
     monkeypatch.setattr("tracer_agent.worker.agents.runtime.llm.structured_agent.Client", _CapturingClient)
     monkeypatch.setattr(
         "tracer_agent.worker.agents.runtime.llm.structured_agent.LangChainTracer", _NoopTracer
