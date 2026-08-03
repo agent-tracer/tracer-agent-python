@@ -14,6 +14,7 @@ from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.runtime.llm.standard_agent import (
     FINALIZE_STRUCTURED_DIRECTIVE,
     FINALIZE_TEXT_DIRECTIVE,
@@ -168,7 +169,7 @@ async def _run(_chat: GreedyChat, ledger: FakeTracerApi) -> Any:
 async def test_예산을_다_써도_모은_근거로_결론을_낸다(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
     ledger = FakeTracerApi()
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger)
 
@@ -178,7 +179,7 @@ async def test_예산을_다_써도_모은_근거로_결론을_낸다(monkeypatc
 
 async def test_턴_사용량을_매_턴_알려준다(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = GreedyChat()
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     await _run(chat, FakeTracerApi())
 
@@ -189,7 +190,7 @@ async def test_턴_사용량을_매_턴_알려준다(monkeypatch: pytest.MonkeyP
 
 async def test_비용_상한에_닿기_전에_결론을_받아낸다(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, FakeTracerApi())
 
@@ -203,7 +204,7 @@ async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남�
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     chat = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     await _run(chat, FakeTracerApi())
 
@@ -213,11 +214,11 @@ async def test_예산이_바닥나면_조사_도구를_거두고_출력만_남�
 
 async def test_착지했는지를_응답에_실어_보낸다(monkeypatch: pytest.MonkeyPatch) -> None:
     expensive = GreedyChat(usage=_EXPENSIVE_USAGE)
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: expensive)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(expensive, None))
     landed = await _run(expensive, FakeTracerApi())
 
     cheap = GreedyChat()
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: cheap)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(cheap, None))
     unlanded = await _run(cheap, FakeTracerApi())
 
     # 턴을 다 써 끝난 실행과 예산이 다해 착지한 실행을 서버가 구분해 답할 수 있어야 한다.
@@ -270,7 +271,7 @@ async def test_대화는_예산이_바닥나도_자유_텍스트로_끝내라는
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conversation = _GreedyConversation()
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_a, **_k: conversation)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(conversation, None))
     request = ChatRequest.model_validate(
         {
             "model": "claude-sonnet-4-6",

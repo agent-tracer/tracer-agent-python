@@ -6,8 +6,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..agents.runtime.dependencies import ExecutionSql, UserId
-from ..agents.shared.wire import SuccessEnvelope, error_responses
-from .jobs_intake import INVALID_REQUEST, JOBS_PATH, NOT_FOUND, error_envelope
+from ..agents.shared.wire import SuccessEnvelope, error_envelope, error_responses
+from .jobs_intake import INVALID_REQUEST, JOBS_PATH, NOT_FOUND
 from .jobs_ledger import JobLedger
 from .jobs_view import job_dto, job_step_dto
 

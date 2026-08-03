@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from tracer_agent.shared.agents.shared.json_view import JsonValue
+
 # 창구가 요청자를 식별하는 헤더다.
 USER_HEADER = "x-monitor-user"
 _CLIENT_ERROR = 400
@@ -42,14 +44,14 @@ class TracerApiClient:
         self._base_url = base_url.rstrip("/")
         self._user_id = user_id
 
-    async def get(self, path: str, params: Mapping[str, Any] | None = None) -> Any:
+    async def get(self, path: str, params: Mapping[str, Any] | None = None) -> JsonValue:
         """창구 하나를 읽어 봉투를 벗긴 본문을 내며, 이 사용자의 것이 아니면 None을 낸다."""
         response = await self._send("GET", path, params=_query(params))
         if response.status_code == _NOT_FOUND:
             return None
         return _unwrap(self._checked(response))
 
-    async def post(self, path: str, body: Mapping[str, Any]) -> Any:
+    async def post(self, path: str, body: Mapping[str, Any]) -> JsonValue:
         """창구 하나에 본문을 보내고 봉투를 벗긴 응답을 낸다."""
         response = await self._send("POST", path, json=dict(body))
         return _unwrap(self._checked(response))
@@ -77,11 +79,12 @@ def _query(params: Mapping[str, Any] | None) -> dict[str, str]:
     return {key: str(value) for key, value in params.items() if value is not None}
 
 
-def _unwrap(response: httpx.Response) -> Any:
+def _unwrap(response: httpx.Response) -> JsonValue:
     try:
         payload = response.json()
     except ValueError as malformed:
         raise TracerApiUnavailable(f"tracer api answered with a non-JSON body: {malformed}") from malformed
     if not isinstance(payload, dict) or payload.get("ok") is not True or "data" not in payload:
         raise TracerApiUnavailable("tracer api answered outside the success envelope")
-    return payload["data"]
+    data: JsonValue = payload["data"]
+    return data

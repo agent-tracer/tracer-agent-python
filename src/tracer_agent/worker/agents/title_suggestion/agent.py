@@ -4,22 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.runnables import RunnableConfig
-
-from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
+from tracer_agent.shared.agents.title_suggestion.models import (
+    TitleSuggestionDraft,
+    TitleSuggestionRequest,
+)
+from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import job_durability, resume_input, with_thread
+from ..runtime.durable_graph import execution_config, job_durability, resume_input
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.job_agent import JobAgent
 from ..runtime.llm.budget import ExecutionBudget
-from ..runtime.llm.client import make_chat
-from ..runtime.llm.structured_agent import recursion_config
+from ..runtime.llm.client import make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
+from .deps import TitleDeps
 from .graph import TITLE_SUGGESTION_GRAPH, TITLE_SUGGESTION_NODE_NAMES
 from .nodes.candidate import (
     EmptyNode,
@@ -30,9 +33,20 @@ from .nodes.candidate import (
 )
 from .policy import build_routes
 from .prompts import build_prompt_bundle
-from .reader import TitleLedgerReader
+from .reader import TitleLedgerReader, load_title_context
 
-AGENT_NAME = "title-suggestion"
+# 조사 한 번과 수리 한 번이 도구를 도는 동안 그래프가 밟는 노드 수의 상한이다.
+_RECURSION_LIMIT = 20
+
+
+async def prepare_title_suggestion(
+    payload: dict[str, Any], tracer: TracerApiClient
+) -> TitleSuggestionRequest:
+    """접수가 대화 발췌를 싣지 않았으면 이 시점에 스스로 조립해 요청을 세운다."""
+    if "context" not in payload:
+        context = await load_title_context(tracer, payload["taskId"])
+        payload = {**payload, "context": context.model_dump(mode="json")}
+    return TitleSuggestionRequest.model_validate(payload)
 
 
 async def run_title_suggestion(
@@ -46,56 +60,23 @@ async def run_title_suggestion(
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
     resume_key = req.executionId or req.jobId
     saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
-    prompts = build_prompt_bundle(prompt)
-    chat = make_chat(
-        req.model,
-        req.apiKey,
-        req.deadlineMs,
-        feature_max_output_tokens=req.limits.maxOutputTokens,
+    deps = TitleDeps(
+        req=req,
+        reader=TitleLedgerReader(tracer),
+        usage=usage,
+        chats=make_chat_pair(req),
+        budget=ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates)),
+        prompts=build_prompt_bundle(prompt),
+        language_directives=prompt.language_directives,
     )
-    fallback_model = req.effective_fallback_model()
-    fallback_chat = (
-        make_chat(
-            fallback_model,
-            req.apiKey,
-            req.deadlineMs,
-            feature_max_output_tokens=req.limits.maxOutputTokens,
-        )
-        if fallback_model is not None
-        else None
-    )
-    reader = TitleLedgerReader(tracer)
-    budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates))
     context = ValidationGraphContext(
-        AGENT_NAME,
+        AgentJobKind.TITLE_SUGGESTION,
         usage,
         NodeRegistry(
             {
-                InvestigateNode.name: InvestigateNode(
-                    req,
-                    reader,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    agent_name=AGENT_NAME,
-                    system_prompt=prompts["investigatorSystemPrompt"],
-                    repair_directive=prompts["repairDirective"],
-                    language_directives=prompt.language_directives,
-                ),
+                InvestigateNode.name: InvestigateNode(deps),
                 ValidateCandidateNode.name: ValidateCandidateNode(usage),
-                RepairNode.name: RepairNode(
-                    req,
-                    reader,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    agent_name=AGENT_NAME,
-                    system_prompt=prompts["investigatorSystemPrompt"],
-                    repair_directive=prompts["repairDirective"],
-                    language_directives=prompt.language_directives,
-                ),
+                RepairNode.name: RepairNode(deps),
                 FinalizeNode.name: FinalizeNode(),
                 EmptyNode.name: EmptyNode(),
             },
@@ -104,10 +85,10 @@ async def run_title_suggestion(
         build_routes(usage, ValidateCandidateNode.name),
     )
     graph = TITLE_SUGGESTION_GRAPH.compiled(saver)
-    config = _execution_config(
-        20,
+    config = execution_config(
+        _RECURSION_LIMIT,
         TraceSafeMetadata(
-            agent_name=AGENT_NAME,
+            agent_name=AgentJobKind.TITLE_SUGGESTION,
             model_requested=req.model,
             prompt_version=prompt.version(),
             job_id=req.jobId,
@@ -131,10 +112,12 @@ async def run_title_suggestion(
         config=config,
         durability=job_durability(saver),
     )
-    return final["result"] or {"suggestions": []}
+    result: TitleSuggestionDraft = final["result"] or TitleSuggestionDraft()
+    return result.model_dump(mode="json")
 
 
-def _execution_config(limit: int, trace: TraceSafeMetadata, thread_id: str | None) -> RunnableConfig:
-    """재개할 실행은 잡 하나를 열쇠로 삼고, 열쇠를 모르는 실행은 보존하지 않는다."""
-    config = recursion_config(limit, trace)
-    return config if thread_id is None else with_thread(config, thread_id)
+TITLE_SUGGESTION_JOB = JobAgent(
+    kind=AgentJobKind.TITLE_SUGGESTION,
+    prepare=prepare_title_suggestion,
+    run=run_title_suggestion,
+)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from langgraph.graph import END, StateGraph
 from langgraph.runtime import Runtime
@@ -13,24 +13,19 @@ from langgraph.types import RetryPolicy, TimeoutPolicy
 
 from .execution.trace import ExecutionTrace
 from .node import NodeRegistry
+from .routes import EMPTY, FINALIZE, REPAIR, ValidationRoute, ValidationRouteName
 
-type ValidationRouteName = Literal["repair", "finalize", "empty"]
-type ValidationRoute = Callable[[Any], ValidationRouteName]
 type NodeErrorHandler = Callable[..., Any]
-
-REPAIR: ValidationRouteName = "repair"
-FINALIZE: ValidationRouteName = "finalize"
-EMPTY: ValidationRouteName = "empty"
 
 
 @dataclass(frozen=True)
-class ValidationGraphContext:
+class ValidationGraphContext[StateT]:
     """정적 검증 그래프에 요청별 노드와 관측 의존성을 주입한다."""
 
     agent_name: str
     trace: ExecutionTrace
     nodes: NodeRegistry
-    route_validation: ValidationRoute
+    route_validation: ValidationRoute[StateT]
 
 
 # LangGraph 스텁이 runtime 인자를 실은 노드 시그니처를 싣지 못하므로 이 모듈이 좁힘을 소유한다.
@@ -75,8 +70,8 @@ def add_validation_tail(graph: StateGraph[Any, Any, Any, Any], validation_node: 
     graph.add_edge(EMPTY, END)
 
 
-def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, Any]]]:
-    async def run(state: Any, runtime: Runtime[ValidationGraphContext]) -> Mapping[str, Any]:
+def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, object]]]:
+    async def run(state: Any, runtime: Runtime[ValidationGraphContext[Any]]) -> Mapping[str, object]:
         context = runtime.context
         trace = context.trace
         trace.record_orchestration_event(
@@ -104,5 +99,5 @@ def _dispatch(node_name: str) -> Callable[..., Awaitable[Mapping[str, Any]]]:
     return run
 
 
-def _route(state: Any, runtime: Runtime[ValidationGraphContext]) -> ValidationRouteName:
+def _route(state: Any, runtime: Runtime[ValidationGraphContext[Any]]) -> ValidationRouteName:
     return runtime.context.route_validation(state)

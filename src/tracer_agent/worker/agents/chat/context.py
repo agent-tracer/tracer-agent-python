@@ -9,6 +9,7 @@ import httpx
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 from tracer_agent.shared.agents.chat.models import ChatFact, ChatHistoryMessage, ChatReplay
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 
 from .reader import USER_HEADER, unwrap_envelope
 
@@ -71,7 +72,7 @@ def replay_messages(history: list[ChatHistoryMessage]) -> list[BaseMessage]:
     return messages
 
 
-def _calls(message: ChatHistoryMessage) -> list[dict[str, object]]:
+def _calls(message: ChatHistoryMessage) -> list[JsonObject]:
     return [
         {"id": call.id, "name": call.name, "args": call.args, "type": "tool_call"}
         for call in message.toolCalls

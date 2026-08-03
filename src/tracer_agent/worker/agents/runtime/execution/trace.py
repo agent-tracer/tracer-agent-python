@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -11,6 +10,7 @@ from tracer_agent.shared.agents.shared.models import (
     AgentRunObservationDTO,
     AgentStepDTO,
     ModelCallObservationDTO,
+    ObservationStatus,
     ObservationUsageDTO,
     OrchestrationEventKind,
     ToolCallObservationDTO,
@@ -25,8 +25,7 @@ from ..llm.trajectory import (
     message_step,
     step_carries_content,
 )
-
-ObservationStatus = Literal["succeeded", "failed", "cancelled"]
+from ..routes import REPAIR
 
 
 @dataclass
@@ -165,7 +164,7 @@ class ExecutionTrace:
             durationMs=duration_ms,
             usage=usage,
             landed=self.landed,
-            repairAttempted=any(step.nodeName == "repair" for step in self.steps),
+            repairAttempted=any(step.nodeName == REPAIR for step in self.steps),
             validation=ValidationObservationDTO(
                 passed=error_subtype is None,
                 errorCodes=[] if error_subtype is None else [error_subtype],

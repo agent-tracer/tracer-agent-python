@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch
+from tracer_agent.shared.agents.shared.instant import parse_instant
+from tracer_agent.shared.agents.shared.json_view import (
+    JsonObject,
+    as_object,
+    as_objects,
+    opt_text,
+    text,
+)
+from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch, CleanupTaskStatus
 
 from ..runtime.scoped_event_reader import ScopedEventReader
 from ..runtime.tracer_client import TracerApiClient
@@ -20,7 +27,6 @@ SERVER_SDK_TASK_ORIGIN = "server-sdk"
 TASKS_PATH = "/api/v1/tasks"
 # 목록 창구가 한 장에 내주는 상한이며 배치 하나가 여러 장에 걸친다.
 TASK_PAGE_LIMIT = 100
-_ACTIVE_STATUSES = ("running", "waiting")
 
 
 async def load_cleanup_batch(tracer: TracerApiClient, now: datetime) -> CleanupBatch:
@@ -43,20 +49,20 @@ async def _scan_tasks(tracer: TracerApiClient) -> tuple[list[CleanupTaskSnapshot
     return tasks, truncated
 
 
-async def _read_pages(tracer: TracerApiClient, cap: int) -> list[dict[str, Any]]:
+async def _read_pages(tracer: TracerApiClient, cap: int) -> list[JsonObject]:
     """목록 창구를 여러 장에 걸쳐 상한까지 읽는다."""
-    read: list[dict[str, Any]] = []
+    read: list[JsonObject] = []
     cursor: str | None = None
     while len(read) < cap:
         payload = await tracer.get(
             TASKS_PATH, {"archived": "false", "limit": TASK_PAGE_LIMIT, "cursor": cursor}
         )
-        items = list((payload or {}).get("items") or [])
+        page = {} if payload is None else as_object(payload)
+        items = as_objects(page.get("items"))
         read.extend(items)
-        next_cursor = (payload or {}).get("nextCursor")
-        if not items or next_cursor is None:
+        cursor = opt_text(page.get("nextCursor"))
+        if not items or cursor is None:
             break
-        cursor = str(next_cursor)
     return read[:cap]
 
 
@@ -67,22 +73,19 @@ async def _active_child_counts(tracer: TracerApiClient, task_ids: list[str]) -> 
         payload = await tracer.get(f"{TASKS_PATH}/{task_id}/children")
         if payload is None:
             continue
-        active = sum(1 for child in payload.get("items") or [] if child.get("status") in _ACTIVE_STATUSES)
+        children = as_objects(as_object(payload).get("items"))
+        active = sum(1 for child in children if child.get("status") in tuple(CleanupTaskStatus))
         if active:
             counts[task_id] = active
     return counts
 
 
-def _snapshot(item: dict[str, Any]) -> CleanupTaskSnapshot:
-    last_event_at = item.get("lastEventAt")
+def _snapshot(item: JsonObject) -> CleanupTaskSnapshot:
+    last_event_at = opt_text(item.get("lastEventAt"))
     return {
-        "id": item["id"],
-        "title": item["title"],
-        "status": item["status"],
-        "lastEventAt": None if last_event_at is None else _instant(last_event_at),
-        "updatedAt": _instant(item["updatedAt"]),
+        "id": text(item["id"]),
+        "title": text(item["title"]),
+        "status": text(item["status"]),
+        "lastEventAt": None if last_event_at is None else parse_instant(last_event_at),
+        "updatedAt": parse_instant(text(item["updatedAt"])),
     }
-
-
-def _instant(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))

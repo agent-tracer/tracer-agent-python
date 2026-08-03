@@ -6,84 +6,28 @@ from abc import ABC
 from collections.abc import Mapping
 from typing import Any
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 
 from tracer_agent.shared.agents.title_suggestion.models import (
     InvestigateUpdate,
     RepairUpdate,
     ResultUpdate,
     TitleSuggestionDraft,
-    TitleSuggestionRequest,
     TitleSuggestionState,
     ValidateCandidateUpdate,
 )
 
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
-from ...runtime.llm.standard_agent import StandardAgentContext
-from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
 from ...runtime.node import GraphNode
-from ...runtime.validation_graph import EMPTY, FINALIZE
-from ..langchain_agent import build_title_agent
+from ...runtime.routes import EMPTY, FINALIZE
+from ..deps import TitleDeps
 from ..policy import validate_title_candidate
 from ..prompts import build_user_prompt
-from ..reader import TitleLedgerReader
-from ..tools import build_title_registry
 
 
 class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[TitleSuggestionState, UpdateT], ABC):
-    def __init__(
-        self,
-        req: TitleSuggestionRequest,
-        reader: TitleLedgerReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-        repair_directive: str,
-        language_directives: Mapping[str, str],
-    ) -> None:
-        self._req = req
-        self._reader = reader
-        self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
-        self._budget = budget
-        self._agent_name = agent_name
-        self._system_prompt = system_prompt
-        self._repair_directive = repair_directive
-        self._language_directives = language_directives
-
-    async def _invoke_agent(
-        self, messages: list[Any]
-    ) -> tuple[TitleSuggestionDraft, list[Any], SharedToolLoopBudget]:
-        budget = self._budget.new_loop(self._agent_name, self._req.model)
-        registry = build_title_registry(self._reader, agent_name=self._agent_name)
-        agent = build_title_agent(
-            self._chat,
-            self._system_prompt,
-            registry.langchain_tools(),
-            fallback_chat=self._fallback_chat,
-            max_turns=self._req.limits.maxTurns,
-        )
-        context = StandardAgentContext(
-            agent_name=self._agent_name,
-            trace=self._usage,
-            budget=budget,
-            max_model_turns=self._req.limits.maxTurns,
-        )
-        result = await invoke_structured_agent(
-            agent,
-            messages=messages,
-            context=context,
-            response_type=TitleSuggestionDraft,
-            recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
-            missing_response=f"{self._agent_name} produced no structured output",
-        )
-        return result.response, result.messages, budget
+    def __init__(self, deps: TitleDeps) -> None:
+        self._deps = deps
 
 
 class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
@@ -92,16 +36,15 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
     name = "investigate"
 
     async def run(self, state: TitleSuggestionState) -> InvestigateUpdate:
-        draft, messages, budget = await self._invoke_agent(
+        draft, messages, budget = await self._deps.investigate(
             [
-                {
-                    "role": "user",
-                    "content": build_user_prompt(
+                HumanMessage(
+                    content=build_user_prompt(
                         state["task_id"],
                         state["context"],
-                        self._language_directives[state["language"]],
-                    ),
-                }
+                        self._deps.language_directives[state["language"]],
+                    )
+                )
             ],
         )
         return {"candidate": draft, "messages": messages, "model_cost_usd": budget.delta}
@@ -115,12 +58,13 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
     async def run(self, state: TitleSuggestionState) -> RepairUpdate:
         repair_prompt = [
             *state["messages"],
-            {
-                "role": "user",
-                "content": self._repair_directive.format(errors="\n".join(state["validation_errors"])),
-            },
+            HumanMessage(
+                content=self._deps.prompts.repair_directive.format(
+                    errors="\n".join(state["validation_errors"])
+                )
+            ),
         ]
-        draft, messages, budget = await self._invoke_agent(repair_prompt)
+        draft, messages, budget = await self._deps.investigate(repair_prompt)
         return {
             "candidate": draft,
             "messages": messages,
@@ -154,8 +98,7 @@ class FinalizeNode(GraphNode[TitleSuggestionState, ResultUpdate]):
     name = FINALIZE
 
     async def run(self, state: TitleSuggestionState) -> ResultUpdate:
-        candidate = state["candidate"] or TitleSuggestionDraft()
-        return {"result": candidate.model_dump(mode="json")}
+        return {"result": state["candidate"] or TitleSuggestionDraft()}
 
 
 class EmptyNode(GraphNode[TitleSuggestionState, ResultUpdate]):
@@ -164,4 +107,4 @@ class EmptyNode(GraphNode[TitleSuggestionState, ResultUpdate]):
     name = EMPTY
 
     async def run(self, _state: TitleSuggestionState) -> ResultUpdate:
-        return {"result": {"suggestions": []}}
+        return {"result": TitleSuggestionDraft()}

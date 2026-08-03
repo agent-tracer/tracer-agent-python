@@ -21,9 +21,11 @@ from tests.support.prompts import JOB_PROMPTS
 from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
+from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities, merge_envelope
@@ -99,7 +101,9 @@ def http() -> CapturingCompletionClient:
 async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
+    )
     activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
     payload = {
         "model": "claude-haiku-4-5",
@@ -113,7 +117,7 @@ async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest("title-suggestion", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     assert http.deliveries[0]["token"] == "done-1"
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
@@ -122,7 +126,11 @@ async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
 async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        cleanup_mod,
+        "make_chat_pair",
+        lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
+    )
     activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
@@ -137,7 +145,7 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest("task-cleanup", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TASK_CLEANUP, payload))
 
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
 
@@ -145,7 +153,9 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
 async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(recipe_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"recipes": []}]))
+    monkeypatch.setattr(
+        recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"recipes": []}]), None)
+    )
     activities = AgentJobActivities(TRACER_API_URL, http, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
     payload = {
         "model": "claude-sonnet-4-6",
@@ -158,7 +168,7 @@ async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest("recipe-scan", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.RECIPE_SCAN, payload))
 
     assert http.deliveries[0]["response"]["data"]["recipes"] == []
 
@@ -166,7 +176,9 @@ async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
 async def test_실행_식별자가_있으면_원장에_종료_상태와_비용과_관측이_남는다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
+    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e1")
     activities = AgentJobActivities(  # type: ignore[arg-type]
@@ -186,7 +198,7 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
         "attemptId": "1",
     }
 
-    await activities.run(AgentJobRequest("title-suggestion", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "completed"
@@ -200,7 +212,9 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
 async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를_당겨온다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
+    )
     envelopes = FakeEnvelopeSource()
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e2")
@@ -217,7 +231,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
         "executionId": "e2",
     }
 
-    await activities.run(AgentJobRequest("title-suggestion", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     assert envelopes.issued_for == ["title.suggestion:user-1"]
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
@@ -263,7 +277,7 @@ async def test_페이로드에_자격도_실행_식별자도_없으면_거부한
     payload = {"model": "claude-haiku-4-5", "taskId": "task-1"}
 
     with pytest.raises(ValueError):
-        await activities.run(AgentJobRequest("title-suggestion", payload))
+        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
 
 async def test_실행_액티비티가_돌기_전에_취소되면_원장이_취소로_닫힌다(
@@ -301,7 +315,7 @@ async def test_그래프를_돌리기_전에_죽으면_원장이_failed로_닫�
     }
 
     with pytest.raises(Exception):  # noqa: B017
-        await activities.run(AgentJobRequest("title-suggestion", payload))
+        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "failed"
@@ -337,7 +351,9 @@ class CapturingNotifier:
 async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(title_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        title_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None)
+    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e6")
     notifier = CapturingNotifier()
@@ -358,7 +374,7 @@ async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
         "attemptId": "1",
     }
 
-    await activities.run(AgentJobRequest("title-suggestion", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     assert [entry[1]["status"] for entry in notifier.published] == ["running", "completed"]
     assert notifier.published[0][0] == "user-1"
@@ -374,7 +390,11 @@ async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
 async def test_태스크에_매이지_않은_잡은_태스크_식별자를_싣지_않는다(
     http: CapturingCompletionClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([{"suggestions": []}]))
+    monkeypatch.setattr(
+        cleanup_mod,
+        "make_chat_pair",
+        lambda *_a, **_k: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
+    )
     execution_sql = SqliteLedgerSql()
     await claim(execution_sql, "e7")
     notifier = CapturingNotifier()
@@ -395,7 +415,7 @@ async def test_태스크에_매이지_않은_잡은_태스크_식별자를_싣�
         "executionId": "e7",
     }
 
-    await activities.run(AgentJobRequest("task-cleanup", payload))
+    await activities.run(AgentJobRequest(AgentJobKind.TASK_CLEANUP, payload))
 
     assert "taskId" not in notifier.published[-1][1]
     assert notifier.published[-1][1]["kind"] == "task.cleanup"
@@ -424,7 +444,7 @@ async def test_그래프를_돌리기_전에_죽으면_실패가_상태_전이�
     }
 
     with pytest.raises(Exception):  # noqa: B017
-        await activities.run(AgentJobRequest("title-suggestion", payload))
+        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     assert notifier.published[-1] == (
         "user-1",

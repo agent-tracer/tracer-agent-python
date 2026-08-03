@@ -12,6 +12,7 @@ from tracer_agent.shared.agents.chat.tools.surface import (
     recall_tool_name,
     tool_surface,
 )
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 
 from .reader import scoped_headers, unwrap_envelope
 
@@ -46,7 +47,7 @@ class ChatMemoryClient:
         """recall_facts 바인딩대로 이 사용자의 장기기억 전체를 되읽는다."""
         return await self._call(RECALL_TOOL, {})
 
-    async def _call(self, tool_name: str, args: dict[str, object]) -> ChatMemoryResult:
+    async def _call(self, tool_name: str, args: JsonObject) -> ChatMemoryResult:
         binding = TOOL_BINDINGS[tool_name]
         if tool_surface(tool_name) != MEMORY_SURFACE:
             raise ValueError(f"{tool_name} is not a memory tool")

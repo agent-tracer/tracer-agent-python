@@ -46,8 +46,6 @@ class TitleSuggestionRequest(AgentExecutionRequest):
     model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1)
-    # 조회 범위를 정하는 값이라 도메인 입력이며 멱등 해시에 함께 든다.
-    userId: TrimmedStr = Field(min_length=1)
     language: Language = "auto"
     context: TitleSuggestionContext
 
@@ -87,7 +85,7 @@ class RepairUpdate(TypedDict):
 class ResultUpdate(TypedDict):
     """종단 노드가 갱신하는 상태 부분집합이다."""
 
-    result: dict[str, object]
+    result: TitleSuggestionDraft
 
 
 class TitleSuggestionState(TypedDict):
@@ -100,4 +98,4 @@ class TitleSuggestionState(TypedDict):
     candidate: TitleSuggestionDraft | None
     validation_errors: list[str]
     repair_attempted: bool
-    result: dict[str, object] | None
+    result: TitleSuggestionDraft | None

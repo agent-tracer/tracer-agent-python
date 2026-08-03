@@ -6,29 +6,25 @@ from abc import ABC
 from collections.abc import Mapping
 from typing import Any
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, HumanMessage
 
 from tracer_agent.shared.agents.task_cleanup.models import (
     MAX_REDISPATCH_ROUNDS,
     CleanupDraft,
     InvestigateUpdate,
     RepairUpdate,
-    TaskCleanupRequest,
     TaskCleanupState,
     TriagePlan,
     ValidateDecisionsUpdate,
 )
 
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
-from ...runtime.llm.standard_agent import StandardAgentContext
-from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
+from ...runtime.llm.budget import SharedToolLoopBudget
 from ...runtime.node import GraphNode
-from ..langchain_agent import build_cleanup_agent
+from ..deps import AGENT_NAME, CleanupDeps
 from ..policy import validate_suggestions
 from ..prompts import build_user_prompt
-from ..reader import CleanupLedgerReader
-from ..tools import COORDINATOR_TOOL_NAMES, build_cleanup_registry
+from ..tools import COORDINATOR_TOOL_NAMES
 
 
 def _plan_redispatch(
@@ -43,67 +39,26 @@ def _plan_redispatch(
 
 
 class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, UpdateT], ABC):
-    def __init__(
-        self,
-        req: TaskCleanupRequest,
-        reader: CleanupLedgerReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-        repair_directive: str,
-        language_directives: Mapping[str, str],
-    ) -> None:
-        self._req = req
-        self._reader = reader
-        self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
-        self._budget = budget
-        self._agent_name = agent_name
-        self._system_prompt = system_prompt
-        self._repair_directive = repair_directive
-        self._language_directives = language_directives
+    def __init__(self, deps: CleanupDeps) -> None:
+        self._deps = deps
 
-    async def _invoke_agent(
-        self, messages: list[Any], state: TaskCleanupState
-    ) -> tuple[CleanupDraft, list[Any], SharedToolLoopBudget]:
-        budget = self._budget.new_loop(self._agent_name, self._req.model)
+    async def _decide(
+        self, messages: list[BaseMessage], state: TaskCleanupState
+    ) -> tuple[CleanupDraft, list[BaseMessage], SharedToolLoopBudget]:
+        deps = self._deps
+        budget = deps.new_loop()
         # 조율자는 후보를 직접 열어보지 않고 검토 전문가의 보고만으로 제안을 쓴다.
-        registry = build_cleanup_registry(
-            self._reader,
-            self._req.batch,
-            state["exposed_candidates"],
-            state["event_ids_by_task"],
-            agent_name=self._agent_name,
-        )
-        cleanup_agent = build_cleanup_agent(
-            self._chat,
-            self._system_prompt,
-            registry.langchain_tools(COORDINATOR_TOOL_NAMES),
-            registry.transient_errors(),
-            output=CleanupDraft,
-            fallback_chat=self._fallback_chat,
-            max_turns=self._req.limits.maxTurns,
-        )
-        context = StandardAgentContext(
-            agent_name=self._agent_name,
-            trace=self._usage,
+        draft, replied = await deps.invoke(
             budget=budget,
-            max_model_turns=self._req.limits.maxTurns,
-        )
-        result = await invoke_structured_agent(
-            cleanup_agent,
+            system_prompt=deps.prompts.investigator_system,
+            tool_names=COORDINATOR_TOOL_NAMES,
+            output=CleanupDraft,
             messages=messages,
-            context=context,
-            response_type=CleanupDraft,
-            recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
-            missing_response=f"{self._agent_name} produced no structured output",
+            missing_response=f"{AGENT_NAME} produced no structured output",
+            exposed_candidates=state["exposed_candidates"],
+            event_ids_by_task=state["event_ids_by_task"],
         )
-        return result.response, result.messages, budget
+        return draft, replied, budget
 
 
 class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
@@ -112,17 +67,17 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
     name = "investigate"
 
     async def run(self, state: TaskCleanupState) -> InvestigateUpdate:
-        draft, messages, budget = await self._invoke_agent(
+        deps = self._deps
+        draft, messages, budget = await self._decide(
             [
-                {
-                    "role": "user",
-                    "content": build_user_prompt(
+                HumanMessage(
+                    content=build_user_prompt(
                         state["scanned_at"],
                         state["max_suggestions"],
-                        self._language_directives[state["language"]],
+                        deps.language_directives[state["language"]],
                         state["reports"],
-                    ),
-                }
+                    )
+                )
             ],
             state,
         )
@@ -136,7 +91,7 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
             "redispatch_ceiling": 0.0,
             "redispatch_count": state["redispatch_count"],
         }
-        remaining = self._budget.max_cost_usd - self._budget.spent
+        remaining = deps.budget.max_cost_usd - deps.budget.spent
         redispatch = _plan_redispatch(draft, state["redispatch_count"], remaining)
         if redispatch is not None:
             plan, ceiling = redispatch
@@ -144,7 +99,7 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
             update["redispatch_ceiling"] = ceiling
             update["redispatch_count"] = state["redispatch_count"] + 1
             chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments)
-            self._usage.record_orchestration_event(
+            deps.usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
             )
         return update
@@ -158,12 +113,13 @@ class RepairNode(_DecisionAgent[RepairUpdate]):
     async def run(self, state: TaskCleanupState) -> RepairUpdate:
         repair_prompt = [
             *state["messages"],
-            {
-                "role": "user",
-                "content": self._repair_directive.format(errors="\n".join(state["validation_errors"])),
-            },
+            HumanMessage(
+                content=self._deps.prompts.repair_directive.format(
+                    errors="\n".join(state["validation_errors"])
+                )
+            ),
         ]
-        draft, messages, budget = await self._invoke_agent(repair_prompt, state)
+        draft, messages, budget = await self._decide(repair_prompt, state)
         return {
             "suggestions": draft.suggestions,
             "messages": messages,

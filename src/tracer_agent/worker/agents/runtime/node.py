@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
-type ValidationNode = Callable[[Any], Awaitable[Mapping[str, Any]]]
+type ValidationNode = Callable[[Any], Awaitable[Mapping[str, object]]]
 
 
-class GraphNode[InputT, UpdateT: Mapping[str, Any]](ABC):
+class GraphNode[InputT, UpdateT: Mapping[str, object]](ABC):
     """그래프 위상과 관측이 쓰는 노드 이름과 노드의 실행을 한 객체에 모은다."""
 
     name: ClassVar[str]
@@ -22,7 +22,9 @@ class GraphNode[InputT, UpdateT: Mapping[str, Any]](ABC):
 class NodeRegistry:
     """그래프가 요구하는 이름과 등록된 노드가 맞는지 조립 시점에 대조한다."""
 
-    def __init__(self, nodes: Mapping[str, GraphNode[Any, Any]], expected: frozenset[str]) -> None:
+    def __init__(
+        self, nodes: Mapping[str, GraphNode[Any, Mapping[str, object]]], expected: frozenset[str]
+    ) -> None:
         names = set(nodes)
         missing = expected - names
         if missing:

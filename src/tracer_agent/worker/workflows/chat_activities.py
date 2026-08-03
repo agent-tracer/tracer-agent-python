@@ -14,6 +14,7 @@ from ...shared.agents.chat.execution_ledger import CLAIMED, THREAD_BUSY, ChatExe
 from ...shared.agents.chat.models import ChatRequest
 from ...shared.agents.runtime.ledger import LedgerSql, SqlSource
 from ...shared.agents.runtime.wakeup import UpdatePublisher
+from ...shared.agents.shared.json_view import JsonObject
 from ...shared.workflows.chat_spec import (
     FAIL_ACTIVITY,
     FINALIZE_ACTIVITY,
@@ -209,7 +210,7 @@ def _body(
     checkpoints: GraphCheckpointProvider,
     prompt: AgentPrompt,
 ) -> AgentBody:
-    async def run(trace: ExecutionTrace) -> dict[str, object]:
+    async def run(trace: ExecutionTrace) -> JsonObject:
         # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 붙잡아 둔다.
         traces.append(trace)
         return await run_chat(request, http_client, trace, prompt, checkpoints)

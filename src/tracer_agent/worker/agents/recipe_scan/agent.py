@@ -4,34 +4,45 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.runnables import RunnableConfig
-
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanRequest
+from tracer_agent.shared.agents.recipe_scan.models import (
+    ProvenanceCatalog,
+    RecipeScanRequest,
+    RecipeScanResult,
+)
+from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import job_durability, resume_input, with_thread
+from ..runtime.durable_graph import execution_config, job_durability, resume_input
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.job_agent import JobAgent
 from ..runtime.llm.budget import ExecutionBudget
-from ..runtime.llm.client import make_chat
-from ..runtime.llm.structured_agent import recursion_config
+from ..runtime.llm.client import make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.tracer_client import TracerApiClient
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
+from .deps import RecipeDeps
 from .graph import PROBE_WALL_CLOCK_CEILING_S, RECIPE_SCAN_GRAPH, RECIPE_SCAN_NODE_NAMES
 from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import EmptyNode, FinalizeNode, wire_provenance
 from .nodes.survey import SurveyNode
+from .outputs import deliver_recipes
 from .policy import build_routes
 from .prompts import build_prompt_bundle
 from .reader import RecipeLedgerReader
 from .reservation import load_reservation_policy
 from .search import RecipeSearchReader
 
-AGENT_NAME = "recipe-scan"
+# 조사 계획과 전문가 팬아웃과 종합과 수리가 도는 동안 그래프가 밟는 노드 수의 상한이다.
+_RECURSION_LIMIT = 30
+
+
+async def prepare_recipe_scan(payload: dict[str, Any], _tracer: TracerApiClient) -> RecipeScanRequest:
+    """접수가 실은 값만으로 스캔 요청을 세운다."""
+    return RecipeScanRequest.model_validate(payload)
 
 
 async def run_recipe_scan(
@@ -45,91 +56,33 @@ async def run_recipe_scan(
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
     resume_key = req.executionId or req.jobId
     saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
-    prompts = build_prompt_bundle(prompt)
-    chat = make_chat(
-        req.model,
-        req.apiKey,
-        req.deadlineMs,
-        feature_max_output_tokens=req.limits.maxOutputTokens,
-    )
-    fallback_model = req.effective_fallback_model()
-    fallback_chat = (
-        make_chat(
-            fallback_model,
-            req.apiKey,
-            req.deadlineMs,
-            feature_max_output_tokens=req.limits.maxOutputTokens,
-        )
-        if fallback_model is not None
-        else None
-    )
-    reader = RecipeLedgerReader(tracer)
-    search_reader = RecipeSearchReader(tracer)
     budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates), max_turns=req.limits.maxTurns)
     # 뗄 순서를 바꾸면 그 시점 잔량에 곱하는 비율이 달라지므로 repair → survey → synthesisFloor 순서를 지킨다.
     policy = load_reservation_policy()
     repair_lease = budget.reserve(policy.repair.turns, policy.repair.budget_share)
     survey_lease = budget.reserve(policy.survey.turns, policy.survey.budget_share)
     synthesis_floor_lease = budget.reserve(policy.synthesis_floor.turns, policy.synthesis_floor.budget_share)
+    deps = RecipeDeps(
+        req=req,
+        reader=RecipeLedgerReader(tracer),
+        search=RecipeSearchReader(tracer),
+        usage=usage,
+        chats=make_chat_pair(req),
+        budget=budget,
+        prompts=build_prompt_bundle(prompt),
+        prompt=prompt,
+        language_directives=prompt.language_directives,
+    )
     context = ValidationGraphContext(
-        AGENT_NAME,
+        AgentJobKind.RECIPE_SCAN,
         usage,
         NodeRegistry(
             {
-                SurveyNode.name: SurveyNode(
-                    req,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    survey_lease,
-                    prompts["surveySystemPrompt"],
-                    prompt,
-                    reader,
-                    search_reader,
-                ),
-                ProbeNode.name: ProbeNode(
-                    req,
-                    reader,
-                    search_reader,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    agent_name=AGENT_NAME,
-                    system_prompt=prompts["probeSystemPrompt"],
-                    wall_clock_ceiling_s=PROBE_WALL_CLOCK_CEILING_S,
-                    prompt=prompt,
-                ),
-                InvestigateNode.name: InvestigateNode(
-                    req,
-                    reader,
-                    search_reader,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    agent_name=AGENT_NAME,
-                    system_prompt=prompts["investigatorSystemPrompt"],
-                    repair_directive=prompts["repairDirective"],
-                    language_directives=prompt.language_directives,
-                    synthesis_floor_lease=synthesis_floor_lease,
-                ),
+                SurveyNode.name: SurveyNode(deps, survey_lease),
+                ProbeNode.name: ProbeNode(deps, PROBE_WALL_CLOCK_CEILING_S),
+                InvestigateNode.name: InvestigateNode(deps, synthesis_floor_lease),
                 ValidateCandidateNode.name: ValidateCandidateNode(usage),
-                RepairNode.name: RepairNode(
-                    req,
-                    reader,
-                    search_reader,
-                    usage,
-                    chat,
-                    fallback_chat,
-                    budget,
-                    agent_name=AGENT_NAME,
-                    system_prompt=prompts["investigatorSystemPrompt"],
-                    repair_directive=prompts["repairDirective"],
-                    language_directives=prompt.language_directives,
-                    lease=repair_lease,
-                ),
+                RepairNode.name: RepairNode(deps, repair_lease),
                 FinalizeNode.name: FinalizeNode(),
                 EmptyNode.name: EmptyNode(),
             },
@@ -138,10 +91,10 @@ async def run_recipe_scan(
         build_routes(usage, ValidateCandidateNode.name),
     )
     graph = RECIPE_SCAN_GRAPH.compiled(saver)
-    config = _execution_config(
-        30,
+    config = execution_config(
+        _RECURSION_LIMIT,
         TraceSafeMetadata(
-            agent_name=AGENT_NAME,
+            agent_name=AgentJobKind.RECIPE_SCAN,
             model_requested=req.model,
             prompt_version=prompt.version(),
             job_id=req.jobId,
@@ -173,10 +126,15 @@ async def run_recipe_scan(
         config=config,
         durability=job_durability(saver),
     )
-    return final["result"] or {"recipes": [], "provenance": wire_provenance(ProvenanceCatalog())}
+    result: RecipeScanResult = final["result"] or RecipeScanResult(
+        provenance=wire_provenance(ProvenanceCatalog())
+    )
+    return result.model_dump(mode="json", exclude_none=True)
 
 
-def _execution_config(limit: int, trace: TraceSafeMetadata, thread_id: str | None) -> RunnableConfig:
-    """재개할 실행은 잡 하나를 열쇠로 삼고, 열쇠를 모르는 실행은 보존하지 않는다."""
-    config = recursion_config(limit, trace)
-    return config if thread_id is None else with_thread(config, thread_id)
+RECIPE_SCAN_JOB = JobAgent(
+    kind=AgentJobKind.RECIPE_SCAN,
+    prepare=prepare_recipe_scan,
+    run=run_recipe_scan,
+    deliver=deliver_recipes,
+)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from ..agents.runtime.ledger import SqlRow
+from ..agents.shared.instant import opt_iso
 
 # 값이 없으면 궤적 한 줄에 싣지 않는 자리이며 열 이름과 wire 이름을 함께 든다.
 _OPTIONAL_STEP_FIELDS: tuple[tuple[str, str], ...] = (
@@ -37,10 +37,10 @@ def job_dto(row: SqlRow) -> dict[str, Any]:
         "result": row["result"] or {},
         "usage": row["usage"] or {},
         "error": row["error"],
-        "createdAt": iso(row["created_at"]),
-        "updatedAt": iso(row["updated_at"]),
-        "startedAt": iso(row["started_at"]),
-        "completedAt": iso(row["completed_at"]),
+        "createdAt": opt_iso(row["created_at"]),
+        "updatedAt": opt_iso(row["updated_at"]),
+        "startedAt": opt_iso(row["started_at"]),
+        "completedAt": opt_iso(row["completed_at"]),
     }
 
 
@@ -58,11 +58,3 @@ def job_step_dto(row: SqlRow) -> dict[str, Any]:
         if row[column] is not None:
             step[name] = row[column]
     return step
-
-
-def iso(value: datetime | None) -> str | None:
-    """시각을 자바스크립트 Date가 내는 밀리초 세 자리 UTC 문자열로 적는다."""
-    if value is None:
-        return None
-    moment = value.astimezone(UTC)
-    return f"{moment.strftime('%Y-%m-%dT%H:%M:%S')}.{moment.microsecond // 1000:03d}Z"

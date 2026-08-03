@@ -2,13 +2,14 @@
 
 from pydantic import BaseModel, Field
 
+from .json_view import JsonObject
 from .models import AgentErrorDTO, AgentRunObservationDTO, AgentStepDTO, UsageDTO
 
 
 class AgentResponse(BaseModel):
     """세 에이전트 공통 응답이며 data는 성공 시 구조화 출력이고 실패 시 None이다."""
 
-    data: dict[str, object] | None = None
+    data: JsonObject | None = None
     modelUsed: str
     durationMs: int
     numTurns: int | None = None

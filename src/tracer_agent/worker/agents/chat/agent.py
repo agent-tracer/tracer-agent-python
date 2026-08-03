@@ -10,11 +10,12 @@ from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, Chat
 
 from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.llm.client import make_chat
+from ..runtime.llm.client import make_chat_pair
 from ..runtime.llm.structured_agent import recursion_config, recursion_limit_for
 from ..runtime.node import NodeRegistry
+from ..runtime.routes import FINALIZE
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
-from ..runtime.validation_graph import FINALIZE, ValidationGraphContext
+from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
 from .drafts import DraftPublisher
 from .graph import CHAT_GRAPH, CHAT_NODE_NAMES
@@ -41,25 +42,14 @@ def _build_node(
     drafts: DraftPublisher | None = None,
     prompt: AgentPrompt,
 ) -> ConverseNode:
-    tokens = req.limits.maxOutputTokens
-    chat = make_chat(
-        req.model, req.apiKey, req.deadlineMs, feature_max_output_tokens=tokens, streaming=streaming
-    )
-    fallback_model = req.effective_fallback_model()
-    fallback_chat = (
-        make_chat(
-            fallback_model, req.apiKey, req.deadlineMs, feature_max_output_tokens=tokens, streaming=streaming
-        )
-        if fallback_model is not None
-        else None
-    )
+    chats = make_chat_pair(req, streaming=streaming)
     return ConverseNode(
         req,
         http_client,
         checkpoints,
         usage,
-        chat,
-        fallback_chat,
+        chats.primary,
+        chats.fallback,
         agent_name=AGENT_NAME,
         drafts=drafts,
         system_prompt=build_system_prompt(prompt),
@@ -127,4 +117,5 @@ async def run_chat(
             ),
         ),
     )
-    return final["result"] or ChatResult().model_dump(mode="json")
+    result: ChatResult = final["result"] or ChatResult()
+    return result.model_dump(mode="json")

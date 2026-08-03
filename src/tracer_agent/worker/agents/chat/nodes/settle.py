@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 from tracer_agent.shared.agents.chat.models import ChatResult, ChatState, SettleUpdate
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
+from ...runtime.llm.trajectory import step_content_text
 from ...runtime.node import GraphNode
 
 
@@ -22,28 +23,14 @@ class SettleNode(GraphNode[ChatState, SettleUpdate]):
             assistantText=redact_text(final_text(state.get("messages") or []), stage=RedactionStage.OUTPUT),
             proposedWrites=state.get("proposals") or [],
         )
-        return {"result": result.model_dump(mode="json")}
+        return {"result": result}
 
 
 def final_text(messages: list[Any]) -> str:
     """도구 호출로 끝난 메시지를 건너뛰고 사용자에게 보일 마지막 답변을 고른다."""
     for message in reversed(messages):
         if isinstance(message, AIMessage) and not message.tool_calls:
-            text = message_text(message.content)
+            text = step_content_text(message.content)
             if text:
                 return text
-    return ""
-
-
-def message_text(content: Any) -> str:
-    """모델이 낸 텍스트 블록만 이어 붙인다."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = [
-            block["text"]
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)
-        ]
-        return "".join(parts)
     return ""

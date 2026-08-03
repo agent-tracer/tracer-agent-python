@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from tracer_agent.shared.agents.chat.models import ProposedWrite
 from tracer_agent.shared.agents.chat.tools.surface import recall_tool_name
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.telemetry.spans import tool_span
@@ -49,13 +50,13 @@ class ChatToolArgsInvalid(ValueError):
     """모델이 낸 인자가 계약의 인자 모델을 통과하지 못했음을 부른 자리에 알린다."""
 
 
-def _validated(name: str, kwargs: dict[str, Any]) -> dict[str, object]:
+def _validated(name: str, kwargs: JsonObject) -> JsonObject:
     """모델이 고른 인자를 계약이 선언한 모델로 검증해 와이어 이름의 조회 인자로 만든다."""
     try:
         args = ARGS_MODELS[name].model_validate(kwargs)
     except ValidationError as invalid:
         raise ChatToolArgsInvalid(INVALID_ARGS) from invalid
-    dumped: dict[str, object] = args.model_dump(by_alias=True, exclude_none=True)
+    dumped: JsonObject = args.model_dump(by_alias=True, exclude_none=True)
     return dumped
 
 

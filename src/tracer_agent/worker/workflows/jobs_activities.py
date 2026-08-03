@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,39 +11,36 @@ import httpx
 from temporalio import activity
 from temporalio.exceptions import is_cancelled_exception
 
-from ...shared.agents.recipe_scan.models import RecipeScanRequest
 from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.runtime.notification import JobStatusNotifier
-from ...shared.agents.shared.models import AgentResponse
-from ...shared.agents.task_cleanup.models import TaskCleanupRequest
-from ...shared.agents.title_suggestion.models import TitleSuggestionRequest
+from ...shared.agents.shared.json_view import JsonObject, JsonValue, opt_text
+from ...shared.agents.shared.models import AgentExecutionRequest, AgentResponse
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
-from ...shared.workflows.jobs_kinds import wire_kind
+from ...shared.workflows.jobs_kinds import AgentJobKind
 from ...shared.workflows.jobs_ledger import JobLedger
 from ...shared.workflows.jobs_spec import (
     JOB_HEARTBEAT_INTERVAL_S,
     RUN_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
-    AgentJobKind,
     AgentJobRequest,
 )
-from ..agents.recipe_scan.agent import run_recipe_scan
+from ..agents.recipe_scan.agent import RECIPE_SCAN_JOB
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.completion import run_and_deliver
-from ..agents.runtime.execution.runner import AgentBody, execute
+from ..agents.runtime.execution.runner import execute
 from ..agents.runtime.execution.trace import ExecutionTrace
-from ..agents.runtime.outputs import deliver_job_outputs
+from ..agents.runtime.job_agent import JobAgent
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient
 from ..agents.shared.prompt_source_port import AgentPrompt
-from ..agents.task_cleanup.agent import run_task_cleanup
-from ..agents.task_cleanup.reader import load_cleanup_batch
-from ..agents.title_suggestion.agent import run_title_suggestion
-from ..agents.title_suggestion.reader import load_title_context
+from ..agents.task_cleanup.agent import TASK_CLEANUP_JOB
+from ..agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
 from .jobs_outcome import job_usage, status_and_error
 from .jobs_writer import JobExecutionWriter, JobOutcome
 
-JobRequest = TitleSuggestionRequest | RecipeScanRequest | TaskCleanupRequest
+JOB_AGENTS: dict[AgentJobKind, JobAgent[Any]] = {
+    job.kind: job for job in (TITLE_SUGGESTION_JOB, TASK_CLEANUP_JOB, RECIPE_SCAN_JOB)
+}
 
 
 class AgentJobActivities:
@@ -110,7 +107,7 @@ class AgentJobActivities:
         """잡 상태 전이를 알림 토픽에 실으며 발행자가 없으면 아무 일도 하지 않는다."""
         if self._notifier is None:
             return
-        payload: dict[str, Any] = {"jobId": job_id, "kind": wire_kind(kind), "status": status}
+        payload: JsonObject = {"jobId": job_id, "kind": kind.wire, "status": status}
         if task_id is not None:
             payload["taskId"] = task_id
         await self._notifier.job_updated(user_id, payload)
@@ -119,73 +116,36 @@ class AgentJobActivities:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
         return TracerApiClient(self._http, self._tracer_api_url, user_id)
 
-    async def _dispatch(self, kind: AgentJobKind, payload: dict[str, Any]) -> None:
-        """요청 종류에 맞는 그래프를 골라 돌린다."""
+    async def _dispatch(self, kind: AgentJobKind, payload: JsonObject) -> None:
+        """요청 종류를 맡은 잡이 스스로 요청을 세우고 자기 그래프를 돌리게 한다."""
         tracer = self._tracer(str(payload["userId"]))
-        if kind == "title-suggestion":
-            if "context" not in payload:
-                # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 컨텍스트를 이 시점에 스스로 조립한다.
-                context = await load_title_context(tracer, payload["taskId"])
-                payload = {**payload, "context": context.model_dump(mode="json")}
-            title_req = TitleSuggestionRequest.model_validate(payload)
+        job = JOB_AGENTS[kind]
+        req = await job.prepare(payload, tracer)
 
-            async def title_body(
-                trace: ExecutionTrace, req: TitleSuggestionRequest = title_req
-            ) -> dict[str, object]:
-                return await run_title_suggestion(
-                    req, tracer, trace, self._prompts["title-suggestion"], self._checkpoints
-                )
+        async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:
+            return await job.run(req, tracer, trace, self._prompts[kind], self._checkpoints)
 
-            await self._run_and_deliver(kind, title_req, title_body)
-            return
-        if kind == "task-cleanup":
-            if "batch" not in payload:
-                # 접수가 SDK 축을 거치지 않고 직접 받은 요청이라 후보 배치를 이 시점에 스스로 조립한다.
-                now = datetime.now(UTC)
-                batch = await load_cleanup_batch(tracer, now)
-                payload = {
-                    **payload,
-                    "batch": batch.model_dump(mode="json"),
-                    "scannedAt": now.isoformat(),
-                }
-            cleanup_req = TaskCleanupRequest.model_validate(payload)
+        await self._run_and_deliver(job, req, body)
 
-            async def cleanup_body(
-                trace: ExecutionTrace, req: TaskCleanupRequest = cleanup_req
-            ) -> dict[str, object]:
-                return await run_task_cleanup(
-                    req, tracer, trace, self._prompts["task-cleanup"], self._checkpoints
-                )
-
-            await self._run_and_deliver(kind, cleanup_req, cleanup_body)
-            return
-        recipe_req = RecipeScanRequest.model_validate(payload)
-
-        async def recipe_body(
-            trace: ExecutionTrace, req: RecipeScanRequest = recipe_req
-        ) -> dict[str, object]:
-            return await run_recipe_scan(req, tracer, trace, self._prompts["recipe-scan"], self._checkpoints)
-
-        await self._run_and_deliver(kind, recipe_req, recipe_body)
-
-    async def _resolve_payload(self, request: AgentJobRequest) -> dict[str, Any]:
+    async def _resolve_payload(self, request: AgentJobRequest) -> JsonObject:
         """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 당겨온다."""
         if _has_credentials(request.payload):
             return request.payload
         if self._envelopes is None:
             raise ValueError("agent job request has no credentials and no envelope source is wired")
-        user_id = request.payload.get("userId")
-        if not isinstance(user_id, str) or not user_id:
+        user_id = opt_text(request.payload.get("userId"))
+        if not user_id:
             raise ValueError("agent job request has no user id to pull an envelope for")
-        envelope = await self._envelopes.issue(wire_kind(request.kind), user_id)
+        envelope = await self._envelopes.issue(request.kind.wire, user_id)
         return merge_envelope(request.payload, envelope)
 
     async def _run_and_deliver(
         self,
-        kind: AgentJobKind,
-        req: JobRequest,
-        body: AgentBody,
+        job: JobAgent[Any],
+        req: AgentExecutionRequest,
+        body: Callable[[ExecutionTrace], Awaitable[dict[str, JsonValue]]],
     ) -> None:
+        kind = job.kind
         prompt = self._prompts[kind]
 
         async def run_once() -> AgentResponse:
@@ -232,12 +192,12 @@ class AgentJobActivities:
                 await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
             await self._notify(kind, req.executionId, req.userId, status, _task_id(req))
             if status == "completed":
-                await deliver_job_outputs(self._tracer(req.userId), kind, req.executionId, response.data)
+                await job.settle_outputs(self._tracer(req.userId), req.executionId, response.data)
 
         await run_and_deliver(self._http, req.completionCallback, run_once, settle)
 
 
-def _task_id(req: JobRequest) -> str | None:
+def _task_id(req: AgentExecutionRequest) -> str | None:
     """태스크에 매인 잡만 그 식별자를 알림에 싣는다."""
     task_id = getattr(req, "taskId", None)
     return task_id if isinstance(task_id, str) else None
@@ -248,9 +208,9 @@ def _attempt(attempt_id: str | None) -> int:
     return int(attempt_id) if attempt_id is not None and attempt_id.isdigit() else 1
 
 
-def merge_envelope(payload: dict[str, Any], envelope: JobExecutionEnvelope) -> dict[str, Any]:
+def merge_envelope(payload: JsonObject, envelope: JobExecutionEnvelope) -> JsonObject:
     """자격과 단가와 한도와 데드라인을 봉투에서 받아 이번 시도의 실행 입력에 싣는다."""
-    merged: dict[str, Any] = {
+    merged: JsonObject = {
         **payload,
         "apiKey": envelope.api_key,
         "modelRates": envelope.model_rates,
@@ -263,12 +223,12 @@ def merge_envelope(payload: dict[str, Any], envelope: JobExecutionEnvelope) -> d
     return merged
 
 
-def _has_credentials(payload: dict[str, Any]) -> bool:
+def _has_credentials(payload: JsonObject) -> bool:
     api_key = payload.get("apiKey")
     return isinstance(api_key, str) and len(api_key) > 0
 
 
-def _has_model(payload: dict[str, Any]) -> bool:
+def _has_model(payload: JsonObject) -> bool:
     model = payload.get("model")
     return isinstance(model, str) and len(model) > 0
 

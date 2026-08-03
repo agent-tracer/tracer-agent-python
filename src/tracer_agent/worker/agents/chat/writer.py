@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import httpx
 
 from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, tool_surface
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 
 from .reader import scoped_headers, unwrap_envelope
 
@@ -42,7 +43,7 @@ class ChatWriteClient:
         self._thread_id = thread_id
         self._scope_token = scope_token
 
-    async def propose(self, tool_name: str, args: dict[str, object]) -> ChatProposalResult:
+    async def propose(self, tool_name: str, args: JsonObject) -> ChatProposalResult:
         """쓰기 도구 호출 하나를 실행하지 않고 확인 대기 행으로 세운다."""
         if tool_surface(tool_name) != CONFIRM_SURFACE:
             raise ValueError(f"{tool_name} is not a write tool")

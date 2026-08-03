@@ -9,6 +9,7 @@ from temporalio.exceptions import ApplicationError
 
 from ...shared.agents.chat.execution_ledger import ChatExecutionSpend
 from ...shared.agents.chat.models import ChatRequest
+from ...shared.agents.shared.json_view import JsonObject
 from ...shared.agents.shared.models import AgentResponse, AgentStepDTO, UsageDTO
 from ...shared.workflows.chat_spec import (
     STOP_BUDGET_LANDED,
@@ -180,7 +181,7 @@ def _turn(
     )
 
 
-def _tool_calls(data: dict[str, object]) -> list[dict[str, Any]]:
+def _tool_calls(data: JsonObject) -> list[dict[str, Any]]:
     proposed = data.get("proposedWrites")
     if not isinstance(proposed, list):
         return []

@@ -3,24 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from .execution.trace import ExecutionTrace
-from .validation_graph import EMPTY, FINALIZE, REPAIR, ValidationRoute, ValidationRouteName
+from .routes import EMPTY, FINALIZE, REPAIR, ValidatedState, ValidationRoute, ValidationRouteName
 
 
-def build_validation_router(
+def build_validation_router[StateT: ValidatedState](
     trace: ExecutionTrace,
     validation_node: str,
     *,
     pass_reason: str,
     repair_reason: str,
     exhausted_reason: str,
-    has_result: Callable[[Any], bool] | None = None,
-) -> ValidationRoute:
+    has_result: Callable[[StateT], bool] | None = None,
+) -> ValidationRoute[StateT]:
     """검증 통과·수리 전·수리 후 소진 세 경우를 정해진 사유 문구와 함께 경로로 가른다."""
 
-    def route_validation(state: Any) -> ValidationRouteName:
+    def route_validation(state: StateT) -> ValidationRouteName:
         if not state["validation_errors"]:
             route = _with_result(has_result, state, FINALIZE)
             reason = pass_reason
@@ -40,9 +39,9 @@ def build_validation_router(
     return route_validation
 
 
-def _with_result(
-    has_result: Callable[[Any], bool] | None,
-    state: Any,
+def _with_result[StateT: ValidatedState](
+    has_result: Callable[[StateT], bool] | None,
+    state: StateT,
     default: ValidationRouteName,
 ) -> ValidationRouteName:
     if has_result is None:

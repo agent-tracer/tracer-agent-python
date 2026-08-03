@@ -3,26 +3,24 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 from tracer_agent.shared.agents.task_cleanup.models import (
+    CandidateReason,
     CleanupCandidate,
     CleanupDraftSuggestion,
+    CleanupTaskStatus,
     TaskCleanupState,
 )
 
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.routes import ValidationRoute
 from ..runtime.routing import build_validation_router
-
-ValidationRoute = Callable[[TaskCleanupState], Literal["repair", "finalize", "empty"]]
 
 # SDK 축의 buildCleanupCandidates와 값을 맞춘 상수다.
 CLEANUP_RECENT_ACTIVITY = timedelta(minutes=30)
 CLEANUP_STALE = timedelta(days=14)
-_RUNNING_STATUS = "running"
-_WAITING_STATUS = "waiting"
 _PLACEHOLDER_TITLE_PATTERN = re.compile(
     r"^(test|fix\s*bug|todo|wip|session started|정리해줘|테스트|임시)$", re.IGNORECASE
 )
@@ -89,17 +87,17 @@ def _candidate_reasons(
     title_counts: dict[str, int],
     now: datetime,
     last_activity: datetime,
-) -> list[str]:
-    reasons: list[str] = []
+) -> list[CandidateReason]:
+    reasons: list[CandidateReason] = []
     if not has_events:
-        reasons.append("no-events")
+        reasons.append(CandidateReason.NO_EVENTS)
     if title_counts.get(_normalize_title(task["title"]), 0) > 1:
-        reasons.append("duplicate-title")
+        reasons.append(CandidateReason.DUPLICATE_TITLE)
     if _PLACEHOLDER_TITLE_PATTERN.fullmatch(task["title"].strip()):
-        reasons.append("placeholder-title")
-    is_active_status = task["status"] in (_RUNNING_STATUS, _WAITING_STATUS)
+        reasons.append(CandidateReason.PLACEHOLDER_TITLE)
+    is_active_status = task["status"] in tuple(CleanupTaskStatus)
     if is_active_status and now - last_activity >= CLEANUP_STALE:
-        reasons.append("stale")
+        reasons.append(CandidateReason.STALE)
     return reasons
 
 
@@ -149,7 +147,7 @@ def validate_suggestions(
     return valid, errors
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute:
+def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TaskCleanupState]:
     """검증 결과에 따른 분기 함수를 만든다."""
     return build_validation_router(
         trace,

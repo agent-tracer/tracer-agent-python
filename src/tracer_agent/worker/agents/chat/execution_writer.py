@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger, ChatExecutionSpend
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.runtime.wakeup import UpdatePublisher
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.models import AgentRunObservationDTO, AgentStepDTO
 
 _APPEND_ASSISTANT_MESSAGE = """
@@ -76,9 +76,9 @@ class ChatTurnOutcome:
     canceled: bool
     text: str
     spend: ChatExecutionSpend
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[JsonObject] = field(default_factory=list)
     steps: list[AgentStepDTO] = field(default_factory=list)
-    observation: dict[str, Any] = field(default_factory=dict)
+    observation: JsonObject = field(default_factory=dict)
 
 
 class ChatExecutionWriter:
@@ -110,7 +110,7 @@ class ChatExecutionWriter:
         execution_id: str,
         user_id: str,
         attempt: int,
-        observation_payload: dict[str, Any],
+        observation_payload: JsonObject,
         now: datetime,
     ) -> None:
         """실패로 끝난 시도도 잡 전체의 terminal 전이보다 먼저 안전한 관측을 남긴다."""
@@ -147,7 +147,7 @@ class ChatExecutionWriter:
         execution_id: str,
         user_id: str,
         attempt: int,
-        observation_payload: dict[str, Any],
+        observation_payload: JsonObject,
         now: datetime,
     ) -> None:
         observation = AgentRunObservationDTO.model_validate(observation_payload)
@@ -205,7 +205,7 @@ def step_id(execution_id: str, attempt: int, seq: int) -> str:
     return f"{execution_id}:{attempt}:{seq}"
 
 
-def _observation_payload(row: dict[str, Any]) -> dict[str, Any]:
+def _observation_payload(row: JsonObject) -> JsonObject:
     """DB의 snake_case 행을 언어 중립 canonical 계약으로 되돌린다."""
     return {
         "executionId": row["execution_id"],

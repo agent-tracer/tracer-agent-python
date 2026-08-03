@@ -9,7 +9,8 @@ from tracer_agent.shared.agents.task_cleanup.models import InspectDispatch, Task
 
 from ..runtime.durable_graph import DurableGraph
 from ..runtime.orchestration import allocate_cost_shares
-from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, observed
+from ..runtime.routes import EMPTY
+from ..runtime.validation_graph import add_validation_tail, new_graph, observed
 from .nodes.decision import InvestigateNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
 

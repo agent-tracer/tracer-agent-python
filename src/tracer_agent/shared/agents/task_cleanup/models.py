@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import operator
+from enum import StrEnum
 from typing import Annotated, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
@@ -20,6 +21,22 @@ MAX_EVIDENCE_EVENT_IDS = 100
 _TOOL_RESPONSE = ConfigDict(extra="ignore")
 
 
+class CandidateReason(StrEnum):
+    """서버가 결정론적으로 찾아낸 정리 후보의 신호다."""
+
+    NO_EVENTS = "no-events"
+    DUPLICATE_TITLE = "duplicate-title"
+    PLACEHOLDER_TITLE = "placeholder-title"
+    STALE = "stale"
+
+
+class CleanupTaskStatus(StrEnum):
+    """정리 판정이 아직 도는 태스크로 보는 상태다."""
+
+    RUNNING = "running"
+    WAITING = "waiting"
+
+
 class CleanupCandidate(BaseModel):
     model_config = _TOOL_RESPONSE
 
@@ -30,7 +47,7 @@ class CleanupCandidate(BaseModel):
     lastEventAt: str | None
     hasEvents: bool
     activeChildCount: int = Field(ge=0)
-    candidateReasons: list[TrimmedStr]
+    candidateReasons: list[CandidateReason]
 
 
 class CleanupBatch(BaseModel):
@@ -49,8 +66,6 @@ class TaskCleanupRequest(AgentExecutionRequest):
     model_config = ConfigDict(extra="forbid")
 
     scannedAt: TrimmedStr = Field(min_length=1)
-    # 조회 범위를 정하는 값이라 도메인 입력이며 멱등 해시에 함께 든다.
-    userId: TrimmedStr = Field(min_length=1)
     language: Language = "auto"
     maxSuggestions: int = Field(ge=1, le=MAX_SUGGESTIONS)
     batch: CleanupBatch
@@ -234,10 +249,16 @@ class RepairUpdate(TypedDict):
     model_cost_usd: float
 
 
+class CleanupResult(BaseModel):
+    """정리 스캔이 창구에 내는 산출물이다."""
+
+    suggestions: list[CleanupDraftSuggestion] = Field(default_factory=list)
+
+
 class ResultUpdate(TypedDict):
     """종단 노드가 갱신하는 상태 부분집합이다."""
 
-    result: dict[str, object]
+    result: CleanupResult
 
 
 class TaskCleanupState(TypedDict):
@@ -262,4 +283,4 @@ class TaskCleanupState(TypedDict):
     suggestions: list[CleanupDraftSuggestion]
     validation_errors: list[str]
     repair_attempted: bool
-    result: dict[str, object] | None
+    result: CleanupResult | None

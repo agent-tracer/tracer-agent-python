@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Literal
-
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_RECIPE_CANDIDATES,
     ProvenanceCatalog,
@@ -13,9 +10,8 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.routes import ValidationRoute
 from ..runtime.routing import build_validation_router
-
-ValidationRoute = Callable[[RecipeScanState], Literal["repair", "finalize", "empty"]]
 
 
 def validate_recipe_candidates(
@@ -95,7 +91,7 @@ def validate_recipe_candidate(
     return errors
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute:
+def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[RecipeScanState]:
     """검증 결과에 따른 분기 함수를 만든다."""
     return build_validation_router(
         trace,

@@ -7,6 +7,7 @@ from typing import Literal, TypedDict, get_args
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..shared.json_view import JsonObject
 from ..shared.models import AgentExecutionEnvelope, Language, TrimmedStr
 
 ChatMessageRole = Literal["user", "assistant", "tool"]
@@ -35,7 +36,7 @@ class ChatHistoryToolCall(BaseModel):
 
     id: TrimmedStr = Field(min_length=1)
     name: TrimmedStr = Field(min_length=1)
-    args: dict[str, object] = Field(default_factory=dict)
+    args: JsonObject = Field(default_factory=dict)
 
 
 class ChatHistoryMessage(BaseModel):
@@ -116,7 +117,7 @@ class ProposedWrite(BaseModel):
 
     confirmationId: TrimmedStr = Field(min_length=1)
     toolName: TrimmedStr = Field(min_length=1)
-    args: dict[str, object] = Field(default_factory=dict)
+    args: JsonObject = Field(default_factory=dict)
 
 
 class ChatResult(BaseModel):
@@ -147,7 +148,7 @@ class ConverseUpdate(TypedDict):
 class SettleUpdate(TypedDict):
     """종결 노드가 갱신하는 상태 부분집합이다."""
 
-    result: dict[str, object]
+    result: ChatResult
 
 
 class ChatState(TypedDict):
@@ -161,4 +162,4 @@ class ChatState(TypedDict):
     model_cost_usd: float
     # 대화가 세운 확인 대기 행이며 종결이 결과에 인용한다.
     proposals: list[ProposedWrite]
-    result: dict[str, object] | None
+    result: ChatResult | None

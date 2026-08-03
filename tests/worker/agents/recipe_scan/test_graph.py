@@ -16,6 +16,7 @@ from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"}
 
@@ -123,7 +124,7 @@ async def _run(
     ledger: FakeTracerApi | None = None,
 ) -> AgentResponse:
     req = _request()
-    monkeypatch.setattr(recipe_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
     fake_ledger = ledger if ledger is not None else _default_ledger()
     return await execute(
         "recipe-scan",

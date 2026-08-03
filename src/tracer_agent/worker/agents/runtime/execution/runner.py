@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
 
+from opentelemetry.context import Context
+
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.models import (
     AgentErrorDTO,
     AgentResponse,
@@ -21,7 +23,7 @@ from ..telemetry.spans import invoke_agent_span, mark_span_error
 from .registry import IdempotencyConflict, run_registered
 from .trace import ExecutionTrace
 
-AgentBody = Callable[[ExecutionTrace], Awaitable[dict[str, object]]]
+AgentBody = Callable[[ExecutionTrace], Awaitable[JsonObject]]
 
 
 async def execute(
@@ -32,7 +34,7 @@ async def execute(
     job_id: str | None = None,
     idempotency_key: str | None = None,
     run_id: str | None = None,
-    parent_context: Any = None,
+    parent_context: Context | None = None,
     input_hash: str = "",
     execution_id: str | None = None,
     attempt_id: str | None = None,
@@ -77,7 +79,7 @@ async def _execute(
     deadline_ms: int,
     body: AgentBody,
     job_id: str | None = None,
-    parent_context: Any = None,
+    parent_context: Context | None = None,
     execution_id: str | None = None,
     attempt_id: str = "1",
     *,
@@ -86,7 +88,7 @@ async def _execute(
 ) -> AgentResponse:
     started = time.monotonic()
     trace = ExecutionTrace()
-    data: dict[str, object] | None = None
+    data: JsonObject | None = None
     error = None
     usage_dto: UsageDTO | None = None
     async with invoke_agent_span(

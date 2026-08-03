@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
 from tracer_agent.shared.agents.task_cleanup.models import (
@@ -14,28 +13,23 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     InspectDispatch,
     InspectReport,
     InspectUpdate,
-    TaskCleanupRequest,
     TaskCleanupState,
     TriagePlan,
     TriageUpdate,
 )
 
-from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import ExecutionBudget
-from ...runtime.llm.standard_agent import StandardAgentContext
-from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
+from ...runtime.errors import exception_summary
 from ...runtime.node import GraphNode
+from ..deps import AGENT_NAME, CleanupDeps
 from ..failures import WORKER_FAILED
-from ..langchain_agent import build_cleanup_agent
 from ..prompts import build_inspect_prompt, build_triage_prompt
-from ..reader import CleanupLedgerReader
-from ..tools import INSPECT_TOOL_NAMES, TRIAGE_TOOL_NAMES, build_cleanup_registry
+from ..tools import INSPECT_TOOL_NAMES, TRIAGE_TOOL_NAMES
 
 _log = logging.getLogger(__name__)
 
 
 def _failure_reason(exc: Exception) -> str:
-    summary = str(exc).strip() or type(exc).__name__
+    summary = exception_summary(exc)
     return WORKER_FAILED.format(reason=summary)[:MAX_INSPECT_REASON_CHARS]
 
 
@@ -44,61 +38,26 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
 
     name = "triage"
 
-    def __init__(
-        self,
-        req: TaskCleanupRequest,
-        reader: CleanupLedgerReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-    ) -> None:
-        self._req = req
-        self._reader = reader
-        self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
-        self._budget = budget
-        self._agent_name = agent_name
-        self._system_prompt = system_prompt
+    def __init__(self, deps: CleanupDeps) -> None:
+        self._deps = deps
 
     async def run(self, _state: TaskCleanupState) -> TriageUpdate:
-        req = self._req
+        deps = self._deps
         exposed: dict[str, CleanupCandidate] = {}
         event_ids: dict[str, set[str]] = {}
-        triage_name = f"{self._agent_name}:triage"
-        budget = self._budget.new_loop(triage_name, req.model)
-        registry = build_cleanup_registry(
-            self._reader, req.batch, exposed, event_ids, agent_name=self._agent_name
-        )
-        agent = build_cleanup_agent(
-            self._chat,
-            self._system_prompt,
-            registry.langchain_tools(TRIAGE_TOOL_NAMES),
-            registry.transient_errors(),
+        budget = deps.new_loop(self.name)
+        plan, _messages = await deps.invoke(
+            budget=budget,
+            system_prompt=deps.prompts.triage_system,
+            tool_names=TRIAGE_TOOL_NAMES,
             output=TriagePlan,
-            fallback_chat=self._fallback_chat,
-            max_turns=self._req.limits.maxTurns,
+            messages=[HumanMessage(content=build_triage_prompt(len(deps.req.batch.candidates)))],
+            missing_response=f"{AGENT_NAME} triage produced no structured plan",
+            exposed_candidates=exposed,
+            event_ids_by_task=event_ids,
         )
-        result = await invoke_structured_agent(
-            agent,
-            messages=[HumanMessage(content=build_triage_prompt(len(req.batch.candidates)))],
-            context=StandardAgentContext(
-                agent_name=triage_name,
-                trace=self._usage,
-                budget=budget,
-                max_model_turns=self._req.limits.maxTurns,
-            ),
-            response_type=TriagePlan,
-            recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
-            missing_response=f"{self._agent_name} triage produced no structured plan",
-        )
-        plan = result.response
         chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments) or "없음"
-        self._usage.record_orchestration_event(
+        deps.usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",
             node_name=self.name,
@@ -116,70 +75,33 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
 
     name = "inspect"
 
-    def __init__(
-        self,
-        req: TaskCleanupRequest,
-        reader: CleanupLedgerReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-    ) -> None:
-        self._req = req
-        self._reader = reader
-        self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
-        self._budget = budget
-        self._agent_name = agent_name
-        self._system_prompt = system_prompt
+    def __init__(self, deps: CleanupDeps) -> None:
+        self._deps = deps
 
     async def run(self, payload: InspectDispatch) -> InspectUpdate:
-        req = self._req
-        assignment = payload.assignment
+        deps = self._deps
+        task_id = payload.assignment.taskId
         # 장부를 조사마다 새로 두어 다른 후보의 이벤트를 인용하지 못하게 한다.
         event_ids: dict[str, set[str]] = {}
-        name = f"{self._agent_name}:{CLEANUP_REVIEWER_ROLE}"
-        budget = self._budget.new_loop(name, req.model, max_cost_usd=payload.cost_budget)
+        budget = deps.new_loop(CLEANUP_REVIEWER_ROLE, max_cost_usd=payload.cost_budget)
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
-            registry = build_cleanup_registry(
-                self._reader, req.batch, {}, event_ids, agent_name=self._agent_name
-            )
-            agent = build_cleanup_agent(
-                self._chat,
-                self._system_prompt,
-                registry.langchain_tools(INSPECT_TOOL_NAMES),
-                registry.transient_errors(),
+            report, _messages = await deps.invoke(
+                budget=budget,
+                system_prompt=deps.prompts.inspect_system,
+                tool_names=INSPECT_TOOL_NAMES,
                 output=InspectReport,
-                fallback_chat=self._fallback_chat,
-                max_turns=self._req.limits.maxTurns,
+                messages=[HumanMessage(content=build_inspect_prompt(task_id))],
+                missing_response=f"{task_id} inspection produced no structured report",
+                event_ids_by_task=event_ids,
             )
-            result = await invoke_structured_agent(
-                agent,
-                messages=[HumanMessage(content=build_inspect_prompt(assignment.taskId))],
-                context=StandardAgentContext(
-                    agent_name=name,
-                    trace=self._usage,
-                    budget=budget,
-                    max_model_turns=self._req.limits.maxTurns,
-                ),
-                response_type=InspectReport,
-                recursion_limit=recursion_limit_for(self._req.limits.maxTurns),
-                missing_response=f"{assignment.taskId} inspection produced no structured report",
-            )
-            report = result.response
         except Exception as exc:
             # 조사가 무너진 후보는 안전하게 보존하도록 보관 불가로 올린다.
-            reason = _failure_reason(exc)
-            _log.warning("inspect failed for %s: %s", assignment.taskId, exc)
+            _log.warning("inspect failed for %s: %s", task_id, exc)
             report = InspectReport(
-                taskId=assignment.taskId,
+                taskId=task_id,
                 archivable=False,
-                reason=reason,
+                reason=_failure_reason(exc),
                 citedEventIds=[],
             )
         return {

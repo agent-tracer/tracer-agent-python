@@ -12,10 +12,10 @@ from tracer_agent.worker.agents.task_cleanup.prompts import (
 )
 
 _PROMPTS = build_prompt_bundle(TASK_CLEANUP_PROMPT)
-INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
-TRIAGE_SYSTEM_PROMPT = _PROMPTS["triageSystemPrompt"]
-INSPECT_SYSTEM_PROMPT = _PROMPTS["inspectSystemPrompt"]
-REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS.investigator_system
+TRIAGE_SYSTEM_PROMPT = _PROMPTS.triage_system
+INSPECT_SYSTEM_PROMPT = _PROMPTS.inspect_system
+REPAIR_DIRECTIVE = _PROMPTS.repair_directive
 
 
 def _flat(prompt: str) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_RECIPE_CANDIDATES,
@@ -13,23 +14,25 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 
 from ..shared.prompt_source_port import AgentPrompt
 
-# 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
-TEMPLATE_KEYS: dict[str, str] = {
-    "investigatorSystemPrompt": "recipe-scan.investigator.system",
-    "probeSystemPrompt": "recipe-scan.probe.system",
-    "surveySystemPrompt": "recipe-scan.survey.system",
-    "repairDirective": "recipe-scan.investigator.repair",
-}
+
+@dataclass(frozen=True)
+class RecipePrompts:
+    """이 에이전트가 이번 실행에서 쓸 조립된 프롬프트다."""
+
+    investigator_system: str
+    probe_system: str
+    survey_system: str
+    repair_directive: str
 
 
-def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
+def build_prompt_bundle(prompt: AgentPrompt) -> RecipePrompts:
     """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 프롬프트 넷을 만든다."""
-    return {
-        "investigatorSystemPrompt": _investigator(prompt),
-        "probeSystemPrompt": _probe(prompt),
-        "surveySystemPrompt": _survey(prompt),
-        "repairDirective": _repair(prompt),
-    }
+    return RecipePrompts(
+        investigator_system=_investigator(prompt),
+        probe_system=_probe(prompt),
+        survey_system=_survey(prompt),
+        repair_directive=_repair(prompt),
+    )
 
 
 def _investigator(prompt: AgentPrompt) -> str:

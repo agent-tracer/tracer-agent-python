@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext
 
 from ..shared.prompt_source_port import AgentPrompt
 
-# 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
-TEMPLATE_KEYS: dict[str, str] = {
-    "investigatorSystemPrompt": "title-suggestion.investigator.system",
-    "repairDirective": "title-suggestion.investigator.repair",
-}
+
+@dataclass(frozen=True)
+class TitlePrompts:
+    """이 에이전트가 이번 실행에서 쓸 조립된 프롬프트다."""
+
+    investigator_system: str
+    repair_directive: str
 
 
 # 도구 예산을 무엇으로 세는지는 실행 기계가 소유하므로 근거를 더 캐라는 문단만 이 백엔드가 쓴다.
-def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
+def build_prompt_bundle(prompt: AgentPrompt) -> TitlePrompts:
     """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 프롬프트 둘을 만든다."""
     template = prompt.template("title-suggestion.investigator.system")
     investigator = "\n".join(
@@ -42,7 +46,7 @@ def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
             prompt.template("title-suggestion.investigator.repair").slot("repairDirective"),
         ]
     )
-    return {"investigatorSystemPrompt": investigator, "repairDirective": repair}
+    return TitlePrompts(investigator_system=investigator, repair_directive=repair)
 
 
 def build_user_prompt(task_id: str, context: TitleSuggestionContext, directive: str) -> str:

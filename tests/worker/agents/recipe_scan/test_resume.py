@@ -17,6 +17,7 @@ from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.runtime.serde import graph_serde
 
 _PLAN = DispatchPlan(
@@ -71,7 +72,7 @@ async def test_같은_열쇠로_다시_실행하면_끝난_노드를_다시_태�
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     chat = _FailOnceChat([{"recipes": []}, {"recipes": []}], plan=_PLAN)
-    monkeypatch.setattr(recipe_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(recipe_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
     checkpoints = _SharedSaver()
     req = _request()
 

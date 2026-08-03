@@ -17,6 +17,7 @@ from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
 from tracer_agent.worker.agents.chat.nodes.settle import final_text
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 
 def _request(**overrides: Any) -> ChatRequest:
@@ -45,7 +46,7 @@ async def _run(
     monkeypatch: pytest.MonkeyPatch, turns: list[Any], **overrides: Any
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     posted: list[dict[str, Any]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -76,7 +77,7 @@ async def test_접수된_실행은_누적_답변을_창구로_되돌려_보낸�
 async def test_서버가_종결을_알리면_실행을_더_끌지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
     # 취소 레지스트리는 프로세스 로컬이라 다른 인스턴스에서 돈 실행에는 닿지 않는다.
     chat = FakeToolLoopChat(["한참 답하는 중"])
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
 
     def handle(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"stored": False, "terminal": True})
@@ -156,7 +157,7 @@ async def _system_content(
     monkeypatch: pytest.MonkeyPatch, turns: list[Any], **overrides: Any
 ) -> tuple[FakeToolLoopChat, list[Any]]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     req = _request(draftCallback=None, **overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
         await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT)
@@ -195,7 +196,7 @@ async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선�
 ) -> None:
     # 지난 이력의 human·ai 메시지 뒤에 맥락을 시스템으로 붙이면 Anthropic이 메시지 순서를 거절한다.
     chat = FakeToolLoopChat(["정리했습니다"])
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     req = _request(
         messages=[
             {"role": "user", "content": "task-1 상태 알려줘"},

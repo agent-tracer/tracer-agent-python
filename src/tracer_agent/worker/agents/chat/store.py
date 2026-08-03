@@ -19,6 +19,8 @@ from langgraph.store.base import (
     SearchOp,
 )
 
+from tracer_agent.shared.agents.shared.instant import parse_instant
+
 from .memory import ChatMemoryClient, ChatMemoryResult
 
 # 장기기억은 스레드를 가로지르고 사용자 범위는 생성 시점에 묶이므로 네임스페이스가 사용자를 담지 않는다.
@@ -131,6 +133,6 @@ def _at(row: dict[str, Any]) -> datetime:
     if not isinstance(raw, str):
         return _EPOCH
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parse_instant(raw)
     except ValueError:
         return _EPOCH

@@ -19,8 +19,11 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     ProbeAssignment,
     ProbeDispatch,
     ProvenanceCatalog,
+    ProvenanceWire,
     RecipeScanRequest,
+    RecipeScanResult,
 )
+from tracer_agent.worker.agents.recipe_scan.deps import RecipeDeps
 from tracer_agent.worker.agents.recipe_scan.nodes.probe import ProbeNode
 from tracer_agent.worker.agents.recipe_scan.nodes.result import EmptyNode, FinalizeNode
 from tracer_agent.worker.agents.recipe_scan.nodes.survey import SurveyNode
@@ -29,24 +32,27 @@ from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import AgentBudgetLease, ExecutionBudget
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"}
 
 
-def _probe_node(chat: FakeToolLoopChat, *, wall_clock_ceiling_s: float, req: RecipeScanRequest) -> ProbeNode:
-    return ProbeNode(
-        req,
-        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
-        ExecutionTrace(),
-        chat,
-        None,
-        ExecutionBudget(1.0, mk_rates()),
-        agent_name="recipe-scan",
-        system_prompt=build_prompt_bundle(RECIPE_SCAN_PROMPT)["probeSystemPrompt"],
-        wall_clock_ceiling_s=wall_clock_ceiling_s,
+def _deps(chat: FakeToolLoopChat, req: RecipeScanRequest) -> RecipeDeps:
+    return RecipeDeps(
+        req=req,
+        reader=RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        search=RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
+        usage=ExecutionTrace(),
+        chats=ChatPair(chat, None),  # type: ignore[arg-type]
+        budget=ExecutionBudget(1.0, mk_rates()),
+        prompts=build_prompt_bundle(RECIPE_SCAN_PROMPT),
         prompt=RECIPE_SCAN_PROMPT,
+        language_directives=RECIPE_SCAN_PROMPT.language_directives,
     )
+
+
+def _probe_node(chat: FakeToolLoopChat, *, wall_clock_ceiling_s: float, req: RecipeScanRequest) -> ProbeNode:
+    return ProbeNode(_deps(chat, req), wall_clock_ceiling_s)
 
 
 def _request(**overrides: Any) -> RecipeScanRequest:
@@ -70,19 +76,7 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
             raise RuntimeError("agent blew up")
 
     req = _request()
-    node = ProbeNode(
-        req,
-        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
-        ExecutionTrace(),
-        BoomChat([]),
-        None,
-        ExecutionBudget(1.0, mk_rates()),
-        agent_name="recipe-scan",
-        system_prompt=build_prompt_bundle(RECIPE_SCAN_PROMPT)["probeSystemPrompt"],
-        wall_clock_ceiling_s=60.0,
-        prompt=RECIPE_SCAN_PROMPT,
-    )
+    node = _probe_node(BoomChat([]), wall_clock_ceiling_s=60.0, req=req)
 
     result = await node.run(
         ProbeDispatch(
@@ -173,15 +167,15 @@ async def test_종단_노드가_이_실행의_근거_장부를_결과에_싣는�
     finalized = await FinalizeNode().run(state)
     empty = await EmptyNode().run(state)
 
-    wired = {
-        "eventIdsByTask": {"task-1": ["event-1", "event-2"]},
-        "turnIdsByTask": {"task-1": ["turn-1"]},
-        "ruleIds": ["rule-1"],
-        "recipeRevs": {"recipe-1": 3},
-    }
+    wired = ProvenanceWire(
+        eventIdsByTask={"task-1": ["event-1", "event-2"]},
+        turnIdsByTask={"task-1": ["turn-1"]},
+        ruleIds=["rule-1"],
+        recipeRevs={"recipe-1": 3},
+    )
     # 워커가 소유권 밖의 인용까지 같은 기준으로 거르려면 빈 결과에도 장부가 실려야 한다.
-    assert finalized["result"] == {"recipes": [], "provenance": wired}
-    assert empty["result"] == {"recipes": [], "provenance": wired}
+    assert finalized["result"] == RecipeScanResult(provenance=wired)
+    assert empty["result"] == RecipeScanResult(provenance=wired)
 
 
 async def test_0턴_리스를_받은_전문가는_모델을_부르지_않는다() -> None:
@@ -211,16 +205,8 @@ async def test_0턴_리스를_받은_조율자는_모델을_부르지_않는다(
             raise AssertionError("0턴 리스를 받은 노드는 모델을 부르면 안 된다")
 
     node = SurveyNode(
-        _request(),
-        ExecutionTrace(),
-        ExplodingChat([]),
-        None,
-        ExecutionBudget(1.0, mk_rates()),
+        _deps(ExplodingChat([]), _request()),
         AgentBudgetLease(max_turns=0, max_cost_usd=0.0),
-        build_prompt_bundle(RECIPE_SCAN_PROMPT)["surveySystemPrompt"],
-        RECIPE_SCAN_PROMPT,
-        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
     )
 
     result = await node.run({})  # type: ignore[arg-type]

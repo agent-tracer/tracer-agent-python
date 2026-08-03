@@ -13,6 +13,7 @@ from tests.support.prompts import CONTRACT_VERSION, TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
@@ -132,7 +133,7 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -178,7 +179,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다(monkeypatch:
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -218,7 +219,7 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -255,7 +256,7 @@ async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -268,7 +269,7 @@ async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다(monk
     ledger = FakeTracerApi()
     candidates: list[dict[str, object]] = []
     chat = FakeToolLoopChat([{"suggestions": []}])
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -309,7 +310,7 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
         ],
         worker_turns=worker_turns,
     )
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(chat, ledger, *candidates)
 
@@ -342,7 +343,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
 
     plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
     chat = OneInspectFails([{"suggestions": []}], report={"TriagePlan": plan})
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(
         chat,
@@ -362,7 +363,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
 async def test_고른_후보만_각자_예산으로_병렬_조사된다(monkeypatch: pytest.MonkeyPatch) -> None:
     plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
     chat = FakeToolLoopChat([{"suggestions": []}], report={"TriagePlan": plan})
-    monkeypatch.setattr(cleanup_mod, "make_chat", lambda *_a, **_k: chat)
+    monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
     res = await _run(
         chat,

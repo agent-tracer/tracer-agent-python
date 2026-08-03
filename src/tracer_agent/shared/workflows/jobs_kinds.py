@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-
-from .jobs_spec import AgentJobKind
 
 # 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
 _JOB_KINDS_PATH = Path(__file__).resolve().parents[4] / "contract" / "wire" / "job.kinds.json"
@@ -19,35 +18,46 @@ def lease_ttl_ms() -> int:
     return int(document["lease"]["ttlMs"])
 
 
-TEMPORAL_EXECUTOR = "temporal"
-LOCAL_EXECUTOR = "local"
+class JobExecutor(StrEnum):
+    """워크플로가 도는 잡과 플러그인이 궤적을 넘기는 잡을 가르는 실행 주체다."""
 
-# 워크플로가 도는 잡과 플러그인이 궤적을 넘기는 잡을 이 값으로 가른다.
-JOB_EXECUTOR: dict[str, str] = {
-    "title.suggestion": TEMPORAL_EXECUTOR,
-    "recipe.scan": TEMPORAL_EXECUTOR,
-    "task.cleanup": TEMPORAL_EXECUTOR,
-    "rule.generation": LOCAL_EXECUTOR,
+    TEMPORAL = "temporal"
+    LOCAL = "local"
+
+
+class AgentJobKind(StrEnum):
+    """이 서비스가 그래프로 돌리는 잡 종류이며 값은 그 잡을 맡은 에이전트의 이름이다."""
+
+    wire: str
+
+    def __new__(cls, agent_name: str, wire: str) -> AgentJobKind:
+        kind = str.__new__(cls, agent_name)
+        kind._value_ = agent_name
+        kind.wire = wire
+        return kind
+
+    TITLE_SUGGESTION = ("title-suggestion", "title.suggestion")
+    RECIPE_SCAN = ("recipe-scan", "recipe.scan")
+    TASK_CLEANUP = ("task-cleanup", "task.cleanup")
+
+    @classmethod
+    def of_wire(cls, wire: str) -> AgentJobKind:
+        """브라우저와 계약이 쓰는 잡 종류 값을 이 서비스의 에이전트 이름으로 옮긴다."""
+        return _KIND_BY_WIRE[wire]
+
+
+_KIND_BY_WIRE: dict[str, AgentJobKind] = {kind.wire: kind for kind in AgentJobKind}
+
+JOB_EXECUTOR: dict[str, JobExecutor] = {
+    AgentJobKind.TITLE_SUGGESTION.wire: JobExecutor.TEMPORAL,
+    AgentJobKind.RECIPE_SCAN.wire: JobExecutor.TEMPORAL,
+    AgentJobKind.TASK_CLEANUP.wire: JobExecutor.TEMPORAL,
+    "rule.generation": JobExecutor.LOCAL,
 }
 
 JOB_KINDS: tuple[str, ...] = tuple(JOB_EXECUTOR)
 
-AGENT_KIND_BY_WIRE: dict[str, AgentJobKind] = {
-    "title.suggestion": "title-suggestion",
-    "recipe.scan": "recipe-scan",
-    "task.cleanup": "task-cleanup",
-}
-
-WIRE_BY_AGENT_KIND: dict[AgentJobKind, str] = {
-    agent_kind: wire for wire, agent_kind in AGENT_KIND_BY_WIRE.items()
-}
-
-
-def wire_kind(agent_kind: AgentJobKind) -> str:
-    """에이전트 이름을 브라우저와 계약이 쓰는 잡 종류 값으로 옮긴다."""
-    return WIRE_BY_AGENT_KIND[agent_kind]
-
 
 def runs_locally(kind: str) -> bool:
     """로컬 실행기가 가져가는 잡은 워크플로로 보내지 않고 원장에만 세운다."""
-    return JOB_EXECUTOR[kind] == LOCAL_EXECUTOR
+    return JOB_EXECUTOR[kind] is JobExecutor.LOCAL

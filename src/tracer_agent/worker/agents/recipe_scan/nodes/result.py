@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanState, ResultUpdate
+from tracer_agent.shared.agents.recipe_scan.models import (
+    ProvenanceCatalog,
+    ProvenanceWire,
+    RecipeScanResult,
+    RecipeScanState,
+    ResultUpdate,
+)
 
 from ...runtime.node import GraphNode
-from ...runtime.validation_graph import EMPTY, FINALIZE
+from ...runtime.routes import EMPTY, FINALIZE
 
 
-def wire_provenance(catalog: ProvenanceCatalog) -> dict[str, object]:
+def wire_provenance(catalog: ProvenanceCatalog) -> ProvenanceWire:
     """워커가 소유권 밖의 인용까지 같은 기준으로 거를 수 있도록 이 실행의 근거 장부를 싣는다."""
-    return {
-        "eventIdsByTask": {task_id: sorted(ids) for task_id, ids in catalog.eventIdsByTask.items()},
-        "turnIdsByTask": {task_id: sorted(ids) for task_id, ids in catalog.turnIdsByTask.items()},
-        "ruleIds": sorted(catalog.ruleIds),
-        "recipeRevs": dict(catalog.recipeRevs),
-    }
+    return ProvenanceWire(
+        eventIdsByTask={task_id: sorted(ids) for task_id, ids in catalog.eventIdsByTask.items()},
+        turnIdsByTask={task_id: sorted(ids) for task_id, ids in catalog.turnIdsByTask.items()},
+        ruleIds=sorted(catalog.ruleIds),
+        recipeRevs=dict(catalog.recipeRevs),
+    )
 
 
 class FinalizeNode(GraphNode[RecipeScanState, ResultUpdate]):
@@ -24,8 +30,11 @@ class FinalizeNode(GraphNode[RecipeScanState, ResultUpdate]):
     name = FINALIZE
 
     async def run(self, state: RecipeScanState) -> ResultUpdate:
-        recipes = [candidate.model_dump(mode="json", exclude_none=True) for candidate in state["candidates"]]
-        return {"result": {"recipes": recipes, "provenance": wire_provenance(state["provenance"])}}
+        return {
+            "result": RecipeScanResult(
+                recipes=state["candidates"], provenance=wire_provenance(state["provenance"])
+            )
+        }
 
 
 class EmptyNode(GraphNode[RecipeScanState, ResultUpdate]):
@@ -34,4 +43,4 @@ class EmptyNode(GraphNode[RecipeScanState, ResultUpdate]):
     name = EMPTY
 
     async def run(self, state: RecipeScanState) -> ResultUpdate:
-        return {"result": {"recipes": [], "provenance": wire_provenance(state["provenance"])}}
+        return {"result": RecipeScanResult(provenance=wire_provenance(state["provenance"]))}

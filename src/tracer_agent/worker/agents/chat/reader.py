@@ -10,6 +10,7 @@ import httpx
 
 from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS, fill_path
 from tracer_agent.shared.agents.chat.tools.surface import READ_SURFACES, tool_surface
+from tracer_agent.shared.agents.shared.json_view import JsonObject
 
 # 창구가 요청자를 식별하는 헤더이며 실행 범위 토큰이 있으면 서버가 이 값을 토큰의 것으로 덮는다.
 USER_HEADER = "x-monitor-user"
@@ -59,7 +60,7 @@ class ChatReadClient:
         self._user_id = user_id
         self._scope_token = scope_token
 
-    async def read(self, tool_name: str, args: dict[str, object]) -> ChatReadResult:
+    async def read(self, tool_name: str, args: JsonObject) -> ChatReadResult:
         """도구 이름에 맞는 읽기 API를 실행 범위 자격과 함께 되읽는다."""
         binding = TOOL_BINDINGS[tool_name]
         if tool_surface(tool_name) not in READ_SURFACES:

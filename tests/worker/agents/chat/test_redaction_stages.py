@@ -18,6 +18,7 @@ from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.reader import ChatReadClient
 from tracer_agent.worker.agents.chat.tools import build_chat_registry
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _MARKER = str(shared_contract("redaction.json")["marker"])
 _CREDENTIAL = "sk-ant-api03-vJ8xQ2mNbR7tZ1wLpK4hYdF6sA9cE0gU"
@@ -91,7 +92,9 @@ def _request() -> ChatRequest:
 
 
 async def _answer(monkeypatch: pytest.MonkeyPatch, text: str) -> str:
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_a, **_k: FakeToolLoopChat([text]))
+    monkeypatch.setattr(
+        chat_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(FakeToolLoopChat([text]), None)
+    )
     transport = httpx.MockTransport(chat_confirmation_response)
     async with httpx.AsyncClient(transport=transport) as client:
         result = await chat_mod.run_chat(_request(), client, ExecutionTrace(), CHAT_PROMPT)

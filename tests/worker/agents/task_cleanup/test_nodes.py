@@ -13,6 +13,8 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 )
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ExecutionBudget
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
+from tracer_agent.worker.agents.task_cleanup.deps import CleanupDeps
 from tracer_agent.worker.agents.task_cleanup.nodes.inspect import InspectNode
 from tracer_agent.worker.agents.task_cleanup.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
@@ -54,14 +56,15 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
 
     req = _request(_candidate("task-1", has_events=True))
     node = InspectNode(
-        req,
-        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        ExecutionTrace(),
-        BoomChat([]),
-        None,
-        ExecutionBudget(1.0, mk_rates()),
-        agent_name="task-cleanup",
-        system_prompt=build_prompt_bundle(TASK_CLEANUP_PROMPT)["inspectSystemPrompt"],
+        CleanupDeps(
+            req=req,
+            reader=CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+            usage=ExecutionTrace(),
+            chats=ChatPair(BoomChat([]), None),  # type: ignore[arg-type]
+            budget=ExecutionBudget(1.0, mk_rates()),
+            prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
+            language_directives=TASK_CLEANUP_PROMPT.language_directives,
+        )
     )
 
     result = await node.run(

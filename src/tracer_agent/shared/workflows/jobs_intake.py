@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -20,7 +19,15 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 
 from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
 from ..agents.runtime.ledger import SqlSource
-from ..agents.shared.wire import SuccessEnvelope, error_responses
+from ..agents.shared.instant import opt_iso
+from ..agents.shared.json_view import JsonObject
+from ..agents.shared.wire import (
+    SuccessEnvelope,
+    error_envelope,
+    error_responses,
+    read_body,
+    validation_details,
+)
 from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
 from .jobs_envelope import JobEnvelopeSource
@@ -32,9 +39,9 @@ from .jobs_input import (
     input_hash,
     task_id_of,
 )
-from .jobs_kinds import AGENT_KIND_BY_WIRE, JOB_EXECUTOR, lease_ttl_ms, runs_locally
+from .jobs_kinds import JOB_EXECUTOR, AgentJobKind, lease_ttl_ms, runs_locally
 from .jobs_ledger import JobLedger
-from .jobs_view import iso, job_dto
+from .jobs_view import job_dto
 
 JOBS_PATH = "/api/agent/jobs"
 JOB_CANCEL_PATH = f"{JOBS_PATH}/{{execution_id}}/cancel"
@@ -71,7 +78,7 @@ class JobEnqueueBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["title.suggestion", "recipe.scan", "task.cleanup", "rule.generation"]
-    input: dict[str, Any] = Field(default_factory=dict)
+    input: JsonObject = Field(default_factory=dict)
     idempotencyKey: str | None = Field(default=None, min_length=1, max_length=200)
 
 
@@ -124,18 +131,18 @@ async def enqueue_job(
     dispatch: JobDispatch,
 ) -> JSONResponse:
     """잡 하나를 접수하고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
-    body = await _read_body(request)
+    body = await read_body(request)
     if body is None:
         return error_envelope(*INVALID_REQUEST)
     try:
         enqueue = JobEnqueueBody.model_validate(body)
     except ValidationError as invalid:
-        return error_envelope(*INVALID_REQUEST, details=_details(invalid))
+        return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
 
     try:
         job_input = INPUT_MODEL_BY_KIND[enqueue.kind].model_validate(enqueue.input)
     except ValidationError as invalid:
-        return error_envelope(*INVALID_REQUEST, details=_details(invalid))
+        return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
 
     if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(anchors, user_id, job_input):
         return error_envelope(*INVALID_RULE_ANCHOR)
@@ -181,7 +188,7 @@ async def enqueue_job(
     job_id = str(row["id"])
     if not runs_locally(enqueue.kind) and (created or row["status"] == "pending"):
         payload = build_payload(job_input, user_id, job_id, idempotency_key)
-        await dispatch.start(AGENT_KIND_BY_WIRE[enqueue.kind], job_id, payload)
+        await dispatch.start(AgentJobKind.of_wire(enqueue.kind), job_id, payload)
 
     return JSONResponse(status_code=ACCEPTED_STATUS, content={"ok": True, "data": {"job": job_dto(row)}})
 
@@ -202,7 +209,7 @@ async def cancel_job(
     kind = str(row["kind"])
     # 전이를 먼저 하면 취소에 실패했을 때 취소됐다고 기록한 채 유료 실행이 이어진다.
     if not runs_locally(kind):
-        await dispatch.cancel(AGENT_KIND_BY_WIRE[kind], execution_id)
+        await dispatch.cancel(AgentJobKind.of_wire(kind), execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
@@ -226,32 +233,12 @@ def _idempotency_key(value: str | None) -> str | None:
     return trimmed or None
 
 
-def error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
-    """실패 사유를 계약이 정한 오류 봉투로 적는다."""
-    error: dict[str, Any] = {"code": code, "message": message}
-    if details is not None:
-        error["details"] = details
-    return JSONResponse(status_code=status, content={"ok": False, "error": error})
-
-
-async def _read_body(request: Request) -> dict[str, Any] | None:
-    try:
-        body = json.loads(await request.body() or b"null")
-    except json.JSONDecodeError:
-        return None
-    return body if isinstance(body, dict) else None
-
-
-def _details(invalid: ValidationError) -> Any:
-    return json.loads(invalid.json(include_url=False, include_context=False, include_input=False))
-
-
 class JobReportBody(BaseModel):
     """실행기가 만든 규칙과 그 근거이며 잡의 산출물 자리에 그대로 실린다."""
 
     model_config = ConfigDict(extra="forbid")
 
-    rules: list[dict[str, Any]]
+    rules: list[JsonObject]
     skipped: list[str] | None = None
 
 
@@ -352,7 +339,7 @@ async def _settle(
     user_id: str,
     owner: str,
     status: str,
-    result: dict[str, Any],
+    result: JsonObject,
     error: str | None,
 ) -> JSONResponse:
     if not owner:
@@ -369,11 +356,11 @@ async def _settle(
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
 
 
-def _lease(owner: str, expires_at: datetime) -> dict[str, Any]:
-    return {"held": True, "leaseOwner": owner, "leaseExpiresAt": iso(expires_at)}
+def _lease(owner: str, expires_at: datetime) -> JsonObject:
+    return {"held": True, "leaseOwner": owner, "leaseExpiresAt": opt_iso(expires_at)}
 
 
-def _lease_of(row: Mapping[str, Any], owner: str, now: datetime) -> dict[str, Any]:
+def _lease_of(row: Mapping[str, Any], owner: str, now: datetime) -> JsonObject:
     """쥔 사람이 부른 사람과 같고 아직 살아 있을 때만 쥔 것으로 본다."""
     held_by = row["lease_owner"]
     expires_at = row["lease_expires_at"]
@@ -381,5 +368,5 @@ def _lease_of(row: Mapping[str, Any], owner: str, now: datetime) -> dict[str, An
     return {
         "held": bool(alive and held_by == owner),
         "leaseOwner": held_by,
-        "leaseExpiresAt": None if expires_at is None else iso(expires_at),
+        "leaseExpiresAt": None if expires_at is None else opt_iso(expires_at),
     }

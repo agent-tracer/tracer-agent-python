@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
 
+from ..agents.shared.json_view import JsonObject
 from .dispatch import TemporalClientProvider
+from .jobs_kinds import AgentJobKind
 from .jobs_spec import (
     AGENT_JOB_WORKFLOW,
     JOBS_TASK_QUEUE,
-    AgentJobKind,
     AgentJobRequest,
     agent_job_workflow_id,
 )
@@ -24,7 +23,7 @@ class TemporalJobDispatch:
     def __init__(self, provider: TemporalClientProvider) -> None:
         self._provider = provider
 
-    async def start(self, kind: AgentJobKind, key: str, payload: dict[str, Any]) -> None:
+    async def start(self, kind: AgentJobKind, key: str, payload: JsonObject) -> None:
         """같은 키로 이미 끝난 워크플로가 있어도 새 실행을 만들지 않고 그대로 접수를 성립시킨다."""
         client = await self._provider.client()
         try:

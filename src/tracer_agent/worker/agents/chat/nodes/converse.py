@@ -26,6 +26,7 @@ from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import ToolLoopBudget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import recursion_limit_for
+from ...runtime.llm.trajectory import step_content_text
 from ...runtime.node import GraphNode
 from ...runtime.pricing import ModelRates
 from ..checkpointer import seed_checkpoint
@@ -38,7 +39,6 @@ from ..reader import ChatReadClient
 from ..store import ChatMemoryStore
 from ..tools import build_chat_registry
 from ..writer import ChatWriteClient
-from .settle import message_text
 
 # 읽기 도구는 HTTP만 타므로 연결 계열 오류만 일시적이며 도메인 응답은 재시도하지 않는다.
 TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
@@ -91,15 +91,15 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             "proposals": prepared.proposals,
         }
 
-    async def _invoke(self, prepared: _PreparedTurn) -> list[Any]:
-        raw: Any = await prepared.agent.ainvoke(
+    async def _invoke(self, prepared: _PreparedTurn) -> list[BaseMessage]:
+        raw = await prepared.agent.ainvoke(
             {"messages": prepared.messages_in}, context=prepared.context, config=prepared.config
         )
-        return raw["messages"] if isinstance(raw, dict) else []
+        return _messages_of(raw.get("messages")) if isinstance(raw, dict) else []
 
-    async def _invoke_with_drafts(self, prepared: _PreparedTurn, drafts: DraftPublisher) -> list[Any]:
+    async def _invoke_with_drafts(self, prepared: _PreparedTurn, drafts: DraftPublisher) -> list[BaseMessage]:
         """접수만 하고 끊긴 실행이라 진행 중인 답변을 창구로 되돌려 보내며 수행한다."""
-        collected: list[Any] = []
+        collected: list[BaseMessage] = []
         async for mode, chunk in prepared.agent.astream(
             {"messages": prepared.messages_in},
             context=prepared.context,
@@ -110,7 +110,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             if mode == "messages":
                 message = chunk[0]
                 if isinstance(message, AIMessage):
-                    await drafts.push(message_text(message.content))
+                    await drafts.push(step_content_text(message.content))
                     for call in message.tool_calls:
                         await drafts.push_tool(str(call.get("name", "")))
             elif mode == "updates" and isinstance(chunk, dict):
@@ -251,13 +251,17 @@ class _PreparedTurn:
     proposals: list[ProposedWrite]
 
 
-def _appended_messages(update: dict[str, Any]) -> list[Any]:
+def _appended_messages(update: Mapping[str, object]) -> list[BaseMessage]:
     """한 슈퍼스텝의 갱신에서 이 턴이 새로 더한 메시지만 꺼낸다."""
-    appended: list[Any] = []
+    appended: list[BaseMessage] = []
     for node_update in update.values():
-        if not isinstance(node_update, dict):
-            continue
-        messages = node_update.get("messages")
-        if isinstance(messages, list):
-            appended.extend(messages)
+        if isinstance(node_update, dict):
+            appended.extend(_messages_of(node_update.get("messages")))
     return appended
+
+
+def _messages_of(value: object) -> list[BaseMessage]:
+    """SDK가 실어 보낸 값에서 모델 메시지만 남긴다."""
+    if not isinstance(value, list):
+        return []
+    return [message for message in value if isinstance(message, BaseMessage)]

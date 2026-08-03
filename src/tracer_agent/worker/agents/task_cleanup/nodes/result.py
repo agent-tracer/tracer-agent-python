@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from tracer_agent.shared.agents.task_cleanup.models import ResultUpdate, TaskCleanupState
+from tracer_agent.shared.agents.task_cleanup.models import (
+    CleanupResult,
+    ResultUpdate,
+    TaskCleanupState,
+)
 
 from ...runtime.node import GraphNode
-from ...runtime.validation_graph import EMPTY, FINALIZE
+from ...runtime.routes import EMPTY, FINALIZE
 
 
 class FinalizeNode(GraphNode[TaskCleanupState, ResultUpdate]):
@@ -14,8 +18,7 @@ class FinalizeNode(GraphNode[TaskCleanupState, ResultUpdate]):
     name = FINALIZE
 
     async def run(self, state: TaskCleanupState) -> ResultUpdate:
-        suggestions = [item.model_dump() for item in state["suggestions"][: state["max_suggestions"]]]
-        return {"result": {"suggestions": suggestions}}
+        return {"result": CleanupResult(suggestions=state["suggestions"][: state["max_suggestions"]])}
 
 
 class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
@@ -24,4 +27,4 @@ class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
     name = EMPTY
 
     async def run(self, _state: TaskCleanupState) -> ResultUpdate:
-        return {"result": {"suggestions": []}}
+        return {"result": CleanupResult()}

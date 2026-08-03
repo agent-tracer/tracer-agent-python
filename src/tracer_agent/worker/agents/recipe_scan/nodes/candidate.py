@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, HumanMessage
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_REDISPATCH_ROUNDS,
@@ -14,7 +15,6 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     InvestigateUpdate,
     ProvenanceCatalog,
     RecipeDraft,
-    RecipeScanRequest,
     RecipeScanState,
     RepairUpdate,
     ValidateCandidateUpdate,
@@ -22,22 +22,27 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 
 from ...runtime.errors import BudgetExceeded
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import AgentBudgetLease, ExecutionBudget, combine_leases
-from ...runtime.llm.standard_agent import StandardAgentContext
-from ...runtime.llm.structured_agent import invoke_structured_agent, recursion_limit_for
+from ...runtime.llm.budget import AgentBudgetLease, combine_leases
 from ...runtime.node import GraphNode
 from ...runtime.telemetry.execution_metrics import (
     record_redispatch_rounds,
     record_validation_failure,
 )
-from ..langchain_agent import build_recipe_agent
+from ..deps import AGENT_NAME, RecipeDeps
 from ..policy import validate_recipe_candidates
 from ..prompts import build_user_prompt
-from ..reader import RecipeLedgerReader
-from ..search import RecipeSearchReader
-from ..tools import COORDINATOR_TOOLS, build_recipe_registry
+from ..tools import COORDINATOR_TOOLS
 
-AGENT_NAME = "recipe-scan"
+
+@dataclass(frozen=True)
+class Synthesis:
+    """종합 한 번이 낸 후보와 그 호출이 쓴 장부와 턴과 비용이다."""
+
+    draft: RecipeDraft
+    messages: list[BaseMessage]
+    provenance: ProvenanceCatalog
+    turns_used: int
+    cost_usd: float
 
 
 def _plan_redispatch(
@@ -52,70 +57,32 @@ def _plan_redispatch(
 
 
 class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[RecipeScanState, UpdateT], ABC):
-    def __init__(
-        self,
-        req: RecipeScanRequest,
-        reader: RecipeLedgerReader,
-        search: RecipeSearchReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-        repair_directive: str,
-        language_directives: Mapping[str, str],
-    ) -> None:
-        self._req = req
-        self._reader = reader
-        self._search = search
-        self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
-        self._budget = budget
-        self._agent_name = agent_name
-        self._system_prompt = system_prompt
-        self._repair_directive = repair_directive
-        self._language_directives = language_directives
+    def __init__(self, deps: RecipeDeps, lease: AgentBudgetLease) -> None:
+        self._deps = deps
+        self._lease = lease
 
-    async def _invoke_agent(
-        self, messages: list[Any], state: RecipeScanState, lease: AgentBudgetLease
-    ) -> tuple[RecipeDraft, list[Any], ProvenanceCatalog, int, float]:
+    async def _synthesize(
+        self, messages: list[BaseMessage], state: RecipeScanState, lease: AgentBudgetLease
+    ) -> Synthesis:
+        deps = self._deps
         catalog = state["provenance"]
         # 몫이 남지 않으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
         if lease.max_turns <= 0:
-            return RecipeDraft(), messages, catalog, 0, 0.0
-        budget = self._budget.new_loop(self._agent_name, self._req.model, max_cost_usd=lease.max_cost_usd)
-        # 조율자는 전문가가 합친 장부의 인용만 확인하고 근거를 직접 캐지 않는다.
-        registry = build_recipe_registry(
-            self._reader, self._search, catalog, COORDINATOR_TOOLS, agent_name=self._agent_name
-        )
-        agent = build_recipe_agent(
-            self._chat,
-            self._system_prompt,
-            registry.langchain_tools(),
-            registry.transient_errors(),
-            output=RecipeDraft,
-            fallback_chat=self._fallback_chat,
-            max_turns=lease.max_turns,
-        )
-        context = StandardAgentContext(
-            agent_name=self._agent_name,
-            trace=self._usage,
+            return Synthesis(RecipeDraft(), messages, catalog, 0, 0.0)
+        budget = deps.new_loop(max_cost_usd=lease.max_cost_usd)
+        result = await deps.invoke(
             budget=budget,
-            max_model_turns=lease.max_turns,
-        )
-        result = await invoke_structured_agent(
-            agent,
+            system_prompt=deps.prompts.investigator_system,
+            catalog=catalog,
+            # 조율자는 전문가가 합친 장부의 인용만 확인하고 근거를 직접 캐지 않는다.
+            tools=COORDINATOR_TOOLS,
+            output=RecipeDraft,
             messages=messages,
-            context=context,
-            response_type=RecipeDraft,
-            recursion_limit=recursion_limit_for(lease.max_turns),
-            missing_response=f"{self._agent_name} produced no structured output",
-            call_id=f"{self._req.executionId or self._req.jobId}:{self.name}",
+            missing_response=f"{AGENT_NAME} produced no structured output",
+            max_turns=lease.max_turns,
+            call_id=deps.call_id(self.name),
         )
-        return result.response, result.messages, catalog, result.num_turns, budget.delta
+        return Synthesis(result.response, result.messages, catalog, result.num_turns, budget.delta)
 
 
 class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
@@ -123,77 +90,46 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
 
     name = "investigate"
 
-    def __init__(
-        self,
-        req: RecipeScanRequest,
-        reader: RecipeLedgerReader,
-        search: RecipeSearchReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-        repair_directive: str,
-        language_directives: Mapping[str, str],
-        synthesis_floor_lease: AgentBudgetLease,
-    ) -> None:
-        super().__init__(
-            req,
-            reader,
-            search,
-            usage,
-            chat,
-            fallback_chat,
-            budget,
-            agent_name=agent_name,
-            system_prompt=system_prompt,
-            repair_directive=repair_directive,
-            language_directives=language_directives,
-        )
-        self._synthesis_floor_lease = synthesis_floor_lease
-
     async def run(self, state: RecipeScanState) -> InvestigateUpdate:
+        deps = self._deps
         remaining_turns = max(state["max_turns"] - state.get("model_turns_used", 0), 0)
         remaining_usd = max(state["max_cost_usd"] - state.get("model_cost_usd", 0.0), 0.0)
         lease = combine_leases(
             [
-                self._synthesis_floor_lease,
+                self._lease,
                 AgentBudgetLease(max_turns=remaining_turns, max_cost_usd=remaining_usd),
             ]
         )
-        draft, messages, catalog, turns_used, cost_used = await self._invoke_agent(
+        synthesis = await self._synthesize(
             [
-                {
-                    "role": "user",
-                    "content": build_user_prompt(
+                HumanMessage(
+                    content=build_user_prompt(
                         state["task_id"],
                         state["user_prompt"],
-                        self._language_directives[state["language"]],
+                        deps.language_directives[state["language"]],
                         state["plan"],
                         state["reports"],
-                    ),
-                }
+                    )
+                )
             ],
             state,
             lease,
         )
         # 종합의 턴 소모 중 바닥 예약분은 팬아웃 잔량 풀 밖에서 왔으므로 풀의 소모로 세지 않는다.
-        pool_turns_used = max(turns_used - self._synthesis_floor_lease.max_turns, 0)
+        pool_turns_used = max(synthesis.turns_used - self._lease.max_turns, 0)
         update: InvestigateUpdate = {
-            "candidates": draft.recipes,
-            "messages": messages,
-            "provenance": catalog,
-            "model_cost_usd": cost_used,
+            "candidates": synthesis.draft.recipes,
+            "messages": synthesis.messages,
+            "provenance": synthesis.provenance,
+            "model_cost_usd": synthesis.cost_usd,
             "model_turns_used": pool_turns_used,
             "redispatch": None,
             "redispatch_count": state["redispatch_count"],
         }
         plan = _plan_redispatch(
-            draft,
+            synthesis.draft,
             state["redispatch_count"],
-            remaining_usd - cost_used,
+            remaining_usd - synthesis.cost_usd,
             remaining_turns - pool_turns_used,
         )
         if plan is not None:
@@ -201,7 +137,7 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
             update["redispatch_count"] = state["redispatch_count"] + 1
             record_redispatch_rounds(AGENT_NAME, update["redispatch_count"])
             chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes)
-            self._usage.record_orchestration_event(
+            deps.usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
             )
         return update
@@ -212,67 +148,34 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
 
     name = "repair"
 
-    def __init__(
-        self,
-        req: RecipeScanRequest,
-        reader: RecipeLedgerReader,
-        search: RecipeSearchReader,
-        usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
-        budget: ExecutionBudget,
-        *,
-        agent_name: str,
-        system_prompt: str,
-        repair_directive: str,
-        language_directives: Mapping[str, str],
-        lease: AgentBudgetLease,
-    ) -> None:
-        super().__init__(
-            req,
-            reader,
-            search,
-            usage,
-            chat,
-            fallback_chat,
-            budget,
-            agent_name=agent_name,
-            system_prompt=system_prompt,
-            repair_directive=repair_directive,
-            language_directives=language_directives,
-        )
-        self._lease = lease
-
     async def run(self, state: RecipeScanState) -> RepairUpdate:
         if not state["candidates"]:
             return {"repair_attempted": True}
+        deps = self._deps
         # 직전 산출을 본문에 실어 맥락 정리가 도구 결과를 비운 뒤에도 무엇을 고치는지 남는다.
         previous = RecipeDraft(recipes=state["candidates"]).model_dump_json()
         repair_prompt = [
             *state["messages"],
-            {
-                "role": "user",
-                "content": self._repair_directive.format(
+            HumanMessage(
+                content=deps.prompts.repair_directive.format(
                     previous=previous, errors="\n".join(state["validation_errors"])
-                ),
-            },
+                )
+            ),
         ]
         try:
-            draft, messages, catalog, _turns_used, cost_used = await self._invoke_agent(
-                repair_prompt, state, self._lease
-            )
+            synthesis = await self._synthesize(repair_prompt, state, self._lease)
         except BudgetExceeded:
             # 수리는 이미 마지막 시도이며 끊긴 결과는 근거가 부족해 후보를 내지 못한 것과 같다.
-            self._usage.record_orchestration_event(
+            deps.usage.record_orchestration_event(
                 "node.failed", f"{self.name} exhausted its reserved budget", node_name=self.name
             )
             return {"candidates": [], "repair_attempted": True}
         return {
-            "candidates": draft.recipes,
-            "messages": messages,
-            "provenance": catalog,
+            "candidates": synthesis.draft.recipes,
+            "messages": synthesis.messages,
+            "provenance": synthesis.provenance,
             "repair_attempted": True,
-            "model_cost_usd": cost_used,
+            "model_cost_usd": synthesis.cost_usd,
         }
 
 

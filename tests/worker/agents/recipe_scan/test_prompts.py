@@ -20,10 +20,10 @@ from tracer_agent.worker.agents.recipe_scan.prompts import (
 )
 
 _PROMPTS = build_prompt_bundle(RECIPE_SCAN_PROMPT)
-INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
-PROBE_SYSTEM_PROMPT = _PROMPTS["probeSystemPrompt"]
-SURVEY_SYSTEM_PROMPT = _PROMPTS["surveySystemPrompt"]
-REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS.investigator_system
+PROBE_SYSTEM_PROMPT = _PROMPTS.probe_system
+SURVEY_SYSTEM_PROMPT = _PROMPTS.survey_system
+REPAIR_DIRECTIVE = _PROMPTS.repair_directive
 
 
 def _show(role: str, system: str, user: str) -> None:

@@ -13,6 +13,7 @@ from tests.support.prompts import CONTRACT_VERSION, TITLE_SUGGESTION_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
 from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-title"}
@@ -77,7 +78,7 @@ async def _run(
     **request_overrides: Any,
 ) -> tuple[FakeToolLoopChat, AgentResponse, FakeTracerApi]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(title_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(title_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     req = _request(**request_overrides)
     fake_ledger = ledger or FakeTracerApi()
     result = await execute(

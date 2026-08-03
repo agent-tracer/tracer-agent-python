@@ -12,8 +12,9 @@ from tracer_agent.shared.agents.recipe_scan.models import ProbeAssignment, Probe
 from ..runtime.durable_graph import DurableGraph
 from ..runtime.errors import is_retryable_node_failure
 from ..runtime.llm.budget import lease_shares
+from ..runtime.routes import EMPTY
 from ..runtime.timeouts import deadline_fraction_s
-from ..runtime.validation_graph import EMPTY, add_validation_tail, new_graph, observed
+from ..runtime.validation_graph import add_validation_tail, new_graph, observed
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.survey import SurveyNode

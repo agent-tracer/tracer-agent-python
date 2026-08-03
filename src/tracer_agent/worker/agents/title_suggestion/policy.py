@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Callable
-from typing import Literal
 
 from tracer_agent.shared.agents.title_suggestion.models import (
     RECENT_TURN_LIMIT,
@@ -15,9 +13,8 @@ from tracer_agent.shared.agents.title_suggestion.models import (
 )
 
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.routes import ValidationRoute
 from ..runtime.routing import build_validation_router
-
-type ValidationRoute = Callable[[TitleSuggestionState], Literal["repair", "finalize", "empty"]]
 
 
 def windowed_turns(
@@ -56,7 +53,7 @@ def validate_title_candidate(
     return errors
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute:
+def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TitleSuggestionState]:
     """후보 검증 결과에 따른 분기 함수를 만든다."""
     return build_validation_router(
         trace,

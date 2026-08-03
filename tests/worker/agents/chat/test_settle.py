@@ -27,7 +27,7 @@ class Test종결노드:
     async def test_마지막_어시스턴트_답변을_결과로_낸다(self) -> None:
         update = await SettleNode().run(_state([HumanMessage(content="질문"), AIMessage(content="답변")]))
 
-        assert update["result"]["assistantText"] == "답변"
+        assert update["result"].assistantText == "답변"
 
     async def test_도구_호출로_끝난_메시지는_답변으로_고르지_않는다(self) -> None:
         messages = [
@@ -37,21 +37,19 @@ class Test종결노드:
 
         update = await SettleNode().run(_state(messages))
 
-        assert update["result"]["assistantText"] == "정리했습니다"
+        assert update["result"].assistantText == "정리했습니다"
 
     async def test_답변이_없으면_빈_문자열을_낸다(self) -> None:
         update = await SettleNode().run(_state([HumanMessage(content="질문")]))
 
-        assert update["result"]["assistantText"] == ""
+        assert update["result"].assistantText == ""
 
     async def test_확인_대기_행을_결과가_인용한다(self) -> None:
         proposal = ProposedWrite(confirmationId="cf-1", toolName="remember_fact", args={"key": "k"})
 
         update = await SettleNode().run(_state([AIMessage(content="답변")], [proposal]))
 
-        assert update["result"]["proposedWrites"] == [
-            {"confirmationId": "cf-1", "toolName": "remember_fact", "args": {"key": "k"}}
-        ]
+        assert update["result"].proposedWrites == [proposal]
 
     async def test_답변의_텍스트_블록만_이어_붙인다(self) -> None:
         content = [
@@ -62,7 +60,7 @@ class Test종결노드:
 
         update = await SettleNode().run(_state([AIMessage(content=content)]))
 
-        assert update["result"]["assistantText"] == "앞뒤"
+        assert update["result"].assistantText == "앞뒤"
 
 
 class Test판이바뀌기전의체크포인트:
@@ -78,5 +76,5 @@ class Test판이바뀌기전의체크포인트:
 
         update = await SettleNode().run(old)
 
-        assert update["result"]["assistantText"] == "답변"
-        assert update["result"]["proposedWrites"] == []
+        assert update["result"].assistantText == "답변"
+        assert update["result"].proposedWrites == []

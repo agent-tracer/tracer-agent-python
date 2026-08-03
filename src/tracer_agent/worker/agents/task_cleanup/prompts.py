@@ -3,28 +3,31 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from tracer_agent.shared.agents.task_cleanup.models import InspectReport
 
 from ..shared.prompt_source_port import AgentPrompt
 
-# 관측이 조립 결과의 해시를 template 별로 실을 수 있도록 번들 이름과 template key 를 잇는다.
-TEMPLATE_KEYS: dict[str, str] = {
-    "investigatorSystemPrompt": "task-cleanup.investigator.system",
-    "triageSystemPrompt": "task-cleanup.triage.system",
-    "inspectSystemPrompt": "task-cleanup.inspect.system",
-    "repairDirective": "task-cleanup.investigator.repair",
-}
+
+@dataclass(frozen=True)
+class CleanupPrompts:
+    """이 에이전트가 이번 실행에서 쓸 조립된 프롬프트다."""
+
+    investigator_system: str
+    triage_system: str
+    inspect_system: str
+    repair_directive: str
 
 
-def build_prompt_bundle(prompt: AgentPrompt) -> dict[str, str]:
+def build_prompt_bundle(prompt: AgentPrompt) -> CleanupPrompts:
     """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 프롬프트 넷을 만든다."""
-    return {
-        "investigatorSystemPrompt": _investigator(prompt),
-        "triageSystemPrompt": _triage(prompt),
-        "inspectSystemPrompt": _inspect(prompt),
-        "repairDirective": _repair(prompt),
-    }
+    return CleanupPrompts(
+        investigator_system=_investigator(prompt),
+        triage_system=_triage(prompt),
+        inspect_system=_inspect(prompt),
+        repair_directive=_repair(prompt),
+    )
 
 
 def _investigator(prompt: AgentPrompt) -> str:

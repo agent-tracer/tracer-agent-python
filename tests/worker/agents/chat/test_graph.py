@@ -15,6 +15,7 @@ from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _READ_API = "http://tracer-api.test"
 _AGENT_API = "http://agent-api.test"
@@ -44,7 +45,7 @@ async def _run(
     **overrides: Any,
 ) -> AgentResponse:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, **overrides)
     transport = httpx.MockTransport((memory or FakeChatMemoryApi()).handle)
     async with httpx.AsyncClient(transport=transport) as client:
@@ -123,7 +124,7 @@ async def _run_replay(
     **overrides: Any,
 ) -> tuple[AgentResponse, FakeToolLoopChat]:
     chat = FakeToolLoopChat(turns)
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     # 봉투에 이력이 없어야 그래프가 서버 재생 API를 문맥의 출처로 삼는다.
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[], **overrides)
     transport = httpx.MockTransport(_replay_handler(replay, memory or FakeChatMemoryApi()))
@@ -214,7 +215,7 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
             "정리했습니다.",
         ]
     )
-    monkeypatch.setattr(chat_mod, "make_chat", lambda *_args, **_kwargs: chat)
+    monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_args, **_kwargs: ChatPair(chat, None))
     seen: list[tuple[str, str]] = []
     memory = FakeChatMemoryApi()
 

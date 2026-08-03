@@ -24,8 +24,6 @@ class RecipeScanRequest(AgentExecutionRequest):
     model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1)
-    # 조회 범위를 정하는 값이라 도메인 입력이며 멱등 해시에 함께 든다.
-    userId: TrimmedStr = Field(min_length=1)
     language: Language = "auto"
     userPrompt: TrimmedStr | None = None
 
@@ -277,10 +275,26 @@ class RepairUpdate(TypedDict, total=False):
     model_cost_usd: float
 
 
+class ProvenanceWire(BaseModel):
+    """워커가 소유권 밖의 인용까지 같은 기준으로 거를 수 있는 이 실행의 근거 장부다."""
+
+    eventIdsByTask: dict[str, list[str]] = Field(default_factory=dict)
+    turnIdsByTask: dict[str, list[str]] = Field(default_factory=dict)
+    ruleIds: list[str] = Field(default_factory=list)
+    recipeRevs: dict[str, int] = Field(default_factory=dict)
+
+
+class RecipeScanResult(BaseModel):
+    """스캔이 창구에 내는 산출물이다."""
+
+    recipes: list[RecipeCandidate] = Field(default_factory=list)
+    provenance: ProvenanceWire
+
+
 class ResultUpdate(TypedDict):
     """종단 노드가 갱신하는 상태 부분집합이다."""
 
-    result: dict[str, object]
+    result: RecipeScanResult
 
 
 def _sum_turns(left: int, right: int) -> int:
@@ -308,7 +322,7 @@ class RecipeScanState(TypedDict):
     candidates: list[RecipeCandidate]
     validation_errors: list[str]
     repair_attempted: bool
-    result: dict[str, object] | None
+    result: RecipeScanResult | None
 
 
 _ANCHOR_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "recipe-scan" / "agent.json"

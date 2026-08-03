@@ -7,8 +7,8 @@ from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionCo
 from tracer_agent.worker.agents.title_suggestion.prompts import build_prompt_bundle, build_user_prompt
 
 _PROMPTS = build_prompt_bundle(TITLE_SUGGESTION_PROMPT)
-INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS["investigatorSystemPrompt"]
-REPAIR_DIRECTIVE = _PROMPTS["repairDirective"]
+INVESTIGATOR_SYSTEM_PROMPT = _PROMPTS.investigator_system
+REPAIR_DIRECTIVE = _PROMPTS.repair_directive
 
 _CONTEXT = {
     "title": "Untitled",
