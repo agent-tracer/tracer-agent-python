@@ -12,8 +12,8 @@ from temporalio.exceptions import ApplicationError
 
 from tests.support.contract import conformance_case
 from tests.support.fakes import FakeScanAnchors
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
 from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor, ScanAnchor

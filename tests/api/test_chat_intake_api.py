@@ -10,9 +10,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.chat.intake.dispatch import UnwiredExecutionDispatch
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 PATH = "/api/agent/chat/threads/t1/messages"

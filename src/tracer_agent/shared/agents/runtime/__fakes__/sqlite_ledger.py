@@ -10,7 +10,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from tracer_agent.shared.agents.runtime.ledger import SqlRow, UniqueViolation
+from ..ledger import LedgerSql, SqlRow, UniqueViolation
 
 # 사전식 비교가 곧 시간 비교가 되도록 원장의 모든 시각을 UTC 한 형식으로만 적는다.
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
@@ -232,7 +232,7 @@ def rewrite(sql: str) -> tuple[str, list[int]]:
     return _PLACEHOLDER.sub("?", sql), order
 
 
-class SqliteLedgerSql:
+class SqliteLedgerSql(LedgerSql):
     """chat 쓰기 테이블을 메모리에 세우고 원장 문장을 그대로 평가한다."""
 
     def __init__(self) -> None:

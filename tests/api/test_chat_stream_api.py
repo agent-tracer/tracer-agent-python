@@ -16,8 +16,8 @@ from tests.support.chat_surface import (
     seed_pending_tool,
     seed_thread,
 )
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.surface.stream import ChatExecutionSnapshot, frames
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 THREADS = "/api/agent/chat/threads"
 

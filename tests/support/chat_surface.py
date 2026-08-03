@@ -7,7 +7,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 NOW = datetime(2026, 7, 30, tzinfo=UTC)

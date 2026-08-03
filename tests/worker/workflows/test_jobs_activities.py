@@ -14,11 +14,11 @@ from tests.support.fakes import (
     TRACER_API_URL,
     WIRE_LIMITS,
     WIRE_MODEL_RATES,
-    FakeLedgerPool,
     FakeToolLoopChat,
 )
 from tests.support.prompts import JOB_PROMPTS
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind

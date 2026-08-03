@@ -11,7 +11,7 @@ from tests.support.chat_surface import (
     seed_execution,
     seed_thread,
 )
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 
 class Test누적_답변:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tests.support.chat_surface import RecordingExecutor, seed_thread
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 THREADS = "/api/agent/chat/threads"
 

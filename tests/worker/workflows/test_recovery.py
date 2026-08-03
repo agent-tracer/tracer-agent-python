@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.worker.workflows.recovery import resume_active_executions

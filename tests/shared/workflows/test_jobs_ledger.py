@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepToolCall
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 

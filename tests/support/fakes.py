@@ -213,16 +213,6 @@ class FakeToolLoopChat:
 TRACER_API_URL = "http://tracer-api.test"
 
 
-class FakeLedgerPool:
-    """문장을 돌리지 않는 실행 경로에 빌려 주는 원장 연결 풀 대역이다."""
-
-    async def pool(self) -> FakeLedgerPool:
-        return self
-
-    async def close(self) -> None:
-        return None
-
-
 _ELIGIBLE_SCAN_ANCHOR = ScanAnchor(id="task-1", origin="user", root=True, status="completed")
 
 

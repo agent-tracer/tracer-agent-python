@@ -13,7 +13,7 @@ from tests.support.chat_surface import (
     seed_thread,
 )
 from tests.support.contract import conformance_case
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 THREADS = "/api/agent/chat/threads"
 

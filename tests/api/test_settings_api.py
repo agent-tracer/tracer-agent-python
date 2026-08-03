@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.settings.secret import SettingCipher, is_encrypted_secret
 

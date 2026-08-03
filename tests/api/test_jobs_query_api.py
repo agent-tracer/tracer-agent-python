@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 
 from tests.support.contract import conformance_case
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepToolCall
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 from tracer_agent.shared.workflows.jobs_query import (

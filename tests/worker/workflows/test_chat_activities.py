@@ -13,7 +13,7 @@ from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
 from tests.support.prompts import CHAT_PROMPT
-from tests.support.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.shared.workflows.chat_spec import (

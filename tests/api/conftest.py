@@ -15,8 +15,8 @@ from tests.support.chat_surface import (
     SingleSql,
 )
 from tests.support.fakes import FakeScanAnchors
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 
 @pytest.fixture

@@ -10,9 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support.contract import conformance_case
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.envelope.router import CHAT_KEY_MISSING, JOB_KEY_MISSING
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 CHAT_PATH = "/internal/chat/executions/{execution_id}/envelope"

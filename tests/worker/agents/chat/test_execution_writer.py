@@ -11,8 +11,8 @@ import pytest
 
 from tests.support.brokers import RecordingProducer
 from tests.support.contract import wire_contract
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionSpend
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.wakeup import UpdatePublisher
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.shared.agents.shared.models import AgentStepDTO

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from tests.support.fakes import TRACER_API_URL, FakeLedgerPool
+from tests.support.fakes import TRACER_API_URL
 from tests.support.prompts import JOB_PROMPTS
+from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.ledger import PooledSql
 from tracer_agent.worker.worker import (
     QUEUE_ARGS,

@@ -21,7 +21,6 @@ from tests.support.chat_surface import (
     seed_thread,
 )
 from tests.support.contract import conformance_case
-from tests.support.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.chat.models import (
     CHAT_CONFIRMATION_STATUSES,
     CHAT_EXECUTION_STATUSES,
@@ -31,6 +30,7 @@ from tracer_agent.shared.agents.chat.models import (
 )
 from tracer_agent.shared.agents.chat.surface.contract import chat_stream_rules
 from tracer_agent.shared.agents.chat.surface.stream import SNAPSHOT_EVENT
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
 
 THREADS = "/api/agent/chat/threads"
