@@ -153,7 +153,7 @@ class ChatThreadWorkflow:
             )
             if execution_id is None:
                 return
-            # 같은 실행이 연달아 실패하면 원장에 그대로 남아 무한히 다시 집히므로 이번 회차를 접는다.
+            # 같은 실행이 연달아 실패하면 원장에 그대로 남아 무한히 다시 집히므로 이번 회차를 줄인다.
             if execution_id == last_failed:
                 return
             if await self._run_child(request.thread_id, execution_id):

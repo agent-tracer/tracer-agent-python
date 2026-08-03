@@ -30,7 +30,7 @@ from ..tools import COORDINATOR_TOOL_NAMES
 def _plan_redispatch(
     draft: CleanupDraft, redispatch_count: int, remaining: float
 ) -> tuple[TriagePlan, float] | None:
-    """후보를 한 번 더 열어볼지 정하고 남은 예산과 함께 계획을 돌려주거나 없으면 None을 낸다."""
+    """후보를 한 번 더 조사할지 정하고 남은 예산과 함께 계획을 돌려주거나 없으면 None을 낸다."""
     if not draft.redispatch or redispatch_count >= MAX_REDISPATCH_ROUNDS:
         return None
     if remaining <= 0.0:
@@ -47,7 +47,7 @@ class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, Upd
     ) -> tuple[CleanupDraft, list[BaseMessage], SharedToolLoopBudget]:
         deps = self._deps
         budget = deps.new_loop()
-        # 조율자는 후보를 직접 열어보지 않고 검토 전문가의 보고만으로 제안을 쓴다.
+        # 조율자는 후보를 직접 조회하지 않고 검토 전문가의 보고만으로 제안을 쓴다.
         draft, replied = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.investigator_system,
@@ -62,7 +62,7 @@ class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, Upd
 
 
 class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
-    """검토 전문가 보고를 모아 정리 제안을 쓰거나 근거가 얇으면 후보를 한 번 더 열어보게 한다."""
+    """검토 전문가 보고를 모아 정리 제안을 쓰거나 근거가 얇으면 후보를 한 번 더 조사하게 한다."""
 
     name = "investigate"
 

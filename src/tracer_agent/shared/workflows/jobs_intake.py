@@ -197,7 +197,7 @@ async def enqueue_job(
 async def cancel_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, dispatch: JobDispatch
 ) -> JSONResponse:
-    """도는 잡 하나를 끊고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
+    """진행 중인 잡 하나를 끊고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
     async with source.connect() as sql:
         ledger = JobLedger(sql)
         row = await ledger.find(execution_id)
@@ -320,7 +320,7 @@ async def fail_job(
 async def release_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
 ) -> JSONResponse:
-    """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 돌린다."""
+    """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 실행한다."""
     if not owner:
         return error_envelope(*INVALID_REQUEST)
     now = datetime.now(UTC)

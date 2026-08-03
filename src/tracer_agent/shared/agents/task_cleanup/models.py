@@ -31,7 +31,7 @@ class CandidateReason(StrEnum):
 
 
 class CleanupTaskStatus(StrEnum):
-    """정리 판정이 아직 도는 태스크로 보는 상태다."""
+    """정리 판정이 아직 진행 중인 태스크로 보는 상태다."""
 
     RUNNING = "running"
     WAITING = "waiting"
@@ -111,7 +111,7 @@ MAX_INSPECT_EXCERPTS = 6
 MAX_INSPECT_REASON_CHARS = 400
 CLEANUP_REVIEWER_ROLE = "cleanup-candidate-reviewer"
 
-# 조율자가 결정 대신 후보를 다시 열어보게 할 수 있는 라운드 수이며 무한 루프를 이 값으로 막는다.
+# 조율자가 결정 대신 후보를 다시 조회하게 할 수 있는 라운드 수이며 무한 루프를 이 값으로 막는다.
 MAX_REDISPATCH_ROUNDS = 1
 
 
@@ -125,7 +125,7 @@ class InspectAssignment(BaseModel):
 
 
 class TriagePlan(BaseModel):
-    """조율자가 후보 배치를 보고 무엇을 열어볼지 정한 결과다."""
+    """조율자가 후보 배치를 보고 무엇을 조사할지 정한 결과다."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -148,7 +148,7 @@ class InspectDispatch(BaseModel):
 
 
 class InspectReport(BaseModel):
-    """한 후보를 열어본 결과이며 조율자는 이것만 보고 제안을 쓴다."""
+    """한 후보를 조회한 결과이며 조율자는 이것만 보고 제안을 쓴다."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -166,7 +166,7 @@ def merged_candidates(
 
 
 def merged_event_ids(left: dict[str, set[str]], right: dict[str, set[str]]) -> dict[str, set[str]]:
-    """태스크마다 실제로 열어본 이벤트를 합집합으로 합친다."""
+    """태스크마다 실제로 읽은 이벤트를 합집합으로 합친다."""
     combined = {task_id: set(ids) for task_id, ids in left.items()}
     for task_id, ids in right.items():
         combined.setdefault(task_id, set()).update(ids)
@@ -190,7 +190,7 @@ class CleanupDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     suggestions: list[CleanupDraftSuggestion] = Field(default_factory=list, max_length=MAX_SUGGESTIONS)
-    # 조율자는 결정 대신 후보를 한 번 더 열어보게 요청할 수 있으며 둘은 함께 오지 않는다.
+    # 조율자는 결정 대신 후보를 한 번 더 조회하게 요청할 수 있으며 둘은 함께 오지 않는다.
     redispatch: list[InspectAssignment] = Field(default_factory=list, max_length=MAX_SUGGESTIONS)
 
     @model_validator(mode="after")
@@ -225,7 +225,7 @@ class InvestigateUpdate(TypedDict):
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
     model_cost_usd: float
-    # None이면 검증으로 넘어가고, 계획이 담기면 그 후보들을 한 번 더 열어본다.
+    # None이면 검증으로 넘어가고, 계획이 담기면 그 후보들을 한 번 더 조회한다.
     redispatch: TriagePlan | None
     redispatch_ceiling: float
     redispatch_count: int

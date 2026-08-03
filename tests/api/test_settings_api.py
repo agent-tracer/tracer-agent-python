@@ -56,7 +56,7 @@ def client(store: SqliteLedgerSql, cipher: SettingCipher) -> Iterator[TestClient
 
 
 def seed(store: SqliteLedgerSql, key: str, value: str) -> None:
-    """이미 저장되어 있던 설정 하나를 심는다."""
+    """이미 저장되어 있던 설정 하나를 기록한다."""
     store.seed("app_settings", [{"scope": "local", "key": key, "value": value, "updated_at": SEEDED_AT}])
 
 

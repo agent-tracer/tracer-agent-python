@@ -15,7 +15,7 @@ class FallbackModelMiddleware(AgentMiddleware[Any, Any, Any]):
     """공급자 오류에서만 대체 모델 호출로 한 번 넘어가는 미들웨어다."""
 
     def __init__(self, fallback_chat: BaseChatModel) -> None:
-        """대체할 채팅 모델 하나를 쥔다."""
+        """대체할 채팅 모델 하나를 가진다."""
         super().__init__()
         self._fallback_chat = fallback_chat
 

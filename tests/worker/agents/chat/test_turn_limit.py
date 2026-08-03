@@ -47,7 +47,7 @@ async def test_턴_상한에_닿아도_그때까지의_답변을_잃지_않는�
     chat = _NeverStopsChat()
     monkeypatch.setattr(chat_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(chat, None))
 
-    # 예외로 끊으면 사용자는 아무 답도 못 받고 SDK 백엔드와 결과가 갈라진다.
+    # 예외로 끊으면 사용자는 아무 답도 못 받고 SDK 백엔드와 결과가 나뉜다.
     result = await chat_mod.run_chat(_request(), None, ExecutionTrace(), CHAT_PROMPT)  # type: ignore[arg-type]
 
     assert chat.calls > 1

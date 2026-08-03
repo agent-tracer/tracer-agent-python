@@ -58,7 +58,7 @@ class JobEnvelopeClient:
             raise ApplicationError(
                 f"job envelope HTTP {response.status_code}: {response.text[:500]}",
                 type=ENVELOPE_UNAVAILABLE,
-                # 같은 실행으로 다시 물어도 같은 답이 오는 거절이라 다시 태우지 않는다.
+                # 같은 실행으로 다시 물어도 같은 답이 오는 거절이라 다시 실행하지 않는다.
                 non_retryable=response.status_code < 500,
             )
         return _envelope(_data(response))

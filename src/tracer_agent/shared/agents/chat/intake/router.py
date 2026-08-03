@@ -74,7 +74,7 @@ async def cancel_chat_turn(
     dispatch: Dispatch,
     updates: Updates,
 ) -> JSONResponse:
-    """도는 턴 하나를 끊고 결과나 사유를 계약이 정한 봉투로 낸다."""
+    """진행 중인 턴 하나를 끊고 결과나 사유를 계약이 정한 봉투로 낸다."""
     try:
         async with source.connect() as sql:
             canceled = await ChatTurnCancellation(sql, dispatch, updates).cancel(

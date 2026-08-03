@@ -45,7 +45,7 @@ _TITLE_CONTEXT: dict[str, object] = {
 
 
 class CapturingCompletionClient:
-    """완료 창구로 배달된 결과를 그대로 붙잡아 두는 httpx 대역이다."""
+    """완료 창구로 배달된 결과를 그대로 보관해 두는 httpx 대역이다."""
 
     def __init__(self) -> None:
         self.deliveries: list[dict[str, Any]] = []
@@ -338,7 +338,7 @@ async def test_이미_종결된_행은_취소_닫기가_건드리지_않는다(h
 
 
 class CapturingNotifier:
-    """알림 토픽으로 나간 잡 상태 전이를 순서대로 붙잡아 두는 대역이다."""
+    """알림 토픽으로 나간 잡 상태 전이를 순서대로 보관해 두는 대역이다."""
 
     def __init__(self) -> None:
         self.published: list[tuple[str, dict[str, Any]]] = []

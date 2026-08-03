@@ -49,7 +49,7 @@ def test_접수_신호가_실행_식별자_하나만_받는다() -> None:
 
 
 class ThreadDriver:
-    """원장의 대기 줄과 자식 실행을 대신하며 스레드가 무엇을 묻고 무엇을 태웠는지 붙잡는다."""
+    """원장의 대기 줄과 자식 실행을 대신하며 스레드가 무엇을 묻고 무엇을 태웠는지 보관한다."""
 
     def __init__(self, queued: Iterable[str], failing: Iterable[str] = ()) -> None:
         self._queued = list(queued)
@@ -74,7 +74,7 @@ class ThreadDriver:
         return None
 
     async def execute_child_workflow(self, _name: str, request: Any, **_options: Any) -> None:
-        """태운 실행을 기억하고 실패로 지정된 것은 원장에 대기로 남긴다."""
+        """시작한 실행을 기억하고 실패로 지정된 것은 원장에 대기로 남긴다."""
         self.started.append(request.execution_id)
         if request.execution_id in self._failing:
             raise RuntimeError("chat execution did not settle")
@@ -113,5 +113,5 @@ async def test_같은_실행이_연달아_실패하면_회차를_접는다(monke
 
     await ChatThreadWorkflow().run(ChatThreadRequest("t1"))
 
-    # 실패한 실행이 원장에 대기로 남아도 같은 회차에서 다시 태우지 않는다.
+    # 실패한 실행이 원장에 대기로 남아도 같은 회차에서 다시 실행하지 않는다.
     assert driver.started == ["e1"]

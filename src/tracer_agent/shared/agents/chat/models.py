@@ -70,7 +70,7 @@ class ChatReplay(BaseModel):
 
 
 class ChatTurnFields(BaseModel):
-    """대화 턴 하나의 도메인 입력이며 실행 봉투가 이를 실어 나른다."""
+    """대화 턴 하나의 도메인 입력이며 실행 봉투가 이를 실어 전달한다."""
 
     threadId: TrimmedStr = Field(min_length=1)
     executionId: TrimmedStr = Field(min_length=1)
@@ -101,7 +101,7 @@ class DraftCallback(BaseModel):
 
 
 class ChatRequest(ChatTurnFields, AgentExecutionEnvelope):
-    """대화 턴 하나를 태우는 내구성 실행 봉투."""
+    """대화 턴 하나를 실행하는 내구성 실행 봉투."""
 
     model_config = ConfigDict(extra="forbid")
 

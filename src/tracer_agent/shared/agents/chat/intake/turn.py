@@ -43,7 +43,7 @@ class AcceptedChatTurn:
 
 
 class ChatTurnIntake:
-    """사용자 메시지와 대기 실행을 한 트랜잭션으로 세우고 경쟁에 진 접수는 이긴 행으로 흡수한다."""
+    """사용자 메시지와 대기 실행을 한 트랜잭션으로 세우고 경쟁에 진 접수는 우선한 행으로 병합한다."""
 
     def __init__(self, sql: LedgerSql, dispatch: ExecutionDispatch) -> None:
         self._sql = sql

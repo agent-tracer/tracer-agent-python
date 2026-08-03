@@ -215,7 +215,7 @@ async def _serve_generate(settings: Settings, client: Client) -> None:
 
 
 async def serve(queue: WorkerQueue) -> None:
-    """Temporal에 붙어 기동 인자로 받은 큐 하나만 폴링하며 종료 신호가 올 때까지 돈다."""
+    """Temporal에 붙어 기동 인자로 받은 큐 하나만 폴링하며 종료 신호가 올 때까지 실행한다."""
     settings = get_settings()
     settings.configure_langsmith()
     shutdown_observability = configure_observability()
@@ -252,5 +252,5 @@ def _parse_queue(argv: list[str]) -> WorkerQueue:
 
 
 def main() -> None:
-    """워커 프로세스를 큐 인자로 받아 띄운다."""
+    """워커 프로세스를 큐 인자로 받아 시작한다."""
     asyncio.run(serve(_parse_queue(sys.argv[1:])))

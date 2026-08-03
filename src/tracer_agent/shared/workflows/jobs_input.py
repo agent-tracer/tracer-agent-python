@@ -108,7 +108,7 @@ def build_payload(
     }
 
 
-# 같은 멱등키의 두 접수가 같은 입력인지 가르는 칸이며 종류마다 이 순서로 적는다.
+# 같은 멱등키의 두 접수가 같은 입력인지 구분하는 칸이며 종류마다 이 순서로 적는다.
 IDEMPOTENCY_KEYS: dict[str, tuple[str, ...]] = {
     "title.suggestion": ("taskId",),
     "recipe.scan": ("taskId", "userPrompt", "language", "trigger"),

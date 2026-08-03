@@ -1,4 +1,4 @@
-"""에이전트 실행 한 번이 태우는 모델 비용과 턴을 누적하고 상한에서 끊는다."""
+"""에이전트 실행 한 번이 실행하는 모델 비용과 턴을 누적하고 상한에서 끊는다."""
 
 from __future__ import annotations
 
@@ -129,12 +129,12 @@ class ToolLoopBudget:
 
     @property
     def spent(self) -> float:
-        """이 루프가 지금까지 태운 모델 비용이다."""
+        """이 루프가 지금까지 실행한 모델 비용이다."""
         return self._spent
 
     @property
     def landing(self) -> bool:
-        """지금까지 가장 비쌌던 호출을 한 번 더 감당할 수 없는지 알린다."""
+        """지금까지 가장 비쌌던 호출을 한 번 더 처리할 수 없는지 알린다."""
         return self._spent + self._peak >= self._max
 
     def land(self) -> None:
@@ -151,7 +151,7 @@ class ToolLoopBudget:
             raise BudgetExceeded(f"{self._agent} cannot enforce its internal budget for model {priced_model}")
         self._spent += cost
         self._peak = max(self._peak, cost)
-        # 착지한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
+        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
         if not self._landed and self._spent > self._max:
             raise BudgetExceeded(f"{self._agent} exceeded internal model budget ${self._max:.2f}")
 
@@ -192,11 +192,11 @@ class ExecutionBudget:
         return self._remaining_budget_usd
 
     def has_remaining_capacity(self, required_turns: int = 1) -> bool:
-        """요청한 턴과 비용 잔량을 모두 감당할 수 있는지 알린다."""
+        """요청한 턴과 비용 잔량을 모두 처리할 수 있는지 알린다."""
         return self._turn_ledger() >= required_turns and self._remaining_budget_usd > 0
 
     def reserve(self, turns: int, budget_share: float = 0.0) -> AgentBudgetLease:
-        """뒤의 리스가 침범하지 못하도록 잔량에서 먼저 턴과 몫을 떼어 별도로 쥔다."""
+        """뒤의 리스가 침범하지 못하도록 잔량에서 먼저 턴과 몫을 떼어 별도로 가진다."""
         if turns < 0:
             raise ValueError(f"turns must be >= 0, got {turns}")
         if not (0.0 <= budget_share <= 1.0):
@@ -279,7 +279,7 @@ class ExecutionBudget:
         cost = self._rates.estimate_cost_usd(priced_model, usage.to_dto()) if usage else None
         if cost is None:
             raise BudgetExceeded(f"{agent_name} cannot enforce its internal budget for model {priced_model}")
-        # 착지한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
+        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
         if not loop_landed:
             if self._spent + cost > self._max:
                 raise BudgetExceeded(f"{agent_name} exceeded execution model budget ${self._max:.2f}")

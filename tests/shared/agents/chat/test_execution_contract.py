@@ -70,7 +70,7 @@ def spend() -> ChatExecutionSpend:
 
 
 async def invoke(ledger: ChatExecutionLedger, operation: str, call: Mapping[str, Any]) -> Any:
-    """계약이 부르는 연산 하나를 상태 기계에 그대로 돌린다."""
+    """계약이 부르는 연산 하나를 상태 기계에 그대로 실행한다."""
     now = moment(call["now"])
     identifier = call.get("id", "")
     if operation == "recoverStaleRunning":
@@ -95,7 +95,7 @@ async def invoke(ledger: ChatExecutionLedger, operation: str, call: Mapping[str,
 
 
 def cases() -> Iterator[Any]:
-    """계약이 담은 연산별 케이스를 하나씩 펼친다."""
+    """계약이 담은 연산별 케이스를 하나씩 나열한다."""
     for operation in CONTRACT["operations"]:
         for case in operation["cases"]:
             yield pytest.param(operation["operation"], case, id=f"{operation['operation']}:{case['name']}")

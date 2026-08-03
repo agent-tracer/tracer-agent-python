@@ -39,7 +39,7 @@ class RecordingDispatch:
         self.canceled: list[str] = []
 
     async def start(self, _execution_id: str, _thread_id: str, _user_id: str) -> None:
-        """이 대역은 실행을 태우지 않는다."""
+        """이 대역은 실행을 수행하지 않는다."""
 
     async def cancel(self, execution_id: str) -> None:
         """중단 요청을 받은 실행을 적는다."""
@@ -47,7 +47,7 @@ class RecordingDispatch:
 
 
 class SilentWatch:
-    """깨우기 신호가 오지 않는 구독 창구를 대신한다."""
+    """알림 신호가 오지 않는 구독 창구를 대신한다."""
 
     def subscribe(self, _execution_id: str, _listener: Any) -> Any:
         """아무 신호도 주지 않고 그만 듣는 방법만 낸다."""
@@ -58,7 +58,7 @@ class SilentWatch:
 
 
 class RecordingUpdates:
-    """깨우기 신호가 어느 실행으로 갔는지 적는다."""
+    """알림 신호가 어느 실행으로 갔는지 적는다."""
 
     def __init__(self) -> None:
         self.published: list[str] = []
@@ -86,7 +86,7 @@ class RecordingExecutor:
 
 
 def seed_thread(store: SqliteLedgerSql, thread_id: str = "t1", user_id: str = "local", **extra: Any) -> None:
-    """조회가 읽을 스레드 한 행을 심는다."""
+    """조회가 읽을 스레드 한 행을 기록한다."""
     store.seed(
         "chat_threads",
         [
@@ -106,7 +106,7 @@ def seed_thread(store: SqliteLedgerSql, thread_id: str = "t1", user_id: str = "l
 def seed_message(
     store: SqliteLedgerSql, message_id: str, role: str, content: str, offset: int = 0, **extra: Any
 ) -> None:
-    """조회가 읽을 대화 한 줄을 심는다."""
+    """조회가 읽을 대화 한 줄을 기록한다."""
     store.seed(
         "chat_messages",
         [
@@ -126,7 +126,7 @@ def seed_message(
 def seed_execution(
     store: SqliteLedgerSql, execution_id: str = "e1", user_message_id: str = "m1", **extra: Any
 ) -> None:
-    """조회가 읽을 실행 한 행을 심는다."""
+    """조회가 읽을 실행 한 행을 기록한다."""
     store.seed(
         "chat_executions",
         [
@@ -154,7 +154,7 @@ def seed_execution(
 def seed_pending_tool(
     store: SqliteLedgerSql, confirmation_id: str = "c1", status: str = "pending", **extra: Any
 ) -> None:
-    """조회가 읽을 확인 대기 행 하나를 심는다."""
+    """조회가 읽을 확인 대기 행 하나를 기록한다."""
     store.seed(
         "chat_pending_tools",
         [
@@ -171,7 +171,7 @@ def seed_pending_tool(
 
 
 def seed_memory(store: SqliteLedgerSql, key: str = "lang", content: str = "한국어를 쓴다") -> None:
-    """조회가 읽을 사용자 장기기억 한 줄을 심는다."""
+    """조회가 읽을 사용자 장기기억 한 줄을 기록한다."""
     store.seed(
         "chat_user_memories",
         [
@@ -188,7 +188,7 @@ def seed_memory(store: SqliteLedgerSql, key: str = "lang", content: str = "한�
 
 
 def seed_step(store: SqliteLedgerSql, step_id: str, attempt: int, seq: int, **extra: Any) -> None:
-    """조회가 읽을 궤적 한 줄을 심는다."""
+    """조회가 읽을 궤적 한 줄을 기록한다."""
     row: dict[str, Any] = {
         "id": step_id,
         "execution_id": extra.get("execution_id", "e1"),

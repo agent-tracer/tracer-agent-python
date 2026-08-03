@@ -1,4 +1,4 @@
-"""recipe-scan 노드를 그래프 밖에서 직접 실행해 실패 강등을 검증한다(페이크 모델, 네트워크 없음)."""
+"""recipe-scan 노드를 그래프 밖에서 직접 실행해 실패 하향을 검증한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강�
         ),
     )
 
-    # 진전 없이 상한을 넘긴 전문가만 강등되고, 함께 돈 다른 전문가의 보고는 온전히 남는다.
+    # 진전 없이 상한을 넘긴 전문가만 하향되고, 함께 돈 다른 전문가의 보고는 온전히 남는다.
     assert slow_result["reports"][0].exhausted is True
     assert fast_result["reports"][0].exhausted is False
 
@@ -150,7 +150,7 @@ async def test_취소는_강등되지_않고_전파된다() -> None:
     await entered.wait()
     run.cancel()
 
-    # 외부에서 건 취소는 강등된 ProbeReport로 바뀌지 않고 그대로 전파된다.
+    # 외부에서 건 취소는 하향된 ProbeReport로 바뀌지 않고 그대로 전파된다.
     with pytest.raises(asyncio.CancelledError):
         await run
 

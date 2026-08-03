@@ -22,6 +22,33 @@ URL = re.compile(r"^\s*https?://")
 LICENSE = re.compile(r"^\s*(?:Copyright|SPDX-|License|@license)", re.IGNORECASE)
 SENTENCE_BREAK = re.compile(r"[.?!]\s")
 
+# 커밋과 같은 어휘를 주석에도 강제하며 은유와 의인화 대신 코드가 하는 일을 적는다.
+FIGURATIVE = {
+    "걷어내": "제거한다",
+    "가른": "구분한다",
+    "캔다": "수집한다",
+    "잠근": "고정한다",
+    "죽인": "중단한다",
+    "이긴": "우선한다",
+    "돈다": "실행한다",
+    "집는": "가져간다",
+    "흘린": "전송한다",
+    "붙는": "연결된다",
+    "바닥나": "소진된다",
+    "혼자": "단독으로",
+    "태우": "실행한다",
+    "쥐고": "가지고",
+    "무너지": "실패한다",
+    "착지": "종료한다",
+    "강등": "낮춘다",
+    "열어본": "조회한다",
+    "훑는": "조회한다",
+    "깨운": "알린다",
+    "못박": "고정한다",
+    "완주": "끝까지 실행한다",
+    "견준": "비교한다",
+}
+
 
 def python_files(paths: Iterable[Path]) -> Iterator[Path]:
     for path in paths:
@@ -87,6 +114,9 @@ def violation(text: str) -> str | None:
         return "고아 참조나 결정 번호 대신 코드가 강제하는 사실을 직접 적는다"
     if "—" in normalized:
         return "em-dash 부연을 제거하고 결과 중심 문장으로 적는다"
+    for word, plain in FIGURATIVE.items():
+        if word in normalized:
+            return f"은유와 구어 대신 코드가 하는 일을 적는다: {word} → {plain}"
     for line in lines:
         if (
             not line

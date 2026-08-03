@@ -15,7 +15,7 @@ from ..shared.models import (
 )
 
 RECENT_TURN_LIMIT = 20
-# 워커는 최근 창에 최초 턴 하나를 더 얹어 보내므로 컨텍스트가 실을 수 있는 턴은 하나 더 많다.
+# 워커는 최근 창에 최초 턴 하나를 더 올려 보내므로 컨텍스트가 실을 수 있는 턴은 하나 더 많다.
 MAX_CONTEXT_TURNS = RECENT_TURN_LIMIT + 1
 
 

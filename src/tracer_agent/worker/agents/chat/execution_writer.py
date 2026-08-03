@@ -100,7 +100,7 @@ class ChatExecutionWriter:
             for step in outcome.steps:
                 await self._insert_step(outcome, step, now)
             await self._record_thread_turn(outcome, now)
-        # 적히지 않은 갱신을 알리지 않도록 트랜잭션이 닫힌 뒤에만 깨운다.
+        # 적히지 않은 갱신을 알리지 않도록 트랜잭션이 닫힌 뒤에만 알린다.
         if self._wakeup is not None:
             await self._wakeup.publish(outcome.execution_id, {"executionId": outcome.execution_id})
         return True
@@ -170,7 +170,7 @@ class ChatExecutionWriter:
         rows = await self._sql.fetch(
             _RECORD_THREAD_TURN, outcome.thread_id, AGENT_BACKEND, now, outcome.user_id
         )
-        # 목록 정렬 기준을 밀지 못했다면 남의 스레드에 적으려 한 것이므로 턴 전체를 되감는다.
+        # 목록 정렬 기준을 밀지 못했다면 남의 스레드에 적으려 한 것이므로 턴 전체를 되돌린다.
         if not rows:
             raise ValueError("chat thread not found for this user")
 

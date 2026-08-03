@@ -1,4 +1,4 @@
-"""태스크 이벤트 한 페이지를 읽고 열어본 이벤트를 근거로 올리는 도구를 소유한다."""
+"""태스크 이벤트 한 페이지를 읽고 조회한 이벤트를 근거로 올리는 도구를 소유한다."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ GET_TASK_EVENTS_DESCRIPTION = (
 
 
 class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
-    """앵커 태스크의 원본 이벤트를 사용자 범위로 읽고 열어본 이벤트를 근거로 올린다."""
+    """앵커 태스크의 원본 이벤트를 사용자 범위로 읽고 조회한 이벤트를 근거로 올린다."""
 
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION

@@ -11,7 +11,7 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from .llm.structured_agent import recursion_config
 from .telemetry.disclosure import TraceSafeMetadata
 
-# 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 입도는 노드 하나면 충분하다.
+# 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 입진행 중인 노드 하나면 충분하다.
 _JOB_DURABILITY: Literal["sync", "async", "exit"] = "async"
 
 type CompiledGraph = CompiledStateGraph[Any, Any, Any, Any]
@@ -52,7 +52,7 @@ async def resume_input[StateT](
     initial: StateT,
     saver: BaseCheckpointSaver[Any] | None,
 ) -> StateT | None:
-    """이어갈 체크포인트가 있으면 상태를 다시 넣지 않아야 끝난 노드를 다시 태우지 않는다."""
+    """이어갈 체크포인트가 있으면 상태를 다시 넣지 않아야 끝난 노드를 다시 실행하지 않는다."""
     if saver is None or config.get("configurable") is None:
         return initial
     restored = await graph.aget_state(config)
@@ -60,7 +60,7 @@ async def resume_input[StateT](
 
 
 def with_thread(config: RunnableConfig, thread_id: str) -> RunnableConfig:
-    """재시도가 같은 열쇠로 와야 앞선 노드를 다시 태우지 않으므로 잡 하나를 재개의 범위로 잡는다."""
+    """재시도가 같은 열쇠로 와야 앞선 노드를 다시 실행하지 않으므로 잡 하나를 재개의 범위로 잡는다."""
     return {**config, "configurable": {"thread_id": thread_id}}
 
 

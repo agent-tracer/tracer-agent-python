@@ -42,7 +42,7 @@ CHECK_CITATIONS_DESCRIPTION = (
 
 
 class CheckCitationsTool(AgentTool[CheckCitationsArgs]):
-    """도구가 아니라 근거 장부를 읽어 인용 불가한 식별자를 짚어준다."""
+    """도구가 아니라 근거 장부를 읽어 인용 불가한 식별자를 알려준다."""
 
     name = CHECK_CITATIONS
     description = CHECK_CITATIONS_DESCRIPTION

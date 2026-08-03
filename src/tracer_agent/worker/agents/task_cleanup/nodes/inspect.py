@@ -34,7 +34,7 @@ def _failure_reason(exc: Exception) -> str:
 
 
 class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
-    """조율자가 후보 목록만 보고 어느 것을 열어볼지 스스로 정하게 한다."""
+    """조율자가 후보 목록만 보고 어느 것을 조사할지 스스로 정하게 한다."""
 
     name = "triage"
 
@@ -71,7 +71,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
 
 
 class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
-    """후보 하나를 자기 예산과 자기 장부로 열어보고 판정을 올린다."""
+    """후보 하나를 자기 예산과 자기 장부로 조회하고 판정을 올린다."""
 
     name = "inspect"
 
@@ -96,7 +96,7 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
                 event_ids_by_task=event_ids,
             )
         except Exception as exc:
-            # 조사가 무너진 후보는 안전하게 보존하도록 보관 불가로 올린다.
+            # 조사가 실패한 후보는 안전하게 보존하도록 보관 불가로 올린다.
             _log.warning("inspect failed for %s: %s", task_id, exc)
             report = InspectReport(
                 taskId=task_id,

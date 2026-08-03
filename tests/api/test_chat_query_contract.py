@@ -51,7 +51,7 @@ def _shape_fields(name: str) -> list[str]:
 
 
 def _seed_all(store: SqliteLedgerSql) -> None:
-    """케이스가 대조하는 창구 전부가 값을 실어 낼 만큼의 원장을 심는다."""
+    """케이스가 대조하는 창구 전부가 값을 실어 낼 만큼의 원장을 기록한다."""
     seed_thread(store, summary="지난 이야기")
     seed_message(store, "m1", "user", "안녕", offset=0)
     seed_message(

@@ -30,7 +30,7 @@ from .policy import build_routes
 from .prompts import build_prompt_bundle
 from .reader import CleanupLedgerReader, load_cleanup_batch
 
-# 선별과 후보별 조사와 결정과 수리가 도는 동안 그래프가 밟는 노드 수의 상한이다.
+# 선별과 후보별 조사와 결정과 수리가 진행 중인 동안 그래프가 밟는 노드 수의 상한이다.
 _RECURSION_LIMIT = 30
 
 

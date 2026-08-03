@@ -1,4 +1,4 @@
-"""접수가 세운 잡 하나를 큐를 통해 워커에서 그래프째 돌리는 워크플로다."""
+"""접수가 세운 잡 하나를 큐를 통해 워커에서 그래프째 실행하는 워크플로다."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from ...shared.workflows.jobs_spec import (
 
 @workflow.defn(name=AGENT_JOB_WORKFLOW)
 class AgentJobWorkflow:
-    """title·recipe·cleanup 실행 하나를 재시도와 시간 초과가 걸린 액티비티 하나로 돌린다."""
+    """title·recipe·cleanup 실행 하나를 재시도와 시간 초과가 걸린 액티비티 하나로 실행한다."""
 
     @workflow.run
     async def run(self, request: AgentJobRequest) -> None:
@@ -50,7 +50,7 @@ class AgentJobWorkflow:
         )
 
     async def _settle_canceled(self, request: AgentJobRequest) -> None:
-        """실행 식별자가 있을 때만 원장을 취소로 닫으며, 이미 착지한 행은 조건부 갱신이 그대로 둔다."""
+        """실행 식별자가 있을 때만 원장을 취소로 닫으며, 이미 종료한 행은 조건부 갱신이 그대로 둔다."""
         execution_id = request.payload.get("executionId")
         if not isinstance(execution_id, str) or not execution_id:
             return

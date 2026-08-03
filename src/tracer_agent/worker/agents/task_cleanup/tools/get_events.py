@@ -1,4 +1,4 @@
-"""태스크 이벤트 페이지를 사용자 범위 추적 창구로 읽고 열어본 이벤트를 근거로 올린다."""
+"""태스크 이벤트 페이지를 사용자 범위 추적 창구로 읽고 조회한 이벤트를 근거로 올린다."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ GET_TASK_EVENTS_DESCRIPTION = (
 
 
 class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
-    """태스크 이벤트를 사용자 범위로 읽고 열어본 이벤트 id만 근거로 올린다."""
+    """태스크 이벤트를 사용자 범위로 읽고 읽은 이벤트 id만 근거로 올린다."""
 
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION

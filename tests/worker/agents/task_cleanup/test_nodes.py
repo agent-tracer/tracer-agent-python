@@ -1,4 +1,4 @@
-"""task-cleanup 노드를 그래프 밖에서 직접 실행해 실패 강등을 검증한다(페이크 모델, 네트워크 없음)."""
+"""task-cleanup 노드를 그래프 밖에서 직접 실행해 실패 하향을 검증한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
         InspectDispatch(assignment=InspectAssignment(taskId="task-1", weight=2), cost_budget=0.25)
     )
 
-    # 조사가 무너진 후보는 안전하게 보관 불가로, 사유는 실패로 올린다.
+    # 조사가 실패한 후보는 안전하게 보관 불가로, 사유는 실패로 올린다.
     report = result["reports"][0]
     assert report.taskId == "task-1"
     assert report.archivable is False

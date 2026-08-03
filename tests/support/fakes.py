@@ -72,7 +72,7 @@ _AUTO_REPORTS: dict[str, dict[str, Any]] = {
 }
 
 
-# 계획을 안 준 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 돈다.
+# 계획을 안 준 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 실행한다.
 _DEFAULT_PLAN = DispatchPlan.model_validate(
     {"probes": [{"probe": "timeline", "weight": 10, "question": "무엇을 했나"}]}
 )
@@ -168,7 +168,7 @@ class FakeToolLoopChat:
                     for index, call in enumerate(scripted)
                 ]
                 return mk_ai(tool_calls=calls)
-            # 전문가 보고는 조율자 턴을 소비하지 않으므로 무엇을 쥐고 돌았는지만 기록한다.
+            # 전문가 보고는 조율자 턴을 소비하지 않으므로 무엇을 가지고 돌았는지만 기록한다.
             self.probe_calls.append(
                 [getattr(tool, "name", "") for tool in self.bound_tools if tool is not probe_tool]
             )

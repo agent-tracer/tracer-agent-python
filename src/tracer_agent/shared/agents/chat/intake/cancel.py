@@ -23,7 +23,7 @@ class UpdateSignal(Protocol):
 
 
 class ChatTurnCancellation:
-    """도는 턴을 취소로 닫고, 닫혔을 때에만 워크플로와 다른 replica에 알린다."""
+    """진행 중인 턴을 취소로 닫고, 닫혔을 때에만 워크플로와 다른 replica에 알린다."""
 
     def __init__(
         self,

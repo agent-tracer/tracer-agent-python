@@ -1,4 +1,4 @@
-"""접수가 세운 대기 실행을 스레드 워크플로에 신호로 얹고 없으면 그 워크플로를 연다."""
+"""접수가 세운 대기 실행을 스레드 워크플로에 신호로 올리고 없으면 그 워크플로를 연다."""
 
 from __future__ import annotations
 
@@ -37,13 +37,13 @@ class TemporalClientProvider:
 
 
 class TemporalExecutionDispatch:
-    """대기 실행 하나를 그 스레드의 워크플로에 얹어 접수와 실행의 수명을 가른다."""
+    """대기 실행 하나를 그 스레드의 워크플로에 올려 접수와 실행의 수명을 구분한다."""
 
     def __init__(self, provider: TemporalClientProvider) -> None:
         self._provider = provider
 
     async def start(self, execution_id: str, thread_id: str) -> None:
-        """스레드마다 하나인 워크플로를 세우거나 이미 있으면 그것에 이 실행을 신호로 얹는다."""
+        """스레드마다 하나인 워크플로를 세우거나 이미 있으면 그것에 이 실행을 신호로 올린다."""
         client = await self._provider.client()
         await client.start_workflow(
             CHAT_THREAD_WORKFLOW,
@@ -51,7 +51,7 @@ class TemporalExecutionDispatch:
             id=thread_workflow_id(thread_id),
             task_queue=CHAT_TASK_QUEUE,
             id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
-            # 앞선 스레드 워크플로가 이미 닫혔으면 같은 식별자로 다시 열려야 다음 턴이 돈다.
+            # 앞선 스레드 워크플로가 이미 닫혔으면 같은 식별자로 다시 열려야 다음 턴이 실행한다.
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             start_signal=CHAT_ENQUEUE_SIGNAL,
             # 신호는 대기 줄이 움직였다는 포인터이며 실행의 사실은 원장이 갖는다.

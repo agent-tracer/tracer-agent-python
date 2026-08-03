@@ -1,4 +1,4 @@
-"""주인을 잃은 실행을 대기 자리로 되돌리고 아직 끝나지 않은 턴을 워크플로에 다시 태운다."""
+"""주인을 잃은 실행을 대기 자리로 되돌리고 아직 끝나지 않은 턴을 워크플로에 다시 올린다."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ...shared.workflows.chat_spec import RUNNING_LEASE_S
 
 @dataclass(frozen=True)
 class RecoveredExecutions:
-    """되돌린 running 개수와 다시 태운 실행 개수다."""
+    """되돌린 running 개수와 다시 시작한 실행 개수다."""
 
     recovered: int
     resumed: int

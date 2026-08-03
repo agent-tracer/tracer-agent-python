@@ -317,7 +317,7 @@ def test_전문가는_자기_근거_원천의_도구만_쥔다() -> None:
         "rules": {"list_rules", "search_recipes", "check_citations"},
         "repetition": {"search_events", "find_similar_tasks", "check_citations"},
     }
-    # 세 전문가를 합치면 조율자가 혼자 쓸 때와 같은 도구 집합이라 계약이 안 바뀐다.
+    # 세 전문가를 합치면 조율자가 단독으로 쓸 때와 같은 도구 집합이라 계약이 안 바뀐다.
     assert set().union(*rosters.values()) == {cls.name for cls in RECIPE_TOOL_CLASSES}
 
 

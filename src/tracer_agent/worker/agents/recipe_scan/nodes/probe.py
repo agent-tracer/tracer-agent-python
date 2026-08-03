@@ -100,7 +100,7 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
                 excerpts=[],
                 exhausted=True,
             )
-            # 무너진 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
+            # 실패한 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
             turns_used = payload.max_turns
         record_probe_exhaustion(AGENT_NAME, assignment.probe, budget.delta, payload.max_cost_usd)
         return {

@@ -74,7 +74,7 @@ def test_노출되지_않은_후보와_읽지_않은_이벤트_후보를_버리�
 
     valid, errors = validate_suggestions(suggestions, state)
 
-    # 검토자가 읽고 인용까지 맞춘 후보만 살아남는다.
+    # 검토자가 읽고 인용까지 맞춘 후보만 유지된다.
     assert [item.taskId for item in valid] == ["task-1"]
     assert any("unsupported candidate task ID ghost" in error for error in errors)
     assert any("task-2 was never inspected" in error for error in errors)

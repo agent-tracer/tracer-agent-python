@@ -17,7 +17,7 @@ from .nodes.inspect import InspectNode, TriageNode
 
 def _dispatch(state: TaskCleanupState) -> list[Send]:
     plan = state["plan"]
-    # 조율자가 도구를 갖지 않으므로 열어볼 후보가 없으면 바로 빈 결과로 끝낸다.
+    # 조율자가 도구를 갖지 않으므로 조회할 후보가 없으면 바로 빈 결과로 끝낸다.
     if plan is None or not plan.assignments:
         return [Send(EMPTY, state)]
     remaining = state["max_cost_usd"] - state.get("model_cost_usd", 0.0)

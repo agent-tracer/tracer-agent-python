@@ -336,7 +336,7 @@ def _scan_anchor_contract() -> Mapping[str, Any]:
 
 
 def scan_anchor_requirements() -> Mapping[str, Any]:
-    """스캔이 근거를 캘 수 있는 앵커의 자격이며 값은 계약이 소유한다."""
+    """스캔이 근거를 수집할 수 있는 앵커의 자격이며 값은 계약이 소유한다."""
     requires: Mapping[str, Any] = _scan_anchor_contract()["requires"]
     return requires
 

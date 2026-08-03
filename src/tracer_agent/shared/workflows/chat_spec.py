@@ -17,7 +17,7 @@ EXECUTION_WORKFLOW_PREFIX = "chat"
 
 CHAT_ENQUEUE_SIGNAL = "enqueueChatExecution"
 
-# 실행 갱신을 다른 replica의 SSE에 알리는 토픽이며 식별자만 나른다.
+# 실행 갱신을 다른 replica의 SSE에 알리는 토픽이며 식별자만 전달한다.
 CHAT_EXECUTION_UPDATES_TOPIC = "chat.execution.updates"
 
 NEXT_EXECUTION_ACTIVITY = "getNextChatExecution"
@@ -48,7 +48,7 @@ FAIL_TIMEOUT_S = 60.0
 
 # 신호가 끊긴 스레드는 이만큼 조용하면 다음 턴을 새 워크플로가 연다.
 THREAD_IDLE_S = 5.0
-# 이력이 무한정 자라지 않도록 이 만큼 돌린 스레드는 대기 줄을 안고 새 실행으로 넘어간다.
+# 이력이 무한정 자라지 않도록 이 만큼 실행한 스레드는 대기 줄을 안고 새 실행으로 넘어간다.
 THREAD_MAX_CHILDREN = 100
 
 STOP_COMPLETED = "completed"
@@ -68,7 +68,7 @@ def execution_workflow_id(execution_id: str) -> str:
 
 @dataclass
 class ChatExecutionRequest:
-    """실행 하나를 워크플로에 넘기는 입력이며 식별자만 나른다."""
+    """실행 하나를 워크플로에 넘기는 입력이며 식별자만 전달한다."""
 
     execution_id: str
     thread_id: str

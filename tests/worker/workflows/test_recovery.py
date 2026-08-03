@@ -1,4 +1,4 @@
-"""기동 스윕이 주인 잃은 running을 되돌리고 아직 끝나지 않은 턴을 다시 태우는지 검증한다."""
+"""기동 스윕이 주인 잃은 running을 되돌리고 아직 끝나지 않은 턴을 다시 올리는지 검증한다."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class SingleSqlSource:
 
 
 class RecordingDispatch:
-    """스윕이 어떤 실행을 다시 태웠는지 붙잡아 둔다."""
+    """스윕이 어떤 실행을 다시 태웠는지 보관해 둔다."""
 
     def __init__(self) -> None:
         self.signaled: list[tuple[str, str]] = []

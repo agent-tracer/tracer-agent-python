@@ -134,7 +134,7 @@ def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[St
         return request.override(messages=[*messages, HumanMessage(content=notice)])
     context.budget.land()
     context.trace.mark_landed()
-    # 구조화 출력 도구는 이 목록 밖에서 붙어 조사 도구만 거두며, 남은 산출 형태는 response_format이 가른다.
+    # 구조화 출력 도구는 이 목록 밖에서 붙어 조사 도구만 거두며, 남은 산출 형태는 response_format이 구분한다.
     directive = finalize_directive(structured_output=request.response_format is not None)
     return request.override(
         messages=[*messages, HumanMessage(content=directive)],

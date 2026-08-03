@@ -31,7 +31,7 @@ class StructuredAgentResult[Response: BaseModel]:
     num_turns: int
 
 
-# 한 턴이 langchain agent의 여러 슈퍼스텝을 돌므로 재귀 한도는 예산이 아니라 폭주만 끊는 그물이다.
+# 한 턴이 langchain agent의 여러 슈퍼스텝을 거치므로 재귀 한도는 예산이 아니라 폭주만 끊는 상한이다.
 def recursion_limit_for(max_turns: int) -> int:
     """모델 턴 상한에서 그래프 재귀 상한을 유도한다."""
     return 10 * max_turns

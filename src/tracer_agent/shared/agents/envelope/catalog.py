@@ -19,7 +19,7 @@ MODEL_RATES: dict[str, ModelRateDTO] = {
 
 @dataclass(frozen=True)
 class ExecutionCatalog:
-    """실행 종류 하나가 쓸 기본 모델과 물러설 모델과 한도와 벽시계 상한이다."""
+    """실행 종류 하나가 쓸 기본 모델과 대체할 모델과 한도와 벽시계 상한이다."""
 
     default_model: str
     fallback_model: str | None

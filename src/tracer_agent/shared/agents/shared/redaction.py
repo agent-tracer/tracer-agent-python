@@ -113,13 +113,13 @@ def _folded_key(key: str) -> str:
 
 
 def is_suspect_key(key: str) -> bool:
-    """영숫자만 남겨 접은 이름이 계약의 key 낱말을 품는지 견준다."""
+    """영숫자만 남겨 접은 이름이 계약의 key 낱말을 품는지 비교한다."""
     folded = _folded_key(key)
     return any(word in folded for word in _key_words())
 
 
 def is_suspect_text(text: str) -> bool:
-    """구분자를 지키고 접은 문자열에서 계약의 값 낱말 뒤에 자격의 몸통이 이어지는지 견준다."""
+    """구분자를 지키고 접은 문자열에서 계약의 값 낱말 뒤에 자격의 몸통이 이어지는지 비교한다."""
     folded = _lower_ascii(text)
     return any(_carries_body(folded, word) for word in _value_words())
 
@@ -190,7 +190,7 @@ def redact(value: RedactableValue, *, stage: RedactionStage) -> RedactableValue:
 
 
 def redact_text(text: str, *, stage: RedactionStage) -> str:
-    """경계를 넘는 문자열 하나를 자리의 규칙으로 견주어 걸리면 표시로 바꾼다."""
+    """경계를 넘는 문자열 하나를 자리의 규칙으로 비교해 걸리면 표시로 바꾼다."""
     if not (inspects_values(stage) and is_suspect_text(text)):
         return text
     if discards(stage):

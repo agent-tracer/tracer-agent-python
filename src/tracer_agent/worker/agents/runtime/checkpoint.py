@@ -13,7 +13,7 @@ from .serde import graph_serde
 
 
 class GraphCheckpointProvider:
-    """한 워커 프로세스가 공유하는 Postgres 세이버 하나를 지연 생성해 쥔다."""
+    """한 워커 프로세스가 공유하는 Postgres 세이버 하나를 지연 생성해 가진다."""
 
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn

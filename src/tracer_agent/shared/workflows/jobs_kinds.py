@@ -19,14 +19,14 @@ def lease_ttl_ms() -> int:
 
 
 class JobExecutor(StrEnum):
-    """워크플로가 도는 잡과 플러그인이 궤적을 넘기는 잡을 가르는 실행 주체다."""
+    """워크플로가 실행하는 잡과 플러그인이 궤적을 넘기는 잡을 구분하는 실행 주체다."""
 
     TEMPORAL = "temporal"
     LOCAL = "local"
 
 
 class AgentJobKind(StrEnum):
-    """이 서비스가 그래프로 돌리는 잡 종류이며 값은 그 잡을 맡은 에이전트의 이름이다."""
+    """이 서비스가 그래프로 실행하는 잡 종류이며 값은 그 잡을 맡은 에이전트의 이름이다."""
 
     wire: str
 

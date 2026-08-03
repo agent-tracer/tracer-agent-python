@@ -38,7 +38,7 @@ class SingleSql:
 
 
 class FakeJobDispatch:
-    """워커에 실제로 붙지 않고 기동·취소 요청을 그대로 붙잡아 두는 잡 디스패치 대역이다."""
+    """워커에 실제로 붙지 않고 기동·취소 요청을 그대로 보관해 두는 잡 디스패치 대역이다."""
 
     def __init__(self) -> None:
         self.started: list[tuple[str, str, dict[str, Any]]] = []
@@ -280,7 +280,7 @@ def test_task_cleanup_접수는_202와_실행_식별자를_낸다(
     assert kind == "task-cleanup"
     assert payload["maxSuggestions"] == 20
     assert "batch" not in payload
-    # 사용자 전체를 훑는 잡이라 태스크에 매이지 않는다.
+    # 사용자 전체를 조회하는 잡이라 태스크에 매이지 않는다.
     assert store.rows("ai_jobs")[0]["task_id"] is None
 
 
@@ -353,7 +353,7 @@ def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸�
     assert job["status"] == "pending"
     row = store.rows("ai_jobs")[0]
     assert row["executor"] == "local"
-    # 워크플로가 아니라 로컬 실행기가 태워도 접수구가 정한 축은 같다.
+    # 워크플로가 아니라 로컬 실행기가 실행해도 접수구가 정한 축은 같다.
     assert row["backend"] == AGENT_BACKEND
     assert row["task_id"] == "task-1"
     # 로컬 실행기가 가져가는 잡이라 워크플로도 실행 봉투도 접수가 부르지 않는다.

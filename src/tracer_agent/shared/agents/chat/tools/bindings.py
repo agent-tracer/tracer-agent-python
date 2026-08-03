@@ -84,7 +84,7 @@ TOOL_BINDINGS: dict[str, ToolBinding] = {
         "POST",
         "/api/v1/memos",
         body=_same("taskId", "body", "eventId"),
-        # 저자는 모델이 정할 수 없고 에이전트가 쓴 메모임을 실행이 못박는다.
+        # 저자는 모델이 정할 수 없고 에이전트가 쓴 메모임을 실행이 고정한다.
         body_constants={"author": "agent"},
     ),
     "update_memo": _write("PATCH", "/api/v1/memos/{memoId}", path_args=("memoId",), body=_same("body")),

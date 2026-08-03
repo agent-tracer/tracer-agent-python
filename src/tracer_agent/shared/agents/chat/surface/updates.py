@@ -1,4 +1,4 @@
-"""다른 프로세스가 흘린 실행 갱신 신호를 열린 연결마다의 깨우기로 나눈다."""
+"""다른 프로세스가 보낸 실행 갱신 신호를 열린 연결마다의 알림으로 나눈다."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class ConsumerFactory(Protocol):
 
 
 def kafka_consumer(brokers: str, topic: str) -> Any:
-    """설정한 브로커에 붙는 Kafka 소비자를 만든다."""
+    """설정한 브로커에 연결되는 Kafka 소비자를 만든다."""
     return AIOKafkaConsumer(topic, bootstrap_servers=brokers, auto_offset_reset=_OFFSET_RESET)
 
 

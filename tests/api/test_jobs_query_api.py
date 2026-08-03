@@ -26,7 +26,7 @@ NOW = datetime(2026, 7, 30, tzinfo=UTC)
 
 
 async def seed_job(store: SqliteLedgerSql, user_id: str = "local") -> None:
-    """조회가 읽을 잡 한 행과 그 궤적을 심는다."""
+    """조회가 읽을 잡 한 행과 그 궤적을 기록한다."""
     ledger = JobLedger(store)
     await ledger.claim(
         "j1", user_id, "recipe.scan", "temporal", "task-1", None, None, {"taskId": "task-1"}, NOW
@@ -135,7 +135,7 @@ async def test_궤적이_없는_잡은_빈_목록을_낸다(client: TestClient, 
 
 
 async def seed_history(store: SqliteLedgerSql) -> None:
-    """이력과 최신 잡 조회가 읽을 여러 행을 시각을 벌려 심는다."""
+    """이력과 최신 잡 조회가 읽을 여러 행을 시각을 벌려 기록한다."""
     ledger = JobLedger(store)
     for index, (job_id, kind, task_id, status) in enumerate(
         [

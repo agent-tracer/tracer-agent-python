@@ -50,7 +50,7 @@ class ExecutionLimitsDTO(BaseModel):
     """이 실행이 지킬 한도이며 서버 카탈로그가 기능마다 정한다."""
 
     budgetUsd: float = Field(gt=0)
-    # 예산이 아니라 폭주만 끊는 느슨한 그물이며 모델의 self-pacing 표시에도 쓰인다.
+    # 예산이 아니라 폭주만 끊는 느슨한 상한이며 모델의 self-pacing 표시에도 쓰인다.
     maxTurns: int = Field(gt=0)
     maxOutputTokens: int = Field(gt=0)
 

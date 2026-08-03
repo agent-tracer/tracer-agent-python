@@ -1,4 +1,4 @@
-"""잡 그래프가 같은 열쇠로 다시 실행되면 끝난 노드를 다시 태우지 않는지 검증한다."""
+"""잡 그래프가 같은 열쇠로 다시 실행되면 끝난 노드를 다시 실행하지 않는지 검증한다."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ _PLAN = DispatchPlan(
 
 
 class _SharedSaver:
-    """한 실행의 두 시도가 같은 체크포인트를 보도록 세이버 하나를 쥔다."""
+    """한 실행의 두 시도가 같은 체크포인트를 보도록 세이버 하나를 가진다."""
 
     def __init__(self) -> None:
         self._saver = InMemorySaver(serde=graph_serde())
@@ -36,7 +36,7 @@ class _SharedSaver:
 
 
 class _FailOnceChat(FakeToolLoopChat):
-    """첫 시도의 종합에서만 무너져 앞선 노드가 체크포인트에 남게 한다."""
+    """첫 시도의 종합에서만 실패해 앞선 노드가 체크포인트에 남게 한다."""
 
     def __init__(self, turns: list[Any], **kwargs: Any) -> None:
         super().__init__(turns, **kwargs)

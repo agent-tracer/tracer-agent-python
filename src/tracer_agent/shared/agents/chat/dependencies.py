@@ -13,7 +13,7 @@ from .surface.updates import ChatExecutionUpdates
 
 
 def get_execution_dispatch(request: Request) -> ExecutionDispatch:
-    """대기 실행을 태우고 도는 실행을 끊는 신호 창구를 낸다."""
+    """대기 실행을 시작하고 진행 중인 실행을 끊는 신호 창구를 낸다."""
     dispatch: ExecutionDispatch = request.app.state.execution_dispatch
     return dispatch
 
@@ -25,7 +25,7 @@ def get_execution_updates(request: Request) -> UpdateSignal | None:
 
 
 def get_execution_watch(request: Request) -> ChatExecutionUpdates | None:
-    """다른 replica 가 흘린 갱신을 듣는 창구를 내며 배선이 없으면 비운다."""
+    """다른 replica 가 보낸 갱신을 듣는 창구를 내며 배선이 없으면 비운다."""
     watch: ChatExecutionUpdates | None = getattr(request.app.state, "execution_watch", None)
     return watch
 

@@ -221,7 +221,7 @@ async def test_착지했는지를_응답에_실어_보낸다(monkeypatch: pytest
     monkeypatch.setattr(cleanup_mod, "make_chat_pair", lambda *_a, **_k: ChatPair(cheap, None))
     unlanded = await _run(cheap, FakeTracerApi())
 
-    # 턴을 다 써 끝난 실행과 예산이 다해 착지한 실행을 서버가 구분해 답할 수 있어야 한다.
+    # 턴을 다 써 끝난 실행과 예산이 다해 종료한 실행을 서버가 구분해 답할 수 있어야 한다.
     assert landed.landed is True
     assert unlanded.landed is False
 

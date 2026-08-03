@@ -23,7 +23,7 @@ from .reservation import load_wall_clock_policy
 _RECIPE_SCAN_DEADLINE_MS = CATALOG["recipe.scan"].deadline_ms
 _WALL_CLOCK = load_wall_clock_policy()
 
-# 전문가가 진전 없이 머무는 상한이며, 몫이 큰 전문가가 자연히 더 오래 도는 것을 막지 않는다.
+# 전문가가 진전 없이 머무는 상한이며, 몫이 큰 전문가가 자연히 더 오래 진행 중인 것을 막지 않는다.
 PROBE_WALL_CLOCK_CEILING_S = deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)
 _PROBE_SEND_TIMEOUT = TimeoutPolicy(
     idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)
@@ -45,7 +45,7 @@ async def _survey_error_handler(
     *,
     error: NodeError,  # noqa: ARG001 (langgraph는 이 이름으로만 주입한다)
 ) -> Command[str]:
-    """조율자 계획이 재시도 끝에도 무너지면 빈 계획으로 강등해 결론 없는 성공으로 끝낸다."""
+    """조율자 계획이 재시도 끝에도 실패하면 빈 계획으로 하향해 결론 없는 성공으로 끝낸다."""
     return Command(update={"plan": None}, goto=EMPTY)
 
 
@@ -77,7 +77,7 @@ def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd:
 
 def _dispatch(state: RecipeScanState) -> list[Send]:
     plan = state["plan"]
-    # 조율자가 근거를 캐는 도구를 갖지 않으므로 띄울 전문가가 없으면 바로 빈 결과로 끝낸다.
+    # 조율자가 근거를 수집하는 도구를 갖지 않으므로 띄울 전문가가 없으면 바로 빈 결과로 끝낸다.
     if plan is None or not plan.probes:
         return [Send(EMPTY, state)]
     remaining_turns, remaining_usd = _remaining(state)

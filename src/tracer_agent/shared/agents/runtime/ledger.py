@@ -1,4 +1,4 @@
-"""원장에 붙는 연결 풀의 수명과 드라이버를 가린 문장 실행 표면을 소유한다."""
+"""원장에 연결되는 연결 풀의 수명과 드라이버를 가린 문장 실행 표면을 소유한다."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from asyncpg.pool import PoolConnectionProxy
 # 런타임의 Pool은 첨자를 받지 않으므로 평가가 지연되는 별칭으로만 제네릭 형태를 쓴다.
 type LedgerPool = asyncpg.Pool[asyncpg.Record]
 
-# 풀에서 빌린 연결은 대리자로 오므로 두 형태를 모두 받는다.
+# 풀에서 받은 연결은 대리자로 오므로 두 형태를 모두 받는다.
 type LedgerConnection = asyncpg.Connection[asyncpg.Record] | PoolConnectionProxy[asyncpg.Record]
 
 type SqlRow = dict[str, Any]
@@ -37,7 +37,7 @@ class LedgerPoolProvider:
         self._lock = asyncio.Lock()
 
     async def pool(self) -> LedgerPool:
-        """원장 뷰에 붙는 연결 풀을 돌려준다."""
+        """원장 뷰에 연결되는 연결 풀을 돌려준다."""
         async with self._lock:
             pool = self._pool
             if pool is None:

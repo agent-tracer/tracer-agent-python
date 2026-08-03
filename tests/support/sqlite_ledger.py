@@ -290,7 +290,7 @@ class SqliteLedgerSql:
         return self._transaction()
 
     def seed(self, table: str, rows: Iterable[Mapping[str, Any]]) -> None:
-        """테스트가 준비한 행을 그대로 심는다."""
+        """테스트가 준비한 행을 그대로 기록한다."""
         for row in rows:
             columns = ", ".join(row)
             marks = ", ".join("?" for _ in row)

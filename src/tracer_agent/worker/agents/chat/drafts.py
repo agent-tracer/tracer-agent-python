@@ -19,7 +19,7 @@ DRAFT_TIMEOUT_S = 5.0
 
 
 class ChatExecutionClosed(Exception):
-    """서버가 실행을 종결해 더 태울 이유가 없음을 알린다."""
+    """서버가 실행을 종결해 더 실행할 이유가 없음을 알린다."""
 
 
 def tool_marker(tool_name: str) -> str:
@@ -54,7 +54,7 @@ class DraftPublisher:
             await self._send()
 
     async def push_tool(self, tool_name: str) -> None:
-        """도구가 도는 동안에도 진행이 보이도록 호출을 누적분에 남긴다."""
+        """도구가 진행 중인 동안에도 진행이 보이도록 호출을 누적분에 남긴다."""
         await self.push(tool_marker(tool_name))
 
     async def flush(self) -> None:

@@ -1,4 +1,4 @@
-"""검증 결과를 수리·확정·빈 결과 경로로 가르는 닫힌 분기 기계를 제공한다."""
+"""검증 결과를 수리·확정·빈 결과 경로로 구분하는 닫힌 분기 기계를 제공한다."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def build_validation_router[StateT: ValidatedState](
     exhausted_reason: str,
     has_result: Callable[[StateT], bool] | None = None,
 ) -> ValidationRoute[StateT]:
-    """검증 통과·수리 전·수리 후 소진 세 경우를 정해진 사유 문구와 함께 경로로 가른다."""
+    """검증 통과·수리 전·수리 후 소진 세 경우를 정해진 사유 문구와 함께 경로로 구분한다."""
 
     def route_validation(state: StateT) -> ValidationRouteName:
         if not state["validation_errors"]:

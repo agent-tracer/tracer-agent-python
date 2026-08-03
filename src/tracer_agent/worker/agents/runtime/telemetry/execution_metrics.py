@@ -58,7 +58,7 @@ def record_redispatch_rounds(agent: str, rounds: int) -> None:
 
 
 def record_validation_failure(agent: str, repaired: bool) -> None:
-    """결정론 검증이 산출을 거절한 실행이며 repaired가 그 뒤 수리가 살렸는지를 가른다."""
+    """결정론 검증이 산출을 거절한 실행이며 repaired가 그 뒤 수리가 살렸는지를 구분한다."""
     _instruments()[VALIDATION_FAILURE].add(1, {"agent": agent, "repaired": repaired})
 
 

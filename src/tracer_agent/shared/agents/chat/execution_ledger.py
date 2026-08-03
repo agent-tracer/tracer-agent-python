@@ -156,7 +156,7 @@ RETURNING id
 
 @dataclass(frozen=True)
 class ChatExecutionSpend:
-    """턴 하나가 실제로 태운 지출과 모델이 말을 멈춘 이유다."""
+    """턴 하나가 실제로 실행한 지출과 모델이 말을 멈춘 이유다."""
 
     model_used: str
     cost_usd: float | None

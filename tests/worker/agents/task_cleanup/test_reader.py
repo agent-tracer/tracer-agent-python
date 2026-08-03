@@ -1,4 +1,4 @@
-"""task-cleanup 스캔이 훑는 창의 경계를 고정한다."""
+"""task-cleanup 스캔이 조회하는 창의 경계를 고정한다."""
 
 from __future__ import annotations
 

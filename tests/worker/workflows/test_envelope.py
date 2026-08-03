@@ -44,7 +44,7 @@ async def test_받은_값을_봉투_조각과_지문으로_가른다() -> None:
     assert envelope.fields["apiKey"] == "sk-test"
     assert envelope.fields["limits"]["maxTurns"] == 14
     assert "draft" not in envelope.fields
-    # draft 창구는 이 시도에만 유효하므로 시도 번호가 봉투에서 붙는다.
+    # draft 창구는 이 시도에만 유효하므로 시도 번호가 봉투에서 연결되는다.
     assert envelope.fields["draftCallback"] == {"url": DATA["draft"]["url"], "token": "tok", "attempt": 2}
 
 

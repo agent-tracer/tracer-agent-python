@@ -33,7 +33,7 @@ def chat_middleware(
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         # 시스템 프롬프트와 도구 선언이 턴마다 같으므로 그 둘이 캐시 접두사가 된다.
         AnthropicPromptCachingMiddleware(ttl="1h"),
-        # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 갈라진다.
+        # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end"),
         # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
         context_editing_middleware(),

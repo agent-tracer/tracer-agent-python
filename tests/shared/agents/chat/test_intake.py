@@ -19,7 +19,7 @@ NOW = datetime(2026, 7, 26, 0, 5, tzinfo=UTC)
 
 
 class RecordingDispatch:
-    """접수가 어떤 실행에 워크플로 신호를 보냈는지 붙잡아 둔다."""
+    """접수가 어떤 실행에 워크플로 신호를 보냈는지 보관해 둔다."""
 
     def __init__(self) -> None:
         self.signaled: list[tuple[str, str]] = []

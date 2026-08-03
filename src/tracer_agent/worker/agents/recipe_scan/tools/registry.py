@@ -29,7 +29,7 @@ RECIPE_TOOL_CLASSES: tuple[type[AgentTool[Any]], ...] = (
     CheckCitationsTool,
 )
 
-# 전문가는 자기 근거 원천에 닿는 도구 이름만 쥐고 인용 확인만은 모든 전문가가 공유한다.
+# 전문가는 자기 근거 원천에 닿는 도구 이름만 가지고 인용 확인만은 모든 전문가가 공유한다.
 PROBE_TOOLS: dict[ProbeName, tuple[str, ...]] = {
     "timeline": (GET_TASK_SUMMARY, GET_TASK_EVENTS, SEARCH_EVENTS, CHECK_CITATIONS),
     "rules": (LIST_RULES, SEARCH_RECIPES, CHECK_CITATIONS),
@@ -39,7 +39,7 @@ PROBE_TOOLS: dict[ProbeName, tuple[str, ...]] = {
 # 조율자는 근거를 직접 캐지 않고 전문가가 합친 장부의 인용만 확인한다.
 COORDINATOR_TOOLS: tuple[str, ...] = (CHECK_CITATIONS,)
 
-# 계획이 규모를 모른 채 서지 않도록 조율자가 요약 하나를 쥔다.
+# 계획이 규모를 모른 채 서지 않도록 조율자가 요약 하나를 가진다.
 SURVEY_TOOLS: tuple[str, ...] = (GET_TASK_SUMMARY,)
 
 _ARGS_BY_TOOL: dict[str, type[BaseModel]] = {cls.name: cls.args_model for cls in RECIPE_TOOL_CLASSES}

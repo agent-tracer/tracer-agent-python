@@ -72,7 +72,7 @@ def client(store: SqliteLedgerSql, credentials: FakeCredentials) -> Iterator[Tes
 
 
 def seed_execution(store: SqliteLedgerSql, model: str | None = None) -> None:
-    """봉투를 물을 대화 실행 행 하나를 심는다."""
+    """봉투를 물을 대화 실행 행 하나를 기록한다."""
     store.seed(
         "chat_executions",
         [

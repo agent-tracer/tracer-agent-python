@@ -89,7 +89,7 @@ class ChatIntakeLedger:
         language: str | None,
         now: datetime,
     ) -> SqlRow:
-        """이 접수구가 받았다는 것이 곧 축이므로 축을 함께 적고 이번 턴을 태울 실행을 대기 상태로 세운다."""
+        """이 접수구가 받았다는 것이 곧 축이므로 축을 함께 적고 이번 턴을 실행할 실행을 대기 상태로 세운다."""
         rows = await self._sql.fetch(
             _INSERT_QUEUED_EXECUTION,
             execution_id,

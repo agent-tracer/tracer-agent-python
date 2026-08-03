@@ -79,7 +79,7 @@ async def test_일시_오류는_도구_계층에서_재시도해_실행이_이�
         config={"recursion_limit": 100},
     )
 
-    # 첫 호출이 끊겨도 도구를 한 번 더 부르고, 조사는 무너지지 않고 이어진다.
+    # 첫 호출이 끊겨도 도구를 한 번 더 부르고, 조사는 실패하지 않고 이어진다.
     assert calls[0] == 2
     assert isinstance(output.get("structured_response"), RecipeDraft)
 

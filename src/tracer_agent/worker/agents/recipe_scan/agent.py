@@ -36,7 +36,7 @@ from .reader import RecipeLedgerReader
 from .reservation import load_reservation_policy
 from .search import RecipeSearchReader
 
-# 조사 계획과 전문가 팬아웃과 종합과 수리가 도는 동안 그래프가 밟는 노드 수의 상한이다.
+# 조사 계획과 전문가 팬아웃과 종합과 수리가 진행 중인 동안 그래프가 밟는 노드 수의 상한이다.
 _RECURSION_LIMIT = 30
 
 

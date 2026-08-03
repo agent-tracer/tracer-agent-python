@@ -44,7 +44,7 @@ def test_후보_비용_몫은_배분한_weight에_비례한다() -> None:
 
 
 def test_열어볼_후보가_없으면_즉시_빈_결과로_끝낸다() -> None:
-    # 조율자가 도구를 갖지 않으므로 열어볼 후보가 없으면 혼자 조사할 길이 없어 바로 끝난다.
+    # 조율자가 도구를 갖지 않으므로 조회할 후보가 없으면 단독으로 조사할 길이 없어 바로 끝난다.
     sends = _dispatch({"plan": TriagePlan(inspect=[]), "max_cost_usd": 2.0})  # type: ignore[typeddict-item]
 
     assert [send.node for send in sends] == ["empty"]

@@ -10,7 +10,7 @@ SURFACE_PATH = "/internal/surface"
 
 
 def served_routes(application: FastAPI) -> list[dict[str, str]]:
-    """손으로 적은 목록이 라우팅과 갈라지지 않도록 앱이 조립한 표를 그대로 읽는다."""
+    """손으로 적은 목록이 라우팅과 달라지지 않도록 앱이 조립한 표를 그대로 읽는다."""
     declared = {
         (method.upper(), path)
         for path, operations in application.openapi()["paths"].items()

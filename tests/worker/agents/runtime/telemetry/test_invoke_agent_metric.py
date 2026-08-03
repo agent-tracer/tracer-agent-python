@@ -11,7 +11,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 METRIC_NAME = "gen_ai.invoke_agent.duration"
 
-# 공급자는 프로세스에서 한 번만 세울 수 있으므로 이 모듈이 하나를 세우고 속성으로 가른다.
+# 공급자는 프로세스에서 한 번만 세울 수 있으므로 이 모듈이 하나를 세우고 속성으로 구분한다.
 _READER = InMemoryMetricReader()
 metrics.set_meter_provider(MeterProvider(metric_readers=[_READER]))
 

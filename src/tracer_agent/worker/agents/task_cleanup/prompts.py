@@ -109,7 +109,7 @@ def build_user_prompt(
 
 
 def build_triage_prompt(candidate_count: int) -> str:
-    """조율자가 무엇을 열어볼지 정하는 데 필요한 사실만 싣는다."""
+    """조율자가 무엇을 조사할지 정하는 데 필요한 사실만 싣는다."""
     return "\n".join(
         [
             f"Candidates in this batch: {candidate_count}",

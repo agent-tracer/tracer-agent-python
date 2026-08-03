@@ -10,7 +10,7 @@ ATTEMPT_FAILED = "failed"
 
 
 def status_and_error(response: AgentResponse) -> tuple[str, str | None]:
-    """응답의 오류 유무와 서브타입만으로 원장이 쓸 종료 상태를 가른다."""
+    """응답의 오류 유무와 서브타입만으로 원장이 쓸 종료 상태를 구분한다."""
     if response.error is None:
         return "completed", None
     if response.error.subtype == "cancelled":
@@ -19,7 +19,7 @@ def status_and_error(response: AgentResponse) -> tuple[str, str | None]:
 
 
 def job_usage(response: AgentResponse, cost_usd: float | None, attempt: int = 1) -> dict[str, Any]:
-    """성공한 잡은 태운 모델의 별칭과 토큰과 비용을, 끝내지 못한 잡은 시도 이력을 원장 한 칸에 담는다."""
+    """성공한 잡은 실행한 모델의 별칭과 토큰과 비용을, 끝내지 못한 잡은 시도 이력을 원장 한 칸에 담는다."""
     if response.error is not None:
         return {"attempts": [attempt_record(response, response.error, cost_usd, attempt)]}
     usage = response.usage

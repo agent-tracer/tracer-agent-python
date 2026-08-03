@@ -15,7 +15,7 @@ TASK_ANCHOR_PATH = "/api/v1/tasks/{task_id}"
 ANCHOR_TIMEOUT_S = 10.0
 MONITOR_USER_HEADER = "x-monitor-user"
 NOT_FOUND_STATUS = 404
-# 근거가 사용자 발화인지를 가르는 이벤트 종류다.
+# 근거가 사용자 발화인지를 구분하는 이벤트 종류다.
 USER_MESSAGE_KIND = "agent_tracer.user.message"
 
 
@@ -25,7 +25,7 @@ class RuleAnchorUnavailable(RuntimeError):
 
 @dataclass(frozen=True)
 class RuleAnchor:
-    """규칙 생성이 근거로 삼는 이벤트 하나이며 소속 태스크와 발화 여부를 함께 나른다."""
+    """규칙 생성이 근거로 삼는 이벤트 하나이며 소속 태스크와 발화 여부를 함께 전달한다."""
 
     id: str
     task_id: str
@@ -88,7 +88,7 @@ def _anchor(data: JsonValue) -> RuleAnchor | None:
 
 @dataclass(frozen=True)
 class ScanAnchor:
-    """스캔이 근거를 캘 태스크 하나이며 자격 판정에 쓰는 세 값을 나른다."""
+    """스캔이 근거를 수집할 태스크 하나이며 자격 판정에 쓰는 세 값을 전달한다."""
 
     id: str
     origin: str | None

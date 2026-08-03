@@ -27,19 +27,19 @@ def _frames(body: str) -> list[dict[str, object]]:
 
 
 class WakingWatch:
-    """열린 연결의 깨우기를 시험이 직접 켜고 구독을 놓았는지 관측한다."""
+    """열린 연결의 알림를 시험이 직접 켜고 구독을 놓았는지 관측한다."""
 
     def __init__(self) -> None:
         self.released = False
         self._listener: Callable[[], None] | None = None
 
     def subscribe(self, _execution_id: str, listener: Callable[[], None]) -> Callable[[], None]:
-        """이 실행의 깨우기를 맡아 두고 그만 듣는 방법을 낸다."""
+        """이 실행의 알림를 맡아 두고 그만 듣는 방법을 낸다."""
         self._listener = listener
         return self._release
 
     def wake(self) -> None:
-        """맡아 둔 깨우기를 켠다."""
+        """맡아 둔 알림를 켠다."""
         assert self._listener is not None
         self._listener()
 

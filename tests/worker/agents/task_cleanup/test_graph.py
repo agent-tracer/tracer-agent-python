@@ -63,7 +63,7 @@ def _event_rows(*event_ids: str) -> list[dict[str, Any]]:
 
 
 def _triage(*assignments: dict[str, object]) -> dict[str, list[Any]]:
-    """조율자는 후보를 직접 열지 못하므로 선별자가 목록을 보고 검토자를 배정하게 대본을 짠다."""
+    """조율자는 후보를 직접 열지 못하므로 선별자가 목록을 보고 검토자를 배정하게 대본을 구성한다."""
     return {
         "Call list_candidate_tasks": [
             [{"name": "list_candidate_tasks", "args": {}}],
@@ -316,7 +316,7 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
 
     assert res.error is None
     assert [item["taskId"] for item in res.data["suggestions"]] == ["task-1", "task-2"]
-    # 조율자가 두 번 종합했고 그 사이 후보 하나를 더 열어보게 재파견한다.
+    # 조율자가 두 번 종합했고 그 사이 후보 하나를 더 조회하게 재파견한다.
     completed = [
         step for step in res.steps if step.nodeName == "investigate" and step.eventKind == "node.completed"
     ]
@@ -336,7 +336,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
         async def ainvoke(self, messages: list[Any]) -> Any:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
             text = " ".join(str(getattr(message, "content", message)) for message in messages)
-            # CleanupDraft를 쥔 조율자는 걸리지 않아 task-2 조사만 골라 무너진다.
+            # CleanupDraft를 쥔 조율자는 걸리지 않아 task-2 조사만 골라 실패한다.
             if "InspectReport" in names and "task-2" in text:
                 raise RuntimeError("inspect blew up")
             return await super().ainvoke(messages)
@@ -352,7 +352,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
         _candidate("task-2", has_events=True),
     )
 
-    # 한 후보 조사가 예외를 던져도 잡은 실패하지 않고 완주한다.
+    # 한 후보 조사가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
     assert res.error is None and res.data == {"suggestions": []}
     inspected = [step for step in res.steps if step.nodeName == "inspect"]
     assert sum(1 for step in inspected if step.eventKind == "node.completed") == 2

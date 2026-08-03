@@ -46,7 +46,7 @@ def test_전문가_턴과_비용_몫은_배분한_weight에_비례한다() -> No
 
 
 def test_띄울_전문가가_없으면_즉시_빈_결과로_끝낸다() -> None:
-    # 조율자가 근거를 캐는 도구를 갖지 않아 혼자 조사할 길이 없으므로 계획이 비면 그대로 끝난다.
+    # 조율자가 근거를 수집하는 도구를 갖지 않아 단독으로 조사할 길이 없으므로 계획이 비면 그대로 끝난다.
     empty = _dispatch({"plan": DispatchPlan(), "max_cost_usd": 2.0, "max_turns": 8})  # type: ignore[typeddict-item]
     missing = _dispatch({"plan": None, "max_cost_usd": 2.0, "max_turns": 8})  # type: ignore[typeddict-item]
 

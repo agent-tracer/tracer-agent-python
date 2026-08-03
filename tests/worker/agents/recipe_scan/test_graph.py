@@ -145,7 +145,7 @@ async def test_전문가가_모은_장부로_조율자가_후보를_낸다(
 
     assert res.error is None
     assert res.data is not None and res.data["recipes"][0]["title"] == "Add migration"
-    # 근거를 캐는 도구 호출은 조율자가 아니라 두 전문가에게서만 나온다.
+    # 근거를 수집하는 도구 호출은 조율자가 아니라 두 전문가에게서만 나온다.
     assert sorted(step.toolName for step in res.steps if step.role == "tool") == [
         "get_task_events",
         "list_rules",
@@ -170,7 +170,7 @@ async def test_도구를_한_번도_부르지_않아도_빈_결과로_끝난다(
 async def test_띄울_전문가가_없으면_조율자를_부르지_않고_빈_결과로_끝난다(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # 조율자 턴 대본을 비워 두어, 조사가 조율자에게 닿으면 그 자리에서 무너지게 한다.
+    # 조율자 턴 대본을 비워 두어, 조사가 조율자에게 닿으면 그 자리에서 실패하게 한다.
     chat = FakeToolLoopChat([], plan=DispatchPlan())
     ledger = _default_ledger()
 
@@ -291,7 +291,7 @@ async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_�
     ]
     assert len(completed) == 2
     assert any("redispatch repetition:2" in step.content for step in res.steps)
-    # 초기 두 전문가에 재파견 하나를 더해 전문가는 세 번 돈다.
+    # 초기 두 전문가에 재파견 하나를 더해 전문가는 세 번 실행한다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
     narrate("recipe-scan :: 조율자가 재파견을 요청하면 전문가를 한 번 더 부르고 완주한다", res)
@@ -312,7 +312,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
     assert res.error is None and res.data["recipes"] == []
     redispatched = [step for step in res.steps if "redispatch repetition" in step.content]
     assert len(redispatched) == 1
-    # 재파견은 한 번만 실렸으므로 전문가는 초기 둘에 하나만 더해 세 번 돈다.
+    # 재파견은 한 번만 실렸으므로 전문가는 초기 둘에 하나만 더해 세 번 실행한다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
     narrate("recipe-scan :: 재파견 상한을 넘긴 두 번째 요청은 무시하고 끝낸다", res)
@@ -333,7 +333,7 @@ async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등�
 
     res = await _run(monkeypatch, chat)
 
-    # 재시도 대상이 아닌 실패는 조율자를 빈 계획으로 강등하고 잡은 성공한다.
+    # 재시도 대상이 아닌 실패는 조율자를 빈 계획으로 낮추고 잡은 성공한다.
     assert res.error is None and res.data is not None and res.data["recipes"] == []
     # 계획 단계가 첫 모델 호출이므로 실패도 거기서 궤적에 남는다.
     events = [step.eventKind for step in res.steps if step.nodeName == "survey"]
@@ -416,7 +416,7 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
     res = await _run(monkeypatch, chat)
 
     assert res.error is None
-    # 전문가는 자기 근거 원천의 도구만 쥔다.
+    # 전문가는 자기 근거 원천의 도구만 가진다.
     assert sorted(sorted(names) for names in chat.probe_calls) == [
         ["check_citations", "get_task_events", "get_task_summary", "search_events"],
         ["check_citations", "list_rules", "search_recipes"],
@@ -433,7 +433,7 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     class OneProbeFails(FakeToolLoopChat):
         async def ainvoke(self, messages: list[object]) -> object:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
-            # RecipeDraft를 쥔 조율자는 걸리지 않아 rules 전문가만 골라 무너진다.
+            # RecipeDraft를 쥔 조율자는 걸리지 않아 rules 전문가만 골라 실패한다.
             if "ProbeReport" in names and "list_rules" in names:
                 raise RuntimeError("rules probe blew up")
             return await super().ainvoke(messages)
@@ -448,10 +448,10 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
 
     res = await _run(monkeypatch, chat)
 
-    # 한 전문가가 예외를 던져도 잡은 실패하지 않고 완주한다.
+    # 한 전문가가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
     assert res.error is None and res.data["recipes"] == []
     probe_nodes = [step for step in res.steps if step.nodeName == "probe"]
-    # 두 분기 모두 노드로는 완주하고, 실패로 무너진 분기는 없다.
+    # 두 분기 모두 노드로는 끝까지 실행하고, 실패로 실패한 분기는 없다.
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in probe_nodes)
     narrate("recipe-scan :: 전문가 하나가 무너져도 그래프가 완주하고 나머지가 합쳐진다", res)

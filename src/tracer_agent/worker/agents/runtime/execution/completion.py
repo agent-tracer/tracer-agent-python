@@ -22,7 +22,7 @@ async def run_and_deliver(
     execute_request: Callable[[], Awaitable[AgentResponse]],
     on_result: Callable[[AgentResponse], Awaitable[None]] | None = None,
 ) -> None:
-    """실행을 끝까지 돌리고 창구가 있으면 결과를 한 번 전달하며, 전달 전 부른 쪽의 후처리를 먼저 태운다."""
+    """실행을 끝까지 수행하고 창구가 있으면 결과를 한 번 전달하며, 전달 전 후처리를 먼저 실행한다."""
     try:
         response = await execute_request()
     except asyncio.CancelledError:
@@ -46,7 +46,7 @@ async def _deliver(
             return
         except httpx.HTTPError as error:
             if attempt == DELIVERY_ATTEMPTS - 1:
-                # 워커는 자기 데드라인으로 실패를 판정하므로 여기서 더 밀어붙이지 않는다.
+                # 워커는 자기 데드라인으로 실패를 판정하므로 여기서 더 보내붙이지 않는다.
                 _log.error("completion delivery failed: %s", error)
                 return
             await asyncio.sleep(DELIVERY_BACKOFF_S**attempt)

@@ -60,7 +60,7 @@ class DeadlineExceeded(Exception):
 
 
 class BudgetExceeded(Exception):
-    """쿼리당 USD 상한 초과이며 재시도해도 예산만 더 태우므로 비재시도다."""
+    """쿼리당 USD 상한 초과이며 재시도해도 예산만 더 쓰므로 비재시도다."""
 
 
 class OutputTruncated(Exception):
@@ -68,7 +68,7 @@ class OutputTruncated(Exception):
 
 
 def _status_subtype(status: int | None) -> str:
-    # 요청 자체가 틀린 4xx는 같은 요청으로 다시 보내도 같은 응답이 오므로 비재시도 어휘로 접는다.
+    # 요청 자체가 틀린 4xx는 같은 요청으로 다시 보내도 같은 응답이 오므로 비재시도 어휘로 줄인다.
     if status is not None and 400 <= status < 500 and status not in (408, 429):
         return INVALID_REQUEST_ERROR
     return API_ERROR

@@ -54,7 +54,7 @@ def qualify_candidates(tasks: list[CleanupTaskSnapshot], now: datetime) -> list[
 def without_active_children(
     candidates: list[CleanupCandidate], active_child_counts: dict[str, int]
 ) -> list[CleanupCandidate]:
-    """자식이 아직 도는 태스크는 정리 대상이 아니므로 후보에서 뺀다."""
+    """자식이 아직 진행 중인 태스크는 정리 대상이 아니므로 후보에서 뺀다."""
     return [candidate for candidate in candidates if active_child_counts.get(candidate.id, 0) == 0]
 
 

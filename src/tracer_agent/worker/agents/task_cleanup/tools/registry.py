@@ -15,7 +15,7 @@ from .list_candidates import LIST_CANDIDATE_TASKS, ListCandidateTasksTool
 
 TRIAGE_TOOL_NAMES: tuple[str, ...] = (LIST_CANDIDATE_TASKS,)
 INSPECT_TOOL_NAMES: tuple[str, ...] = (GET_TASK_EVENTS,)
-# 조율자는 후보를 직접 열어보지 않고 검토 전문가의 보고만으로 제안을 쓴다.
+# 조율자는 후보를 직접 조회하지 않고 검토 전문가의 보고만으로 제안을 쓴다.
 COORDINATOR_TOOL_NAMES: tuple[str, ...] = ()
 
 _ARGS_BY_TOOL: dict[str, type[BaseModel]] = {

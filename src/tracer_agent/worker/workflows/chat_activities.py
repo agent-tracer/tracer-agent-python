@@ -45,7 +45,7 @@ from .chat_turn import (
 )
 from .envelope import ChatEnvelopeSource
 
-# 열려 있는 실행이 없으면 재시도해도 같은 답이 오므로 워크플로를 더 태우지 않는다.
+# 열려 있는 실행이 없으면 재시도해도 같은 답이 오므로 워크플로를 더 실행하지 않는다.
 _NOT_ACTIVE = "chat.execution-not-active"
 
 
@@ -211,7 +211,7 @@ def _body(
     prompt: AgentPrompt,
 ) -> AgentBody:
     async def run(trace: ExecutionTrace) -> JsonObject:
-        # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 붙잡아 둔다.
+        # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 보관해 둔다.
         traces.append(trace)
         return await run_chat(request, http_client, trace, prompt, checkpoints)
 

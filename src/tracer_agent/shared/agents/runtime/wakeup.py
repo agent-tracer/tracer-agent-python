@@ -1,4 +1,4 @@
-"""갱신이 있었다는 사실만 다른 프로세스에 흘려 보내는 발행 진입점을 소유한다."""
+"""갱신이 있었다는 사실만 다른 프로세스에 전송하는 발행 진입점을 소유한다."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class ProducerFactory(Protocol):
 
 
 def kafka_producer(brokers: str) -> MessageProducer:
-    """설정한 브로커에 붙는 Kafka 생산자를 만든다."""
+    """설정한 브로커에 연결되는 Kafka 생산자를 만든다."""
     producer: MessageProducer = AIOKafkaProducer(bootstrap_servers=brokers)
     return producer
 

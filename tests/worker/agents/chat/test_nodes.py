@@ -179,7 +179,7 @@ async def test_사실과_요약은_시스템_메시지_밖에_붙는다(monkeypa
 
 
 async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다(monkeypatch: pytest.MonkeyPatch) -> None:
-    # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 죽는다.
+    # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 끝나는다.
     _first, before = await _system_content(monkeypatch, ["정리했습니다"], summary="요약 A", facts=[])
     _chat, after = await _system_content(
         monkeypatch,

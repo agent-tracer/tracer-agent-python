@@ -198,12 +198,12 @@ class JobLedger:
         return len(rows) == 1
 
     async def claim_lease(self, job_id: str, owner: str, expires_at: datetime, now: datetime) -> bool:
-        """살아 있는 리스를 남이 쥐고 있지 않을 때만 이 실행기의 것으로 가져간다."""
+        """살아 있는 리스를 남이 가지고 있지 않을 때만 이 실행기의 것으로 가져간다."""
         rows = await self._sql.fetch(_CLAIM_LEASE, job_id, owner, expires_at, now)
         return len(rows) == 1
 
     async def renew_lease(self, job_id: str, owner: str, expires_at: datetime, now: datetime) -> bool:
-        """쥐고 있는 실행기의 리스 수명을 늘린다."""
+        """가지고 있는 실행기의 리스 수명을 늘린다."""
         rows = await self._sql.fetch(_RENEW_LEASE, job_id, owner, expires_at, now)
         return len(rows) == 1
 
@@ -221,7 +221,7 @@ class JobLedger:
         return len(rows) == 1
 
     async def release_lease(self, job_id: str, owner: str, now: datetime) -> bool:
-        """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 돌린다."""
+        """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 실행한다."""
         rows = await self._sql.fetch(_RELEASE_LEASE, job_id, owner, now)
         return len(rows) == 1
 
@@ -233,7 +233,7 @@ class JobLedger:
     async def record_steps(
         self, job_id: str, user_id: str, attempt: int, steps: list[AgentStepDTO], now: datetime
     ) -> None:
-        """이번 시도가 남긴 궤적을 시도 회차와 순번으로 갈라 적는다."""
+        """이번 시도가 남긴 궤적을 시도 회차와 순번으로 나뉘어 적는다."""
         for step in steps:
             if not carries_content(step):
                 continue

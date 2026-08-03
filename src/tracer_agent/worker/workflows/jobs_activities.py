@@ -44,7 +44,7 @@ JOB_AGENTS: dict[AgentJobKind, JobAgent[Any]] = {
 
 
 class AgentJobActivities:
-    """워커가 열어 둔 추적 창구와 자기 원장으로 잡 셋을 그래프째 돌리는 액티비티 하나를 낸다."""
+    """워커가 열어 둔 추적 창구와 자기 원장으로 잡 셋을 그래프째 실행하는 액티비티 하나를 낸다."""
 
     def __init__(
         self,
@@ -72,7 +72,7 @@ class AgentJobActivities:
         try:
             await self._dispatch(request.kind, payload)
         except BaseException as error:
-            # 그래프를 돌리기 전에 죽으면 원장이 running도 못 거쳐 대기 중에 그대로 남는다.
+            # 그래프를 돌리기 전에 끝나면 원장이 running도 못 거쳐 대기 중에 그대로 남는다.
             if not is_cancelled_exception(error):
                 await self._settle_failed_before_dispatch(request, error)
             raise
@@ -128,7 +128,7 @@ class AgentJobActivities:
         await self._run_and_deliver(job, req, body)
 
     async def _resolve_payload(self, request: AgentJobRequest) -> JsonObject:
-        """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 당겨온다."""
+        """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 가져온다."""
         if _has_credentials(request.payload):
             return request.payload
         if self._envelopes is None:
