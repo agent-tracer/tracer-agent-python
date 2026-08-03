@@ -175,11 +175,11 @@ flowchart LR
 
 `AgentPrompt.version()`은 template들이 동일한 계약 판을 사용하는지 확인한다. 구조화 에이전트는 `ToolStrategy`로 출력 타입을 강제하며, Chat은 자유 텍스트 응답과 `ChatResult`를 사용한다.
 
-## 공통 안전 정책 prompt
+## 대화의 안전 정책 prompt
 
-모든 에이전트의 system prompt 앞에는 코드가 소유하는 `SAFETY_POLICY`가 배치된다. 아래는 `shared/safety_policy.py`의 영어 원문과 한국어 번역이다.
+Chat의 system prompt 앞에는 코드가 소유하는 `SAFETY_POLICY`가 배치된다.
 
-전문은 `shared/safety_policy.py` 가 갖는다. 문서가 옮겨 적으면 두 벌이 되어 한쪽만 바뀐다.
+전문은 `chat/safety_policy.py` 가 갖는다. 문서가 옮겨 적으면 두 벌이 되어 한쪽만 바뀐다.
 
 ## 에이전트별 출력 타입
 
@@ -212,12 +212,20 @@ Chat만 스레드 워크플로와 실행 워크플로를 따로 두고 준비·�
 | --- | --- |
 | 노드 계약과 registry | `runtime/node.py` |
 | 검증 그래프와 관측 | `runtime/validation_graph.py` |
+| 검증 뒤 경로 이름과 그 판정이 읽는 상태 | `runtime/routes.py` |
+| 경계를 넘는 JSON 값의 타입 | `shared/agents/shared/json_view.py` |
+| HTTP 봉투와 본문 해석 | `shared/agents/shared/wire.py` |
+| 시각 표현과 되읽기 | `shared/agents/shared/instant.py` |
+| 도구 재시도·모델 재시도 미들웨어 | `runtime/llm/retry.py` |
+| 재개 열쇠를 실은 실행 설정 | `runtime/durable_graph.py` |
+| 잡 하나의 조립·실행·배달 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |
+| 노드가 함께 받는 실행 의존성 | 에이전트별 `deps.py` |
 | LangChain 표준 실행 체인 | `runtime/llm/standard_agent.py` |
 | 구조화 출력 실행 | `runtime/llm/structured_agent.py` |
 | 대체 모델·모델 재시도 | `runtime/llm/fallback.py`, `runtime/llm/retry.py` |
 | 실행 예산 | `runtime/llm/budget.py` |
 | 도구 계약과 registry | `runtime/tooling.py` |
 | 궤적과 관측 | `runtime/execution/trace.py` |
-| 공통 안전 정책 | `shared/safety_policy.py` |
+| 대화의 안전 정책 | `chat/safety_policy.py` |
 | 잡 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |
 | 대화 워크플로와 액티비티 | `worker/workflows/chat_workflows.py`, `chat_activities.py` |
