@@ -17,6 +17,7 @@ from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.serde import graph_serde
 
 _PLAN = DispatchPlan(
     probes=[{"probe": "timeline", "weight": 5, "question": "무엇을 했나"}]  # type: ignore[list-item]
@@ -27,7 +28,7 @@ class _SharedSaver:
     """한 실행의 두 시도가 같은 체크포인트를 보도록 세이버 하나를 쥔다."""
 
     def __init__(self) -> None:
-        self._saver = InMemorySaver()
+        self._saver = InMemorySaver(serde=graph_serde())
 
     async def saver(self) -> InMemorySaver:
         return self._saver

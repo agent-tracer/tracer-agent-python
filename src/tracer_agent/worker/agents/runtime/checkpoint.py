@@ -9,6 +9,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 
 from ....shared.config import CHECKPOINT_SCHEMA
+from .serde import graph_serde
 
 
 class GraphCheckpointProvider:
@@ -24,7 +25,7 @@ class GraphCheckpointProvider:
         async with self._lock:
             if self._saver is None:
                 await self._create_schema()
-                context = AsyncPostgresSaver.from_conn_string(self._dsn)
+                context = AsyncPostgresSaver.from_conn_string(self._dsn, serde=graph_serde())
                 saver = await context.__aenter__()
                 await saver.setup()
                 self._context = context

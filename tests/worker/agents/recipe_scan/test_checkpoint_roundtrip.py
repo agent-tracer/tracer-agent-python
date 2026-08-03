@@ -11,6 +11,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeScanRequest
 from tracer_agent.worker.agents.recipe_scan.graph import RECIPE_SCAN_GRAPH
+from tracer_agent.worker.agents.runtime.serde import graph_serde
 
 
 def _catalog() -> ProvenanceCatalog:
@@ -47,7 +48,7 @@ def saved_state() -> dict[str, Any]:
 
 class Test체크포인트왕복:
     async def test_근거_장부가_왕복해도_같은_집합을_낸다(self, saved_state: dict[str, Any]) -> None:
-        saver = InMemorySaver()
+        saver = InMemorySaver(serde=graph_serde())
         graph = RECIPE_SCAN_GRAPH.compiled(saver)
         config = {"configurable": {"thread_id": "job-1"}}
 
@@ -61,7 +62,7 @@ class Test체크포인트왕복:
         assert catalog.recipeRevs == {"rec-1": 3}
 
     async def test_대화_이력과_예산_잔량이_왕복해도_같다(self, saved_state: dict[str, Any]) -> None:
-        saver = InMemorySaver()
+        saver = InMemorySaver(serde=graph_serde())
         graph = RECIPE_SCAN_GRAPH.compiled(saver)
         config = {"configurable": {"thread_id": "job-2"}}
 
@@ -76,7 +77,7 @@ class Test체크포인트왕복:
         assert RECIPE_SCAN_GRAPH.compiled(None) is RECIPE_SCAN_GRAPH.compiled(None)
 
     async def test_같은_세이버는_같은_판을_쓴다(self) -> None:
-        saver = InMemorySaver()
+        saver = InMemorySaver(serde=graph_serde())
 
         assert RECIPE_SCAN_GRAPH.compiled(saver) is RECIPE_SCAN_GRAPH.compiled(saver)
 
