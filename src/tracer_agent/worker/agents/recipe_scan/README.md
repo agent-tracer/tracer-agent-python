@@ -131,30 +131,38 @@ recipe-scan.probe.system
 
 ## Temporal 워크플로
 
-세 잡 종류를 `agentJobWorkflow` 하나가 받는다. 준비와 종결을 별도 액티비티로 두지 않고
-`runAgentJob` 실행 액티비티 안에서 처리하며 그 하나를 `generate` 큐로 보낸다. 잡 종류마다
-워크플로를 두는 TypeScript 구현과 갈라진 자리이며 `divergence.json`의 `job.workflow.shape`가
-그것을 갖는다.
+세 잡 종류를 `agentJobWorkflow` 하나가 받고 준비 → 생성 → 종결 순서로 실행한다. 모델을 부르는
+생성만 `generate` 큐로 보내고 나머지 단계는 `jobs` 큐에 남는다. 단계별 큐와 시간 상한과 재시도
+상한은 계약의 `workflow/queues.yaml`이 소유한다.
 
 | 액티비티 | 큐 | start-to-close | 재시도 | 비고 |
 | --- | --- | --- | ---: | --- |
-| `runAgentJob` | `generate` | 900초 | 3 | 30초 heartbeat. 실행 체인 전체가 이 안에서 돈다 |
-| `settleCanceledAgentJob` | `jobs` | 30초 | — | 취소된 잡의 원장을 접는다 |
+| `prepareAgentJob` | `jobs` | 60초 | 5 | 도메인 문맥을 모으고 원장을 실행 중으로 옮긴다 |
+| `generateAgentJob` | `generate` | 900초 | 3 | 20분 schedule-to-close, 30초 heartbeat |
+| `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물과 완료 배달 |
+| `failAgentJob` | `jobs` | 60초 | 5 | 어느 단계가 실패하든 원장을 실패로 닫는다 |
+| `settleCanceledAgentJob` | `jobs` | 30초 | — | 액티비티가 돌기 전에 닿은 취소를 접는다 |
 
 ```mermaid
 stateDiagram-v2
-    [*] --> RunAgentJob
-    RunAgentJob --> Settled: 결과 또는 빈 결과
-    RunAgentJob --> SettleCanceled: 취소
-    RunAgentJob --> Failed: 취소가 아닌 오류
-    Settled --> [*]
+    [*] --> Prepare
+    Prepare --> Generate
+    Generate --> Finalize: 결과 또는 빈 결과
+    Prepare --> Fail: 준비 실패
+    Generate --> Fail: 취소가 아닌 오류
+    Prepare --> SettleCanceled: 취소
+    Generate --> SettleCanceled: 취소
+    Finalize --> [*]
+    Fail --> [*]
     SettleCanceled --> [*]
-    Failed --> [*]
 ```
 
-**재시도 경계가 실행 체인 전체를 감싼다.** 노드 하나가 실패해도 그래프가 처음부터 다시 돌므로
-선언한 예산의 3배를 소진할 수 있다. 종착지는 노드마다 액티비티 하나이며 `divergence.json`의
-같은 항목이 그 두 단계 수렴을 적는다.
+**자격은 생성 액티비티 밖으로 나가지 않는다.** 준비는 도메인 문맥만 모으고 그 산출이 워크플로
+이력에 남는다. 이 시도가 쓸 봉투는 생성이 실행 직전에 받으며 종결은 자격을 뺀 정산 값만 받는다.
+
+**생성이 다시 시도돼도 끝난 노드를 다시 태우지 않는다.** 그래프가 잡 하나를 열쇠로 삼는
+LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다. 그 상태는 계약이 소유하지 않는
+`agent_langgraph` 스키마에 있으며 `divergence.json`의 `job.workflow.shape`가 그 자리를 갖는다.
 
 ## 관련 코드
 

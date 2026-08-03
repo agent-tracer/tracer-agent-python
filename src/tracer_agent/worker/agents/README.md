@@ -109,7 +109,7 @@ Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이
 | 프롬프트 캐시 | `AnthropicPromptCachingMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언을 캐시 접두사로 유지한다 |
 | 모델 호출 상한 | `ModelCallLimitMiddleware` | 전체 | `max_turns + 2` 호출 상한을 적용한다 |
 | 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 오래된 도구 결과를 정리하고 최근 2개를 유지한다 |
-| 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록한다 |
+| 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
 | 도구 재시도 | `ToolRetryMiddleware` | Chat·Recipe Scan·Task Cleanup | 선언된 일시 오류를 최대 2회 재시도한다 |
 | 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | `anthropic.APIError`에 대해서만 대체 모델을 1회 호출한다 |
 | 모델 재시도 | `model_retry_middleware()` | Chat·Recipe Scan | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
@@ -130,6 +130,8 @@ flowchart LR
 ```
 
 `FallbackModelMiddleware`는 예산 초과·출력 절단·취소를 fallback 대상으로 바꾸지 않는다. `model_retry_middleware`도 정의된 공급자 일시 오류 범위 밖의 예외를 재시도하지 않는다. 이 경계는 예산·출력·취소 상태가 상위 실행기로 전달되도록 한다.
+
+모델이 답의 밀도를 스스로 정하도록 실행 표준화가 호출마다 쓴 턴과 총량을 메시지 꼬리에 붙이고, 예산이 다하면 조사 도구를 거두고 마무리 지시만 남긴다. 두 문구는 `runtime/llm/pacing.py`가 계약의 `agent/shared/execution.budget.json`에서 읽으므로 구현체가 문장을 소유하지 않는다.
 
 ## 도구 실행 구조
 
@@ -194,17 +196,22 @@ Chat의 system prompt 앞에는 코드가 소유하는 `SAFETY_POLICY`가 배치
 
 ```mermaid
 flowchart TD
-    START[workflow start] --> RUN[runAgentJob on generate queue]
-    RUN --> GRAPH[compiled LangGraph]
-    GRAPH --> SETTLE[원장 정산·알림]
-    RUN -->|취소| CANCEL[settleCanceledAgentJob]
-    RUN -->|취소가 아닌 오류| FAIL[실패 상태]
-    SETTLE --> DONE[완료 상태·산출물]
+    START[workflow start] --> PREPARE[prepareAgentJob on jobs queue]
+    PREPARE --> GENERATE[generateAgentJob on generate queue]
+    GENERATE --> GRAPH[compiled LangGraph]
+    GRAPH --> FINALIZE[finalizeAgentJob on jobs queue]
+    FINALIZE --> DONE[완료 상태·산출물]
+    START -->|취소| CANCEL[settleCanceledAgentJob]
+    START -->|취소가 아닌 오류| FAIL[failAgentJob]
 ```
 
-세 잡 종류가 `agentJobWorkflow` 하나를 함께 쓰고 준비와 종결이 실행 액티비티 안에 있다.
-Chat만 스레드 워크플로와 실행 워크플로를 따로 두고 준비·생성·종결·실패를 별도 액티비티로 나눈다.
-자세한 표는 각 에이전트 문서의 Temporal 워크플로 절이 갖는다.
+세 잡 종류가 `agentJobWorkflow` 하나를 함께 쓰고 단계마다 자기 액티비티를 갖는다.
+준비는 도메인 문맥만 모으고 자격은 생성 액티비티가 실행 직전에 봉투로 받는다. 준비의 산출은
+워크플로 이력에 남으므로 자격이 그 자리에 실리면 이력이 자격을 갖게 된다.
+
+Chat도 스레드 워크플로와 실행 워크플로를 따로 두고 준비·생성·종결·실패를 별도 액티비티로 나눈다.
+단계별 큐와 시간 상한과 재시도 상한은 계약의 `workflow/queues.yaml`이 소유하며 자세한 표는
+각 에이전트 문서의 Temporal 워크플로 절이 갖는다.
 
 ## 코드 탐색 기준점
 

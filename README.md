@@ -55,8 +55,8 @@ flowchart LR
 | --- | --- |
 | FastAPI | 계약의 에이전트 API 경로와 `/health`, `/health/ready`, `/internal/surface`를 제공합니다 |
 | chat 워커 | LangGraph 상태와 체크포인트, 대화 복구를 처리합니다 |
-| jobs 워커 | 짧은 잡 상태 액티비티를 처리합니다 |
-| generate 워커 | 모델을 호출하는 긴 액티비티를 처리합니다 |
+| jobs 워커 | 짧은 잡 액티비티와 상태 정산을 처리합니다 |
+| generate 워커 | 모델을 호출하는 긴 액티비티를 분리해 처리합니다 |
 | `agent-db` | 이 서비스가 소유하는 실행 원장입니다 |
 
 LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. 추적 데이터베이스와 OpenSearch를 직접 읽지 않습니다.
