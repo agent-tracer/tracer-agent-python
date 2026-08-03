@@ -100,6 +100,8 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
     async def _invoke_with_drafts(self, prepared: _PreparedTurn, drafts: DraftPublisher) -> list[BaseMessage]:
         """접수만 하고 끊긴 실행이라 진행 중인 답변을 창구로 되돌려 보내며 수행한다."""
         collected: list[BaseMessage] = []
+        # 한 도구 호출이 여러 조각에 걸쳐 오므로 이미 알린 호출을 여기서 기억한다.
+        announced: set[str] = set()
         async for mode, chunk in prepared.agent.astream(
             {"messages": prepared.messages_in},
             context=prepared.context,
@@ -112,8 +114,8 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
                 if isinstance(message, AIMessage):
                     self._usage.mark_first_token()
                     await drafts.push(step_content_text(message.content))
-                    for call in message.tool_calls:
-                        await drafts.push_tool(str(call.get("name", "")))
+                    for name in _fresh_tool_names(message, announced):
+                        await drafts.push_tool(name)
             elif mode == "updates" and isinstance(chunk, dict):
                 collected.extend(_appended_messages(chunk))
         await drafts.flush()
@@ -253,6 +255,19 @@ class _PreparedTurn:
     context: StandardAgentContext
     budget: ToolLoopBudget
     proposals: list[ProposedWrite]
+
+
+def _fresh_tool_names(message: AIMessage, announced: set[str]) -> list[str]:
+    """이 조각이 처음 드러낸 도구 호출의 이름만 내고 이미 알린 것은 거른다."""
+    names: list[str] = []
+    for call in message.tool_calls:
+        name = str(call.get("name") or "")
+        key = str(call.get("id") or name)
+        if not key or key in announced:
+            continue
+        announced.add(key)
+        names.append(name)
+    return names
 
 
 def _appended_messages(update: Mapping[str, object]) -> list[BaseMessage]:

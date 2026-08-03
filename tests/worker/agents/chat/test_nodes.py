@@ -15,6 +15,7 @@ from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest, DraftCallback
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
+from tracer_agent.worker.agents.chat.nodes.converse import _fresh_tool_names
 from tracer_agent.worker.agents.chat.nodes.settle import final_text
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
@@ -121,6 +122,40 @@ def test_최종_답변은_도구_호출이_없는_마지막_어시스턴트_텍�
     ]
 
     assert final_text(messages) == "최종 답변"
+
+
+def test_도구를_더_부르려다_끊긴_턴은_마지막으로_쓴_본문을_낸다() -> None:
+    # 상한이나 예산으로 루프가 끊기면 마무리한 답이 없으므로 그때까지 쓴 본문이라도 사용자에게 간다.
+    messages = [
+        AIMessage(
+            content="지금까지 찾은 것은 배포 실패 셋입니다",
+            tool_calls=[{"id": "call-1", "name": "search_tasks", "args": {}, "type": "tool_call"}],
+        ),
+        ToolMessage(content="검색 결과", tool_call_id="call-1"),
+    ]
+
+    assert final_text(messages) == "지금까지 찾은 것은 배포 실패 셋입니다"
+
+
+def test_한_도구_호출은_조각이_여러_번_와도_한_줄만_남긴다() -> None:
+    # 스트림은 한 호출을 여러 조각으로 나눠 주므로 조각마다 알리면 같은 도구가 여러 줄로 적힌다.
+    announced: set[str] = set()
+    partial = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-1", "name": "search_tasks", "args": {}, "type": "tool_call"}],
+    )
+    complete = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-1", "name": "search_tasks", "args": {"q": "배포"}, "type": "tool_call"}],
+    )
+    another = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-2", "name": "get_task", "args": {}, "type": "tool_call"}],
+    )
+
+    assert _fresh_tool_names(partial, announced) == ["search_tasks"]
+    assert _fresh_tool_names(complete, announced) == []
+    assert _fresh_tool_names(another, announced) == ["get_task"]
 
 
 async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() -> None:

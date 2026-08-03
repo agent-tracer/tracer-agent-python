@@ -27,10 +27,15 @@ class SettleNode(GraphNode[ChatState, SettleUpdate]):
 
 
 def final_text(messages: list[Any]) -> str:
-    """도구 호출로 끝난 메시지를 건너뛰고 사용자에게 보일 마지막 답변을 고른다."""
+    """마무리한 답이 있으면 그것을, 도구를 더 부르려다 끊겼으면 마지막으로 쓴 본문을 고른다."""
+    partial = ""
     for message in reversed(messages):
-        if isinstance(message, AIMessage) and not message.tool_calls:
-            text = step_content_text(message.content)
-            if text:
-                return text
-    return ""
+        if not isinstance(message, AIMessage):
+            continue
+        text = step_content_text(message.content)
+        if not text:
+            continue
+        if not message.tool_calls:
+            return text
+        partial = partial or text
+    return partial
