@@ -8,6 +8,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from ..agents.shared.json_view import JsonValue
+
 ANCHOR_PATH = "/api/v1/events/{event_id}"
 TASK_ANCHOR_PATH = "/api/v1/tasks/{task_id}"
 ANCHOR_TIMEOUT_S = 10.0
@@ -63,7 +65,7 @@ class RuleAnchorClient:
         return _anchor(_data(response))
 
 
-def _data(response: httpx.Response) -> Any:
+def _data(response: httpx.Response) -> JsonValue:
     try:
         body = response.json()
     except ValueError as malformed:
@@ -73,7 +75,7 @@ def _data(response: httpx.Response) -> Any:
     return body.get("data")
 
 
-def _anchor(data: Any) -> RuleAnchor | None:
+def _anchor(data: JsonValue) -> RuleAnchor | None:
     event = data.get("event") if isinstance(data, dict) else None
     if not isinstance(event, dict):
         return None
@@ -138,7 +140,7 @@ class ScanAnchorClient:
         return _scan_anchor(_data(response))
 
 
-def _scan_anchor(data: Any) -> ScanAnchor | None:
+def _scan_anchor(data: JsonValue) -> ScanAnchor | None:
     task = data.get("task") if isinstance(data, dict) else None
     if not isinstance(task, dict):
         return None

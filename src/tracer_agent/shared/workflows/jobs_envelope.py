@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
 from temporalio.exceptions import ApplicationError
+
+from ..agents.shared.json_view import JsonObject
 
 # 배포 단위 사이에서만 오가는 창구이며 edge가 바깥에 열지 않는다.
 ENVELOPE_PATH = "/internal/jobs/{kind}/envelope"
@@ -21,8 +23,8 @@ class JobExecutionEnvelope:
     model: str
     fallback_model: str | None
     api_key: str
-    model_rates: dict[str, Any]
-    limits: dict[str, Any]
+    model_rates: JsonObject
+    limits: JsonObject
     deadline_ms: int
 
 
@@ -62,7 +64,7 @@ class JobEnvelopeClient:
         return _envelope(_data(response))
 
 
-def _data(response: httpx.Response) -> dict[str, Any]:
+def _data(response: httpx.Response) -> JsonObject:
     try:
         body = response.json()
     except ValueError as malformed:
@@ -75,7 +77,7 @@ def _data(response: httpx.Response) -> dict[str, Any]:
     return data
 
 
-def _envelope(data: dict[str, Any]) -> JobExecutionEnvelope:
+def _envelope(data: JsonObject) -> JobExecutionEnvelope:
     model = data.get("model")
     fallback_model = data.get("fallbackModel")
     api_key = data.get("apiKey")
