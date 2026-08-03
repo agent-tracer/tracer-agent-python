@@ -15,6 +15,7 @@ from .execution.trace import ExecutionTrace
 from .llm.client import ChatPair
 from .tracer_client import TracerApiPort
 
+type JobCollect = Callable[[JsonObject, TracerApiPort], Awaitable[JsonObject]]
 type JobPrepare[RequestT] = Callable[[JsonObject, TracerApiPort], Awaitable[RequestT]]
 type JobRun[RequestT] = Callable[
     [RequestT, TracerApiPort, ExecutionTrace, AgentPrompt, GraphCheckpointProvider | None, ChatPair | None],
@@ -30,7 +31,14 @@ class JobAgent[RequestT: AgentExecutionRequest]:
     kind: AgentJobKind
     prepare: JobPrepare[RequestT]
     run: JobRun[RequestT]
+    collect: JobCollect | None = None
     deliver: JobDeliver | None = None
+
+    async def collect_context(self, payload: JsonObject, tracer: TracerApiPort) -> JsonObject:
+        """자격을 알지 못한 채 실행 입력에 도메인 문맥만 실어 낸다."""
+        if self.collect is None:
+            return payload
+        return await self.collect(payload, tracer)
 
     async def settle_outputs(self, tracer: TracerApiPort, execution_id: str, data: JsonObject | None) -> None:
         """종결한 잡의 산출물을 배달하며 보낼 것이 없는 잡은 아무 창구도 부르지 않는다."""

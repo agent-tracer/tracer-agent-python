@@ -39,11 +39,16 @@ from .reader import TitleLedgerReader, load_title_context
 _RECURSION_LIMIT = 20
 
 
-async def prepare_title_suggestion(payload: dict[str, Any], tracer: TracerApiPort) -> TitleSuggestionRequest:
-    """접수가 대화 발췌를 싣지 않았으면 이 시점에 스스로 조립해 요청을 세운다."""
-    if "context" not in payload:
-        context = await load_title_context(tracer, payload["taskId"])
-        payload = {**payload, "context": context.model_dump(mode="json")}
+async def collect_title_context(payload: dict[str, Any], tracer: TracerApiPort) -> dict[str, Any]:
+    """접수가 대화 발췌를 싣지 않았으면 이 시점에 스스로 조립해 실행 입력에 싣는다."""
+    if "context" in payload:
+        return payload
+    context = await load_title_context(tracer, payload["taskId"])
+    return {**payload, "context": context.model_dump(mode="json")}
+
+
+async def prepare_title_suggestion(payload: dict[str, Any], _tracer: TracerApiPort) -> TitleSuggestionRequest:
+    """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
     return TitleSuggestionRequest.model_validate(payload)
 
 
@@ -119,4 +124,5 @@ TITLE_SUGGESTION_JOB = JobAgent(
     kind=AgentJobKind.TITLE_SUGGESTION,
     prepare=prepare_title_suggestion,
     run=run_title_suggestion,
+    collect=collect_title_context,
 )

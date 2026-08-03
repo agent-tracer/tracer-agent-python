@@ -29,6 +29,15 @@ async def run_and_deliver(
         return
     if on_result is not None:
         await on_result(response)
+    await deliver_completion(client, callback, response)
+
+
+async def deliver_completion(
+    client: httpx.AsyncClient,
+    callback: CompletionCallback | None,
+    response: AgentResponse,
+) -> None:
+    """창구가 있으면 실행 결과를 한 번 전달하고 없으면 아무 곳도 부르지 않는다."""
     if callback is not None:
         await _deliver(client, callback, response)
 

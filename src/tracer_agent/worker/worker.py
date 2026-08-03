@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 import httpx
 from temporalio.client import Client
@@ -56,7 +57,7 @@ SHUTDOWN_GRACE_S = 15 * 60.0
 JOB_AGENT_NAMES = ("title-suggestion", "recipe-scan", "task-cleanup")
 
 WorkerQueue = str
-JobActivity = Callable[..., Awaitable[None]]
+JobActivity = Callable[..., Awaitable[Any]]
 QUEUE_ARGS = (CHAT_QUEUE_KEY, JOBS_QUEUE_KEY, GENERATE_QUEUE_KEY)
 
 
@@ -166,13 +167,18 @@ def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobAc
 
 
 def short_job_activities(activities: AgentJobActivities) -> list[JobActivity]:
-    """원장 갱신 한 문장으로 끝나는 액티비티만 골라 jobs 큐에 등록한다."""
-    return [activities.settle_canceled]
+    """모델을 부르지 않는 액티비티만 골라 jobs 큐에 등록한다."""
+    return [
+        activities.prepare,
+        activities.finalize,
+        activities.fail,
+        activities.settle_canceled,
+    ]
 
 
 def generate_job_activities(activities: AgentJobActivities) -> list[JobActivity]:
     """모델을 부르는 긴 액티비티만 골라 generate 큐에 등록한다."""
-    return [activities.run]
+    return [activities.generate]
 
 
 def build_job_worker(client: Client, opened: JobWorkerResources, settings: Settings) -> Worker:

@@ -34,16 +34,17 @@ from .reader import CleanupLedgerReader, load_cleanup_batch
 _RECURSION_LIMIT = 30
 
 
-async def prepare_task_cleanup(payload: dict[str, Any], tracer: TracerApiPort) -> TaskCleanupRequest:
-    """접수가 후보 배치를 싣지 않았으면 이 시점에 스스로 조립해 요청을 세운다."""
-    if "batch" not in payload:
-        now = datetime.now(UTC)
-        batch = await load_cleanup_batch(tracer, now)
-        payload = {
-            **payload,
-            "batch": batch.model_dump(mode="json"),
-            "scannedAt": now.isoformat(),
-        }
+async def collect_cleanup_batch(payload: dict[str, Any], tracer: TracerApiPort) -> dict[str, Any]:
+    """접수가 후보 배치를 싣지 않았으면 이 시점에 스스로 조립해 실행 입력에 싣는다."""
+    if "batch" in payload:
+        return payload
+    now = datetime.now(UTC)
+    batch = await load_cleanup_batch(tracer, now)
+    return {**payload, "batch": batch.model_dump(mode="json"), "scannedAt": now.isoformat()}
+
+
+async def prepare_task_cleanup(payload: dict[str, Any], _tracer: TracerApiPort) -> TaskCleanupRequest:
+    """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
     return TaskCleanupRequest.model_validate(payload)
 
 
@@ -129,5 +130,6 @@ TASK_CLEANUP_JOB = JobAgent(
     kind=AgentJobKind.TASK_CLEANUP,
     prepare=prepare_task_cleanup,
     run=run_task_cleanup,
+    collect=collect_cleanup_batch,
     deliver=deliver_suggestions,
 )

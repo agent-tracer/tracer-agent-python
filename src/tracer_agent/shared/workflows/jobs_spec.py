@@ -20,13 +20,23 @@ NOTIFICATIONS_TOPIC = "notifications"
 JOB_UPDATED_NOTIFICATION = "job.updated"
 
 AGENT_JOB_WORKFLOW = "agentJobWorkflow"
-RUN_AGENT_JOB_ACTIVITY = "runAgentJob"
+PREPARE_AGENT_JOB_ACTIVITY = "prepareAgentJob"
+GENERATE_AGENT_JOB_ACTIVITY = "generateAgentJob"
+FINALIZE_AGENT_JOB_ACTIVITY = "finalizeAgentJob"
+FAIL_AGENT_JOB_ACTIVITY = "failAgentJob"
 # activity가 돌기 전에 취소가 닿으면 워크플로가 이 액티비티로 원장을 직접 닫는다.
 SETTLE_CANCELED_JOB_ACTIVITY = "settleCanceledAgentJob"
 
-# 액티비티 하나의 벽시계 상한이며 가장 긴 recipe-scan 데드라인에 접수와 배달 여유를 더했다.
-JOB_TIMEOUT_S = 900.0
-JOB_MAX_ATTEMPTS = 3
+# 추적 창구 왕복과 원장 전이뿐이라 모델을 부르는 단계보다 짧게 잡는다.
+JOB_PREPARE_TIMEOUT_S = 60.0
+JOB_PREPARE_MAX_ATTEMPTS = 5
+# 생성 하나의 벽시계 상한이며 가장 긴 recipe-scan 데드라인에 배달 여유를 더했다.
+JOB_GENERATE_TIMEOUT_S = 900.0
+JOB_GENERATE_SCHEDULE_TO_CLOSE_S = 1200.0
+JOB_GENERATE_MAX_ATTEMPTS = 3
+# 원장 종결과 산출물 배달뿐이라 생성보다 짧게 잡는다.
+JOB_FINALIZE_TIMEOUT_S = 60.0
+JOB_FINALIZE_MAX_ATTEMPTS = 5
 # 이 안에 하트비트가 없으면 Temporal이 유실로 보고 재시도를 시작하므로 취소 지연보다 넉넉히 잡는다.
 JOB_HEARTBEAT_TIMEOUT_S = 30.0
 JOB_HEARTBEAT_INTERVAL_S = 10.0
@@ -41,7 +51,17 @@ def agent_job_workflow_id(kind: AgentJobKind, key: str) -> str:
 
 @dataclass
 class AgentJobRequest:
-    """접수가 워크플로에 넘기는 입력이며 파싱된 실행 봉투를 JSON으로 전달한다."""
+    """접수가 워크플로에 넘기는 입력이며 도메인 값만 싣는다."""
 
     kind: AgentJobKind
     payload: JsonObject
+
+
+@dataclass
+class AgentJobSettlement:
+    """생성이 끝낸 실행을 종결이 원장에 적는 데 필요한 값이며 자격을 싣지 않는다."""
+
+    kind: AgentJobKind
+    payload: JsonObject
+    outcome: JsonObject
+    response: JsonObject

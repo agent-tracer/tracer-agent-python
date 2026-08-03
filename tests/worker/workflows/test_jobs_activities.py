@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+from temporalio.exceptions import is_cancelled_exception
 
 from tests.support.fakes import (
     TRACER_API_URL,
@@ -23,7 +24,7 @@ from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
-from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest
+from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest, AgentJobSettlement
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities, merge_envelope
 
@@ -95,6 +96,21 @@ def http() -> CapturingCompletionClient:
     return CapturingCompletionClient()
 
 
+async def run_job(activities: AgentJobActivities, kind: AgentJobKind, payload: dict[str, Any]) -> None:
+    """워크플로가 하는 대로 준비와 생성과 종결을 차례로 실행한다."""
+    request = AgentJobRequest(kind, payload)
+    try:
+        prepared = await activities.prepare(request)
+        generated = await activities.generate(AgentJobRequest(kind, prepared))
+        await activities.finalize(
+            AgentJobSettlement(kind, prepared, generated["outcome"], generated["response"])
+        )
+    except BaseException as error:
+        if not is_cancelled_exception(error):
+            await activities.fail(request, str(error))
+        raise
+
+
 async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
     http: CapturingCompletionClient,
 ) -> None:
@@ -117,7 +133,7 @@ async def test_title_suggestion_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+    await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     assert http.deliveries[0]["token"] == "done-1"
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
@@ -146,7 +162,7 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TASK_CLEANUP, payload))
+    await run_job(activities, AgentJobKind.TASK_CLEANUP, payload)
 
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
 
@@ -172,7 +188,7 @@ async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(
         "completionCallback": _COMPLETION_CALLBACK,
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.RECIPE_SCAN, payload))
+    await run_job(activities, AgentJobKind.RECIPE_SCAN, payload)
 
     assert http.deliveries[0]["response"]["data"]["recipes"] == []
 
@@ -203,7 +219,7 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
         "attemptId": "1",
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+    await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "completed"
@@ -238,7 +254,7 @@ async def test_페이로드에_자격이_없으면_실행_식별자로_봉투를
         "executionId": "e2",
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+    await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     assert envelopes.issued_for == ["title.suggestion:user-1"]
     assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
@@ -284,7 +300,7 @@ async def test_페이로드에_자격도_실행_식별자도_없으면_거부한
     payload = {"model": "claude-haiku-4-5", "taskId": "task-1"}
 
     with pytest.raises(ValueError):
-        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+        await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
 
 async def test_실행_액티비티가_돌기_전에_취소되면_원장이_취소로_닫힌다(
@@ -322,7 +338,7 @@ async def test_그래프를_돌리기_전에_죽으면_원장이_failed로_닫�
     }
 
     with pytest.raises(Exception):  # noqa: B017
-        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+        await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     row = execution_sql.rows("ai_jobs")[0]
     assert row["status"] == "failed"
@@ -384,7 +400,7 @@ async def test_잡이_돌면_실행과_종결이_상태_전이로_알려진다(
         "attemptId": "1",
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+    await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     assert [entry[1]["status"] for entry in notifier.published] == ["running", "completed"]
     assert notifier.published[0][0] == "user-1"
@@ -426,7 +442,7 @@ async def test_태스크에_매이지_않은_잡은_태스크_식별자를_싣�
         "executionId": "e7",
     }
 
-    await activities.run(AgentJobRequest(AgentJobKind.TASK_CLEANUP, payload))
+    await run_job(activities, AgentJobKind.TASK_CLEANUP, payload)
 
     assert "taskId" not in notifier.published[-1][1]
     assert notifier.published[-1][1]["kind"] == "task.cleanup"
@@ -455,10 +471,43 @@ async def test_그래프를_돌리기_전에_죽으면_실패가_상태_전이�
     }
 
     with pytest.raises(Exception):  # noqa: B017
-        await activities.run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+        await run_job(activities, AgentJobKind.TITLE_SUGGESTION, payload)
 
     assert notifier.published[-1] == (
         "user-1",
         {"jobId": "e8", "kind": "title.suggestion", "status": "failed", "taskId": "missing-task"},
     )
     execution_sql.close()
+
+
+async def test_준비가_낸_실행_입력에_자격이_실리지_않는다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        PooledSql(FakeLedgerPool()),
+        JOB_PROMPTS,
+        envelopes=FakeEnvelopeSource(),
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "language": "ko", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    # 준비의 산출은 워크플로 이력에 남으므로 자격이 그 자리에 실리면 이력이 자격을 갖는다.
+    assert "apiKey" not in prepared
+
+
+async def test_종결이_받는_값에_자격이_실리지_않는다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        PooledSql(FakeLedgerPool()),
+        JOB_PROMPTS,
+        envelopes=FakeEnvelopeSource(),
+        make_chats=lambda _req: ChatPair(FakeToolLoopChat([{"suggestions": []}]), None),
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "language": "ko", "context": _TITLE_CONTEXT}
+
+    generated = await activities.generate(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert "apiKey" not in generated["outcome"]
+    assert "apiKey" not in generated["response"]

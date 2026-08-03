@@ -3,30 +3,38 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from temporalio import activity
-from temporalio.exceptions import is_cancelled_exception
 
 from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.runtime.notification import JobStatusNotifier
 from ...shared.agents.shared.json_view import JsonObject, JsonValue, opt_text
-from ...shared.agents.shared.models import AgentExecutionRequest, AgentResponse
+from ...shared.agents.shared.models import (
+    AgentExecutionRequest,
+    AgentResponse,
+    AgentStepDTO,
+    CompletionCallback,
+)
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
 from ...shared.workflows.jobs_kinds import AgentJobKind
 from ...shared.workflows.jobs_ledger import JobLedger
 from ...shared.workflows.jobs_spec import (
+    FAIL_AGENT_JOB_ACTIVITY,
+    FINALIZE_AGENT_JOB_ACTIVITY,
+    GENERATE_AGENT_JOB_ACTIVITY,
     JOB_HEARTBEAT_INTERVAL_S,
-    RUN_AGENT_JOB_ACTIVITY,
+    PREPARE_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
     AgentJobRequest,
+    AgentJobSettlement,
 )
 from ..agents.recipe_scan.agent import RECIPE_SCAN_JOB
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
-from ..agents.runtime.execution.completion import run_and_deliver
+from ..agents.runtime.execution.completion import deliver_completion
 from ..agents.runtime.execution.runner import execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.job_agent import JobAgent
@@ -67,34 +75,70 @@ class AgentJobActivities:
         self._checkpoints = checkpoints
         self._make_chats = make_chats
 
-    @activity.defn(name=RUN_AGENT_JOB_ACTIVITY)
-    async def run(self, request: AgentJobRequest) -> None:
-        """요청 종류에 맞는 그래프를 돌리고 결과를 완료 창구로 배달한다."""
+    @activity.defn(name=PREPARE_AGENT_JOB_ACTIVITY)
+    async def prepare(self, request: AgentJobRequest) -> JsonObject:
+        """도메인 문맥을 모아 실행 입력에 싣고 원장을 실행 중으로 옮긴다."""
+        job = JOB_AGENTS[request.kind]
+        user_id = opt_text(request.payload.get("userId"))
+        if not user_id:
+            raise ValueError("agent job request has no user id to collect context for")
+        prepared = await job.collect_context(request.payload, self._tracer(user_id))
+        execution_id = opt_text(prepared.get("executionId"))
+        if execution_id:
+            async with self._execution_sql.connect() as sql:
+                await JobLedger(sql).mark_running(execution_id, datetime.now(UTC))
+            await self._notify(request.kind, execution_id, user_id, "running", _task_id_of(prepared))
+        return prepared
+
+    @activity.defn(name=GENERATE_AGENT_JOB_ACTIVITY)
+    async def generate(self, request: AgentJobRequest) -> JsonObject:
+        """이 시도가 쓸 봉투를 받아 그래프를 돌리며 자격을 이 액티비티 밖으로 내보내지 않는다."""
         payload = await self._resolve_payload(request)
+        job = JOB_AGENTS[request.kind]
+        tracer = self._tracer(str(payload["userId"]))
+        req = await job.prepare(payload, tracer)
         heartbeat = asyncio.ensure_future(_heartbeat())
         try:
-            await self._dispatch(request.kind, payload)
-        except BaseException as error:
-            # 그래프를 돌리기 전에 끝나면 원장이 running도 못 거쳐 대기 중에 그대로 남는다.
-            if not is_cancelled_exception(error):
-                await self._settle_failed_before_dispatch(request, error)
-            raise
+            response = await self._run_once(job, req, tracer)
         finally:
             heartbeat.cancel()
+        cost_usd = ModelRates(req.modelRates).estimate_cost_usd(response.modelUsed, response.usage)
+        return {
+            "outcome": _outcome_payload(req, response, cost_usd),
+            "response": response.model_dump(mode="json"),
+        }
 
-    async def _settle_failed_before_dispatch(self, request: AgentJobRequest, error: BaseException) -> None:
-        """그래프 실행 전 실패를 원장에 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
-        execution_id = request.payload.get("executionId")
-        if not isinstance(execution_id, str) or not execution_id:
+    @activity.defn(name=FINALIZE_AGENT_JOB_ACTIVITY)
+    async def finalize(self, settlement: AgentJobSettlement) -> None:
+        """생성이 낸 결과를 원장에 종결로 적고 산출물과 완료를 배달한다."""
+        outcome = _outcome_of(settlement.outcome)
+        if outcome.job_id:
+            async with self._execution_sql.connect() as sql:
+                await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
+            await self._notify(
+                settlement.kind,
+                outcome.job_id,
+                outcome.user_id,
+                outcome.status,
+                _task_id_of(settlement.payload),
+            )
+        response = AgentResponse.model_validate(settlement.response)
+        if outcome.status == "completed":
+            job = JOB_AGENTS[settlement.kind]
+            await job.settle_outputs(self._tracer(outcome.user_id), outcome.job_id, response.data)
+        await deliver_completion(self._http, _callback_of(settlement.payload), response)
+
+    @activity.defn(name=FAIL_AGENT_JOB_ACTIVITY)
+    async def fail(self, request: AgentJobRequest, message: str) -> None:
+        """어느 단계가 실패하든 원장을 실패로 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
+        execution_id = opt_text(request.payload.get("executionId"))
+        if not execution_id:
             return
         async with self._execution_sql.connect() as sql:
-            await JobLedger(sql).settle(execution_id, "failed", {}, {}, str(error)[:2000], datetime.now(UTC))
-        user_id = request.payload.get("userId")
-        if isinstance(user_id, str) and user_id:
-            task_id = request.payload.get("taskId")
-            await self._notify(
-                request.kind, execution_id, user_id, "failed", task_id if isinstance(task_id, str) else None
-            )
+            await JobLedger(sql).settle(execution_id, "failed", {}, {}, message[:2000], datetime.now(UTC))
+        user_id = opt_text(request.payload.get("userId"))
+        if user_id:
+            await self._notify(request.kind, execution_id, user_id, "failed", _task_id_of(request.payload))
 
     @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
     async def settle_canceled(self, execution_id: str) -> None:
@@ -119,19 +163,6 @@ class AgentJobActivities:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
         return TracerApiClient(self._http, self._tracer_api_url, user_id)
 
-    async def _dispatch(self, kind: AgentJobKind, payload: JsonObject) -> None:
-        """요청 종류를 맡은 잡이 스스로 요청을 세우고 자기 그래프를 돌리게 한다."""
-        tracer = self._tracer(str(payload["userId"]))
-        job = JOB_AGENTS[kind]
-        req = await job.prepare(payload, tracer)
-
-        async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:
-            return await job.run(
-                req, tracer, trace, self._prompts[kind], self._checkpoints, self._make_chats(req)
-            )
-
-        await self._run_and_deliver(job, req, body)
-
     async def _resolve_payload(self, request: AgentJobRequest) -> JsonObject:
         """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 가져온다."""
         if _has_credentials(request.payload):
@@ -144,68 +175,80 @@ class AgentJobActivities:
         envelope = await self._envelopes.issue(request.kind.wire, user_id)
         return merge_envelope(request.payload, envelope)
 
-    async def _run_and_deliver(
-        self,
-        job: JobAgent[Any],
-        req: AgentExecutionRequest,
-        body: Callable[[ExecutionTrace], Awaitable[dict[str, JsonValue]]],
-    ) -> None:
-        kind = job.kind
-        prompt = self._prompts[kind]
+    async def _run_once(
+        self, job: JobAgent[Any], req: AgentExecutionRequest, tracer: TracerApiPort
+    ) -> AgentResponse:
+        """그래프 하나를 실행 궤적과 데드라인 안에서 돌려 이 시도의 응답을 낸다."""
+        prompt = self._prompts[job.kind]
 
-        async def run_once() -> AgentResponse:
-            return await execute(
-                kind,
-                req.model,
-                req.deadlineMs,
-                body,
-                req.jobId,
-                req.idempotencyKey,
-                None,
-                None,
-                req.idempotency_input_hash(),
-                req.executionId,
-                req.attemptId,
-                prompt_version=prompt.version(),
-                tool_contract_version=prompt.tool_contract_version,
-            )
+        async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:
+            return await job.run(req, tracer, trace, prompt, self._checkpoints, self._make_chats(req))
 
-        if req.executionId is not None:
-            async with self._execution_sql.connect() as sql:
-                await JobLedger(sql).mark_running(req.executionId, datetime.now(UTC))
-            await self._notify(kind, req.executionId, req.userId, "running", _task_id(req))
-
-        async def settle(response: AgentResponse) -> None:
-            if req.executionId is None:
-                return
-            status, error = status_and_error(response)
-            cost_usd = ModelRates(req.modelRates).estimate_cost_usd(response.modelUsed, response.usage)
-            outcome = JobOutcome(
-                job_id=req.executionId,
-                user_id=req.userId,
-                status=status,
-                attempt=_attempt(req.attemptId),
-                result=response.data or {},
-                usage=job_usage(response, cost_usd, _attempt(req.attemptId)),
-                error=error,
-                steps=response.steps,
-                observation=(
-                    None if response.observation is None else response.observation.model_dump(mode="json")
-                ),
-            )
-            async with self._execution_sql.connect() as sql:
-                await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
-            await self._notify(kind, req.executionId, req.userId, status, _task_id(req))
-            if status == "completed":
-                await job.settle_outputs(self._tracer(req.userId), req.executionId, response.data)
-
-        await run_and_deliver(self._http, req.completionCallback, run_once, settle)
+        return await execute(
+            job.kind,
+            req.model,
+            req.deadlineMs,
+            body,
+            req.jobId,
+            req.idempotencyKey,
+            None,
+            None,
+            req.idempotency_input_hash(),
+            req.executionId,
+            req.attemptId,
+            prompt_version=prompt.version(),
+            tool_contract_version=prompt.tool_contract_version,
+        )
 
 
-def _task_id(req: AgentExecutionRequest) -> str | None:
+def _task_id_of(payload: JsonObject) -> str | None:
     """태스크에 매인 잡만 그 식별자를 알림에 싣는다."""
-    task_id = getattr(req, "taskId", None)
+    task_id = payload.get("taskId")
     return task_id if isinstance(task_id, str) else None
+
+
+def _callback_of(payload: JsonObject) -> CompletionCallback | None:
+    """완료를 되돌려 받을 창구가 실렸을 때만 그 창구를 낸다."""
+    callback = payload.get("completionCallback")
+    return None if not isinstance(callback, dict) else CompletionCallback.model_validate(callback)
+
+
+def _outcome_payload(
+    req: AgentExecutionRequest, response: AgentResponse, cost_usd: float | None
+) -> JsonObject:
+    """생성이 낸 결과를 종결이 원장에 적을 값으로 옮기며 자격을 싣지 않는다."""
+    status, error = status_and_error(response)
+    attempt = _attempt(req.attemptId)
+    return {
+        "jobId": req.executionId or "",
+        "userId": req.userId,
+        "status": status,
+        "attempt": attempt,
+        "result": response.data or {},
+        "usage": job_usage(response, cost_usd, attempt),
+        "error": error,
+        "steps": [step.model_dump(mode="json") for step in response.steps],
+        "observation": (
+            None if response.observation is None else response.observation.model_dump(mode="json")
+        ),
+    }
+
+
+def _outcome_of(payload: JsonObject) -> JobOutcome:
+    """생성이 실어 보낸 종결 값을 원장이 받는 모양으로 되돌린다."""
+    steps = payload.get("steps")
+    observation = payload.get("observation")
+    return JobOutcome(
+        job_id=str(payload["jobId"]),
+        user_id=str(payload["userId"]),
+        status=str(payload["status"]),
+        attempt=int(payload["attempt"]),  # type: ignore[arg-type]
+        result=dict(payload["result"]),  # type: ignore[arg-type]
+        usage=dict(payload["usage"]),  # type: ignore[arg-type]
+        error=opt_text(payload.get("error")) or None,
+        steps=[AgentStepDTO.model_validate(step) for step in steps] if isinstance(steps, list) else [],
+        observation=dict(observation) if isinstance(observation, dict) else None,
+    )
 
 
 def _attempt(attempt_id: str | None) -> int:

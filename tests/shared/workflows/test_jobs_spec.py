@@ -7,11 +7,12 @@ from tracer_agent.shared.config import DEFAULT_TASK_QUEUE_PREFIX
 from tracer_agent.shared.workflows.chat_spec import CHAT_TASK_QUEUE
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
+    GENERATE_AGENT_JOB_ACTIVITY,
     GENERATE_QUEUE_KEY,
     GENERATE_TASK_QUEUE,
     JOBS_QUEUE_KEY,
     JOBS_TASK_QUEUE,
-    RUN_AGENT_JOB_ACTIVITY,
+    PREPARE_AGENT_JOB_ACTIVITY,
     SETTLE_CANCELED_JOB_ACTIVITY,
     agent_job_workflow_id,
 )
@@ -47,8 +48,12 @@ def test_워크플로_식별자가_잡_종류마다_나뉜다() -> None:
     assert agent_job_workflow_id("title-suggestion", "k1") != agent_job_workflow_id("title-suggestion", "k2")
 
 
-def test_모델을_부르는_긴_액티비티가_generate_큐에서_실행된다() -> None:
-    assert _QUEUE_OF[RUN_AGENT_JOB_ACTIVITY] == GENERATE_QUEUE_KEY
+def test_모델을_부르는_생성_액티비티가_generate_큐에서_실행된다() -> None:
+    assert _QUEUE_OF[GENERATE_AGENT_JOB_ACTIVITY] == GENERATE_QUEUE_KEY
+
+
+def test_모델을_부르지_않는_준비_액티비티가_jobs_큐에서_실행된다() -> None:
+    assert _QUEUE_OF[PREPARE_AGENT_JOB_ACTIVITY] == JOBS_QUEUE_KEY
 
 
 def test_취소_닫기_액티비티가_jobs_큐에서_실행된다() -> None:

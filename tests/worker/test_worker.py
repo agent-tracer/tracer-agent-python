@@ -28,13 +28,18 @@ def test_기동_인자가_계약의_큐_키_셋이다() -> None:
 def test_생성_큐가_모델을_부르는_긴_액티비티만_갖는다() -> None:
     activities = _activities()
 
-    assert generate_job_activities(activities) == [activities.run]
+    assert generate_job_activities(activities) == [activities.generate]
 
 
 def test_잡_큐가_긴_액티비티를_갖지_않는다() -> None:
     activities = _activities()
 
-    assert short_job_activities(activities) == [activities.settle_canceled]
+    assert short_job_activities(activities) == [
+        activities.prepare,
+        activities.finalize,
+        activities.fail,
+        activities.settle_canceled,
+    ]
 
 
 @pytest.mark.parametrize("queue", QUEUE_ARGS)
