@@ -2,25 +2,49 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
+import pkgutil
 import warnings
 
 import pytest
 from pydantic import BaseModel
 
+from tracer_agent.shared import agents
 from tracer_agent.shared.agents.recipe_scan.models import (
     ProbeAssignment,
     ProbeDispatch,
     ProvenanceCatalog,
 )
-from tracer_agent.worker.agents.runtime.serde import checkpointed_models, graph_serde
+from tracer_agent.worker.agents.runtime.serde import (
+    _CHECKPOINTED_ROOTS,
+    checkpointed_models,
+    graph_serde,
+)
 
 
 class _낯선모델(BaseModel):
     value: str
 
 
+def _declared_states() -> set[type]:
+    """에이전트 모델 모듈이 선언한 그래프 상태 타입을 모두 찾는다."""
+    found: set[type] = set()
+    for module in pkgutil.walk_packages(agents.__path__, f"{agents.__name__}."):
+        if not module.name.endswith(".models"):
+            continue
+        loaded = importlib.import_module(module.name)
+        for name, value in vars(loaded).items():
+            if name.endswith("State") and isinstance(value, type) and value.__module__ == module.name:
+                found.add(value)
+    return found
+
+
 class Test체크포인트직렬화기:
+    def test_선언된_상태를_빠짐없이_뿌리로_둔다(self) -> None:
+        # 새 상태가 뿌리 목록에서 빠지면 그 상태가 담는 모델이 되살아나지 않는다.
+        assert _declared_states() <= set(_CHECKPOINTED_ROOTS)
+
     def test_상태가_담는_모델을_모두_밝힌다(self) -> None:
         names = {model.__name__ for model in checkpointed_models()}
 
