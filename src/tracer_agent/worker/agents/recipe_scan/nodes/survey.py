@@ -93,7 +93,7 @@ class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
             response_type=DispatchPlan,
             recursion_limit=recursion_limit_for(lease.max_turns),
             missing_response="survey produced no structured plan",
-            call_id=f"{req.jobId}:survey",
+            call_id=f"{req.executionId or req.jobId}:survey",
         )
         plan = result.response
         chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes) or "no specialists"

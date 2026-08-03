@@ -44,7 +44,7 @@ async def run_title_suggestion(
 ) -> dict[str, Any]:
     """title-suggestion 노드를 실행 의존성과 결합해 그래프를 수행한다."""
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
-    resume_key = req.jobId
+    resume_key = req.executionId or req.jobId
     saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
     prompts = build_prompt_bundle(prompt)
     chat = make_chat(
