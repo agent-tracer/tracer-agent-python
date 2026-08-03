@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import job_durability, with_thread
+from ..runtime.durable_graph import job_durability, resume_input, with_thread
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
@@ -119,37 +119,40 @@ async def run_task_cleanup(
         ),
         build_routes(usage, ValidateDecisionsNode.name),
     )
-    final = await TASK_CLEANUP_GRAPH.compiled(saver).ainvoke(
-        {
-            "scanned_at": req.scannedAt,
-            "language": req.language,
-            "max_suggestions": req.maxSuggestions,
-            "messages": [],
-            "plan": None,
-            "redispatch": None,
-            "redispatch_ceiling": 0.0,
-            "redispatch_count": 0,
-            "reports": [],
-            "exposed_candidates": {},
-            "event_ids_by_task": {},
-            "model_cost_usd": 0.0,
-            "max_cost_usd": req.limits.budgetUsd,
-            "suggestions": [],
-            "validation_errors": [],
-            "repair_attempted": False,
-            "result": None,
-        },
-        context=context,
-        config=_execution_config(
-            30,
-            TraceSafeMetadata(
-                agent_name=AGENT_NAME,
-                model_requested=req.model,
-                prompt_version=prompt.version(),
-                job_id=req.jobId,
-            ),
-            resume_key,
+    graph = TASK_CLEANUP_GRAPH.compiled(saver)
+    config = _execution_config(
+        30,
+        TraceSafeMetadata(
+            agent_name=AGENT_NAME,
+            model_requested=req.model,
+            prompt_version=prompt.version(),
+            job_id=req.jobId,
         ),
+        resume_key,
+    )
+    initial: dict[str, Any] = {
+        "scanned_at": req.scannedAt,
+        "language": req.language,
+        "max_suggestions": req.maxSuggestions,
+        "messages": [],
+        "plan": None,
+        "redispatch": None,
+        "redispatch_ceiling": 0.0,
+        "redispatch_count": 0,
+        "reports": [],
+        "exposed_candidates": {},
+        "event_ids_by_task": {},
+        "model_cost_usd": 0.0,
+        "max_cost_usd": req.limits.budgetUsd,
+        "suggestions": [],
+        "validation_errors": [],
+        "repair_attempted": False,
+        "result": None,
+    }
+    final = await graph.ainvoke(
+        await resume_input(graph, config, initial, saver),
+        context=context,
+        config=config,
         durability=job_durability(saver),
     )
     return final["result"] or {"suggestions": []}

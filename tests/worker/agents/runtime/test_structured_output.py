@@ -57,7 +57,7 @@ class Test호출별실행상태:
         seen: list[Any] = []
 
         class _Agent:
-            async def ainvoke(self, _input: Any, *, context: Any, config: Any) -> Any:
+            async def ainvoke(self, _input: Any, *, context: Any, config: Any) -> Any:  # noqa: ARG002
                 seen.append(config)
                 return {"messages": [], "structured_response": RecipeDraft()}
 
@@ -77,7 +77,7 @@ class Test호출별실행상태:
         seen: list[Any] = []
 
         class _Agent:
-            async def ainvoke(self, _input: Any, *, context: Any, config: Any) -> Any:
+            async def ainvoke(self, _input: Any, *, context: Any, config: Any) -> Any:  # noqa: ARG002
                 seen.append(config)
                 return {"messages": [], "structured_response": RecipeDraft()}
 

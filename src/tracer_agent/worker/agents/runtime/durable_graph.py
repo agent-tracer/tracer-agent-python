@@ -43,6 +43,19 @@ def job_durability(
     return None if saver is None else _JOB_DURABILITY
 
 
+async def resume_input[StateT](
+    graph: CompiledGraph,
+    config: RunnableConfig,
+    initial: StateT,
+    saver: BaseCheckpointSaver[Any] | None,
+) -> StateT | None:
+    """이어갈 체크포인트가 있으면 상태를 다시 넣지 않아야 끝난 노드를 다시 태우지 않는다."""
+    if saver is None or config.get("configurable") is None:
+        return initial
+    restored = await graph.aget_state(config)
+    return None if restored.created_at is not None else initial
+
+
 def with_thread(config: RunnableConfig, thread_id: str) -> RunnableConfig:
     """재시도가 같은 열쇠로 와야 앞선 노드를 다시 태우지 않으므로 잡 하나를 재개의 범위로 잡는다."""
     return {**config, "configurable": {"thread_id": thread_id}}

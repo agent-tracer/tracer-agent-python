@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import job_durability, with_thread
+from ..runtime.durable_graph import job_durability, resume_input, with_thread
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import make_chat
@@ -103,29 +103,32 @@ async def run_title_suggestion(
         ),
         build_routes(usage, ValidateCandidateNode.name),
     )
-    final = await TITLE_SUGGESTION_GRAPH.compiled(saver).ainvoke(
-        {
-            "task_id": req.taskId,
-            "language": req.language,
-            "context": req.context,
-            "messages": [],
-            "model_cost_usd": 0.0,
-            "candidate": None,
-            "validation_errors": [],
-            "repair_attempted": False,
-            "result": None,
-        },
-        context=context,
-        config=_execution_config(
-            20,
-            TraceSafeMetadata(
-                agent_name=AGENT_NAME,
-                model_requested=req.model,
-                prompt_version=prompt.version(),
-                job_id=req.jobId,
-            ),
-            resume_key,
+    graph = TITLE_SUGGESTION_GRAPH.compiled(saver)
+    config = _execution_config(
+        20,
+        TraceSafeMetadata(
+            agent_name=AGENT_NAME,
+            model_requested=req.model,
+            prompt_version=prompt.version(),
+            job_id=req.jobId,
         ),
+        resume_key,
+    )
+    initial: dict[str, Any] = {
+        "task_id": req.taskId,
+        "language": req.language,
+        "context": req.context,
+        "messages": [],
+        "model_cost_usd": 0.0,
+        "candidate": None,
+        "validation_errors": [],
+        "repair_attempted": False,
+        "result": None,
+    }
+    final = await graph.ainvoke(
+        await resume_input(graph, config, initial, saver),
+        context=context,
+        config=config,
         durability=job_durability(saver),
     )
     return final["result"] or {"suggestions": []}
