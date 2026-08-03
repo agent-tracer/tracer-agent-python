@@ -6,7 +6,6 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddleware
-from langchain.agents.structured_output import ToolStrategy
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool
@@ -66,7 +65,7 @@ def build_recipe_agent(
         tools=list(tools),
         system_prompt=system,
         middleware=middleware,
-        response_format=ToolStrategy(output, handle_errors=True),
+        response_format=output,
         context_schema=RecipeToolContext,
         name="recipe-scan-investigator",
     )

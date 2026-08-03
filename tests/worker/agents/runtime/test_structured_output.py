@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from langchain.agents.factory import _supports_provider_strategy
+from langchain_anthropic import ChatAnthropic
 
-from tests.support.fakes import mk_rates
+from tests.support.fakes import FakeToolLoopChat, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
@@ -91,3 +93,15 @@ class Test호출별실행상태:
         )
 
         assert "configurable" not in seen[0]
+
+
+class Test구조화출력전략:
+    def test_실제_모델은_공급자_강제로_해석된다(self) -> None:
+        # 이 판정이 뒤집히면 산출 강제가 도구 호출로 내려가 TypeScript 축과 갈린다.
+        model = ChatAnthropic(model="claude-sonnet-4-6", api_key="sk-test")  # type: ignore[call-arg]
+
+        assert _supports_provider_strategy(model, tools=["get_task_events"]) is True
+
+    def test_대역_모델은_도구_전략으로_내려간다(self) -> None:
+        # 검사가 도는 경로는 운영과 다르므로 대역이 무엇을 밟는지 여기서 드러낸다.
+        assert _supports_provider_strategy(FakeToolLoopChat([]), tools=["get_task_events"]) is False
