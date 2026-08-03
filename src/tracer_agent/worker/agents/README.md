@@ -166,7 +166,7 @@ sequenceDiagram
 
 Chat 도구는 `read`, `agentRead`, `memory`, `confirm` surface로 나뉜다. Recipe Scan과 Task Cleanup은 조사 단계별 provenance ledger를 사용하며, 조율 단계는 조사 보고와 ledger에 기록된 근거만 사용한다.
 
-## 컴파일된 agent 재사용
+## 실행 단위 재사용
 
 `create_agent`는 StateGraph를 컴파일하므로 잡 에이전트는 `runtime/llm/agent_cache.py`의 `CompiledAgentCache`를 실행 의존성(`RecipeDeps`·`CleanupDeps`·`TitleDeps`)에 두고 시스템 프롬프트와 도구 이름 집합과 출력 타입과 모델 턴 상한이 같은 호출에 같은 agent를 다시 쓴다. 캐시는 한 실행에 속하며 그 실행의 채팅 클라이언트만 담는다. 도구 직렬화 락은 `StandardAgentContext.tool_lock`이 갖고 호출마다 새로 서므로 agent를 함께 쓰는 팬아웃이 서로를 기다리지 않는다.
 
@@ -191,6 +191,11 @@ flowchart LR
 ## 대화의 안전 정책 prompt
 
 Chat의 system prompt 앞에는 코드가 소유하는 `SAFETY_POLICY`가 배치된다.
+계약이 아니라 `chat/safety_policy.py` 가 이 문장을 갖는 것은 데이터베이스가 쓴 조각이
+정책을 덮지 못하게 하기 위해서다.
+
+**TypeScript 구현의 `chat.safety.policy.ts`와 바이트로 같은 문장이다.** 두 축이 같은 신뢰
+경계를 모델에게 보이므로 축이 바뀌어도 무엇이 지시문이고 무엇이 데이터인지가 달라지지 않는다.
 
 전문은 `chat/safety_policy.py` 가 갖는다. 문서가 옮겨 적으면 두 벌이 되어 한쪽만 바뀐다.
 
