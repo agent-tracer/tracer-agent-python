@@ -29,14 +29,13 @@ from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
 from ..shared.workflows.jobs_anchor import RuleAnchorClient, ScanAnchorClient
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
-from ..shared.workflows.jobs_envelope import JobEnvelopeClient
 from ..shared.workflows.jobs_intake import router as job_intake_router
 from ..shared.workflows.jobs_query import router as job_query_router
 from .credentials import SettingModelCredentials
 from .surface import SURFACE_PATH, get_served_surface
 
-# 접수가 잡 종류의 카탈로그 값을 물을 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
-ENVELOPE_HTTP_TIMEOUT_S = 20.0
+# 배포 단위 사이의 창구를 부를 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
+OUTBOUND_HTTP_TIMEOUT_S = 20.0
 
 # 원장까지 왕복하는 질의라야 연결이 살아 있다는 것을 알린다.
 READINESS_PROBE = "SELECT 1"
@@ -64,18 +63,14 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
     )
     application.state.execution_watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
-    application.state.chat_tool_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
+    application.state.chat_tool_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
     application.state.chat_tool_executor = HttpChatToolExecutor(
         application.state.chat_tool_http, settings.tracer_api_url, settings.agent_api_url
     )
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
-    application.state.job_envelope_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
-    application.state.job_envelopes = JobEnvelopeClient(
-        application.state.job_envelope_http, settings.agent_api_url
-    )
-    application.state.rule_anchor_http = httpx.AsyncClient(timeout=ENVELOPE_HTTP_TIMEOUT_S)
+    application.state.rule_anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
     application.state.rule_anchors = RuleAnchorClient(
         application.state.rule_anchor_http, settings.tracer_api_url
     )
@@ -87,7 +82,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     finally:
         shutdown_observability()
         await application.state.rule_anchor_http.aclose()
-        await application.state.job_envelope_http.aclose()
         await application.state.chat_tool_http.aclose()
         await application.state.execution_watch.close()
         await application.state.execution_updates.close()

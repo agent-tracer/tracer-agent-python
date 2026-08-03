@@ -28,7 +28,7 @@ def test_성공_응답이_계약의_봉투를_가리킨다(client: TestClient) -
 def test_실패_상태마다_계약의_오류_봉투를_선언한다(client: TestClient) -> None:
     responses = schema(client)["paths"][JOBS_PATH]["post"]["responses"]
 
-    for status in ("400", "404", "409", "502"):
+    for status in ("400", "404", "409"):
         content = responses[status]["content"]["application/json"]["schema"]
         assert content["$ref"] == ENVELOPE_REF
 

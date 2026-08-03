@@ -10,13 +10,14 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from temporalio.exceptions import ApplicationError
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     scan_anchor_conditions,
     scan_anchor_requirements,
 )
 
+from ..agents.envelope.models import ModelCredentialSource
+from ..agents.envelope.router import JOB_KEY_MISSING
 from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
 from ..agents.runtime.ledger import SqlSource
 from ..agents.shared.instant import opt_iso
@@ -30,7 +31,6 @@ from ..agents.shared.wire import (
 )
 from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
-from .jobs_envelope import JobEnvelopeSource
 from .jobs_input import (
     INPUT_MODEL_BY_KIND,
     RecipeScanJobInput,
@@ -68,7 +68,6 @@ IDEMPOTENCY_CONFLICT = (
     "job.idempotency-conflict",
     "Idempotency key was already used with different job input",
 )
-ENVELOPE_UNAVAILABLE = (502, "job.envelope-unavailable", "Could not obtain model and credential envelope")
 LEASE_HELD = (409, "job.lease-held", "Job lease is held by another runner")
 
 
@@ -97,10 +96,10 @@ def get_rule_anchors(request: Request) -> RuleAnchorSource:
     return anchors
 
 
-def get_job_envelopes(request: Request) -> JobEnvelopeSource:
-    """잡 실행 시도가 쓸 봉투를 발급받는 통로를 낸다."""
-    envelopes: JobEnvelopeSource = request.app.state.job_envelopes
-    return envelopes
+def get_model_credentials(request: Request) -> ModelCredentialSource:
+    """접수가 이 사용자의 모델 자격을 보는 통로를 낸다."""
+    credentials: ModelCredentialSource = request.app.state.model_credentials
+    return credentials
 
 
 def get_job_dispatch(request: Request) -> TemporalJobDispatch:
@@ -111,7 +110,7 @@ def get_job_dispatch(request: Request) -> TemporalJobDispatch:
 
 RuleAnchors = Annotated[RuleAnchorSource, Depends(get_rule_anchors)]
 ScanAnchors = Annotated[ScanAnchorSource, Depends(get_scan_anchors)]
-JobEnvelopes = Annotated[JobEnvelopeSource, Depends(get_job_envelopes)]
+ModelCredentials = Annotated[ModelCredentialSource, Depends(get_model_credentials)]
 JobDispatch = Annotated[TemporalJobDispatch, Depends(get_job_dispatch)]
 
 
@@ -119,7 +118,7 @@ JobDispatch = Annotated[TemporalJobDispatch, Depends(get_job_dispatch)]
     JOBS_PATH,
     status_code=ACCEPTED_STATUS,
     response_model=SuccessEnvelope,
-    responses=error_responses(400, 404, 409, 502),
+    responses=error_responses(400, 404, 409),
 )
 async def enqueue_job(
     request: Request,
@@ -127,7 +126,7 @@ async def enqueue_job(
     user_id: UserId,
     anchors: RuleAnchors,
     scan_anchors: ScanAnchors,
-    envelopes: JobEnvelopes,
+    credentials: ModelCredentials,
     dispatch: JobDispatch,
 ) -> JSONResponse:
     """잡 하나를 접수하고 원장 행이나 사유를 계약이 정한 봉투로 낸다."""
@@ -150,16 +149,13 @@ async def enqueue_job(
         scan_anchors, user_id, job_input
     ):
         return error_envelope(*INELIGIBLE_SCAN_ANCHOR)
+    # 자격을 접수가 보지 않으면 대기 행이 선 뒤 워커에서 실패해 사용자가 사유를 늦게 받는다.
+    if not runs_locally(enqueue.kind) and not await credentials.api_key(user_id):
+        return error_envelope(*JOB_KEY_MISSING)
+
     idempotency_key = _idempotency_key(enqueue.idempotencyKey)
     request_hash = None if idempotency_key is None else input_hash(enqueue.kind, job_input)
     now = datetime.now(UTC)
-
-    if not runs_locally(enqueue.kind):
-        try:
-            # 접수는 이 사용자의 자격과 카탈로그가 실제로 발급되는지를 봉투로 확인한다.
-            await envelopes.issue(enqueue.kind, user_id)
-        except ApplicationError as unavailable:
-            return error_envelope(*ENVELOPE_UNAVAILABLE, details=str(unavailable))
     execution_id = str(uuid.uuid4())
     async with source.connect() as sql:
         ledger = JobLedger(sql)

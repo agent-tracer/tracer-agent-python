@@ -8,7 +8,6 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from temporalio.exceptions import ApplicationError
 
 from tests.support.contract import conformance_case
 from tests.support.fakes import FakeScanAnchors
@@ -17,10 +16,15 @@ from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLed
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
 from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor, ScanAnchor
-from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 
 PATH = "/api/agent/jobs"
-JOB_FIELDS = conformance_case("job.intake")["response"]["jobFields"]
+_INTAKE = conformance_case("job.intake")
+JOB_FIELDS = _INTAKE["response"]["jobFields"]
+CREDENTIAL_REJECTION = next(
+    rejection
+    for rejection in _INTAKE["rejections"]
+    if rejection["code"] == _INTAKE["credentialCheck"]["rejection"]
+)
 
 
 class SingleSql:
@@ -53,25 +57,16 @@ class FakeJobDispatch:
         return self.cancel_result
 
 
-class FakeEnvelopes:
-    """카탈로그 값을 지어내지 않고 미리 정한 값만 내주는 봉투 창구 대역이다."""
+class FakeCredentials:
+    """설정 원장에 닿지 않고 미리 정한 모델 자격만 내주는 창구 대역이다."""
 
     def __init__(self) -> None:
-        self.issued_for: list[tuple[str, str]] = []
-        self.unavailable = False
+        self.asked_for: list[str] = []
+        self.key: str | None = "sk-test"
 
-    async def issue(self, kind: str, user_id: str) -> JobExecutionEnvelope:
-        if self.unavailable:
-            raise ApplicationError("job envelope HTTP 404", type="job.envelope-unavailable")
-        self.issued_for.append((kind, user_id))
-        return JobExecutionEnvelope(
-            model="claude-sonnet-4-6",
-            fallback_model=None,
-            api_key="sk-test",
-            model_rates={},
-            limits={"budgetUsd": 2.0, "maxTurns": 16, "maxOutputTokens": 16_000},
-            deadline_ms=720_000,
-        )
+    async def api_key(self, user_id: str) -> str | None:
+        self.asked_for.append(user_id)
+        return self.key
 
 
 class FakeRuleAnchors:
@@ -100,8 +95,8 @@ def dispatch() -> FakeJobDispatch:
 
 
 @pytest.fixture
-def envelopes() -> FakeEnvelopes:
-    return FakeEnvelopes()
+def credentials() -> FakeCredentials:
+    return FakeCredentials()
 
 
 @pytest.fixture
@@ -119,14 +114,14 @@ def scan_anchors() -> FakeScanAnchors:
 @pytest.fixture
 def client(
     dispatch: FakeJobDispatch,
-    envelopes: FakeEnvelopes,
+    credentials: FakeCredentials,
     anchors: FakeRuleAnchors,
     scan_anchors: FakeScanAnchors,
     store: SqliteLedgerSql,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
         test_client.app.state.job_dispatch = dispatch
-        test_client.app.state.job_envelopes = envelopes
+        test_client.app.state.model_credentials = credentials
         test_client.app.state.rule_anchors = anchors
         test_client.app.state.scan_anchors = scan_anchors
         test_client.app.state.execution_sql = SingleSql(store)
@@ -328,20 +323,30 @@ def test_없는_실행의_취소는_404다(client: TestClient) -> None:
     assert res.json()["error"]["code"] == "not_found"
 
 
-def test_봉투를_못_받으면_502_오류_봉투를_낸다(client: TestClient, envelopes: FakeEnvelopes) -> None:
-    envelopes.unavailable = True
+def test_모델_자격이_없으면_접수를_거절한다(client: TestClient, credentials: FakeCredentials) -> None:
+    credentials.key = None
 
     res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
 
-    assert res.status_code == 502
-    assert res.json()["error"]["code"] == "job.envelope-unavailable"
+    assert res.status_code == CREDENTIAL_REJECTION["status"]
+    assert res.json()["error"]["code"] == CREDENTIAL_REJECTION["code"]
+
+
+def test_자격을_보지_않은_거절은_원장에_행을_남기지_않는다(
+    client: TestClient, credentials: FakeCredentials, store: SqliteLedgerSql
+) -> None:
+    credentials.key = None
+
+    client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
+
+    assert store.rows("ai_jobs") == []
 
 
 _RULE_INPUT = {"taskId": "task-1", "anchorEventId": "ev-1", "intent": "테스트를 먼저 쓴다"}
 
 
 def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸다(
-    client: TestClient, dispatch: FakeJobDispatch, envelopes: FakeEnvelopes, store: SqliteLedgerSql
+    client: TestClient, dispatch: FakeJobDispatch, credentials: FakeCredentials, store: SqliteLedgerSql
 ) -> None:
     res = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT})
 
@@ -358,7 +363,7 @@ def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸�
     assert row["task_id"] == "task-1"
     # 로컬 실행기가 가져가는 잡이라 워크플로도 실행 봉투도 접수가 부르지 않는다.
     assert dispatch.started == []
-    assert envelopes.issued_for == []
+    assert credentials.asked_for == []
 
 
 def test_rule_generation_잡은_대기_목록으로_실행기에_보인다(client: TestClient) -> None:
@@ -445,7 +450,7 @@ def test_로컬_잡의_취소는_워크플로_취소를_부르지_않는다(
 )
 def test_스캔은_계약이_정한_앵커_자격만_접수한다(
     dispatch: FakeJobDispatch,
-    envelopes: FakeEnvelopes,
+    credentials: FakeCredentials,
     anchors: FakeRuleAnchors,
     store: SqliteLedgerSql,
     anchor: ScanAnchor | None,
@@ -453,7 +458,7 @@ def test_스캔은_계약이_정한_앵커_자격만_접수한다(
 ) -> None:
     with TestClient(app_module.create_app()) as client:
         client.app.state.job_dispatch = dispatch
-        client.app.state.job_envelopes = envelopes
+        client.app.state.model_credentials = credentials
         client.app.state.rule_anchors = anchors
         client.app.state.scan_anchors = FakeScanAnchors(anchor)
         client.app.state.execution_sql = SingleSql(store)
@@ -465,13 +470,13 @@ def test_스캔은_계약이_정한_앵커_자격만_접수한다(
 
 def test_자격이_없는_앵커의_거절은_계약이_정한_코드로_나간다(
     dispatch: FakeJobDispatch,
-    envelopes: FakeEnvelopes,
+    credentials: FakeCredentials,
     anchors: FakeRuleAnchors,
     store: SqliteLedgerSql,
 ) -> None:
     with TestClient(app_module.create_app()) as client:
         client.app.state.job_dispatch = dispatch
-        client.app.state.job_envelopes = envelopes
+        client.app.state.model_credentials = credentials
         client.app.state.rule_anchors = anchors
         client.app.state.scan_anchors = FakeScanAnchors(None)
         client.app.state.execution_sql = SingleSql(store)
@@ -483,14 +488,14 @@ def test_자격이_없는_앵커의_거절은_계약이_정한_코드로_나간�
 
 def test_세션에서_부른_스캔은_아직_도는_태스크도_접수한다(
     dispatch: FakeJobDispatch,
-    envelopes: FakeEnvelopes,
+    credentials: FakeCredentials,
     anchors: FakeRuleAnchors,
     store: SqliteLedgerSql,
 ) -> None:
     running = ScanAnchor(id="task-1", origin="user", root=True, status="running")
     with TestClient(app_module.create_app()) as client:
         client.app.state.job_dispatch = dispatch
-        client.app.state.job_envelopes = envelopes
+        client.app.state.model_credentials = credentials
         client.app.state.rule_anchors = anchors
         client.app.state.scan_anchors = FakeScanAnchors(running)
         client.app.state.execution_sql = SingleSql(store)
