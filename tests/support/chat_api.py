@@ -34,12 +34,14 @@ class FakeChatMemoryApi:
 
     def __init__(self) -> None:
         self.facts: dict[str, str] = {}
+        self.reads = 0
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         """기억 API 요청은 직접 받고 나머지는 확인 창구로 넘긴다."""
         if not request.url.path.startswith(MEMORIES_PATH):
             return chat_confirmation_response(request)
         if request.method == "GET":
+            self.reads += 1
             return httpx.Response(200, json={"ok": True, "data": {"facts": self._rows()}})
         key = unquote(request.url.path[len(MEMORIES_PATH) :].lstrip("/"))
         content = str(_json.loads(request.content)["content"])

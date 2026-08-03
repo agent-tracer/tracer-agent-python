@@ -67,50 +67,38 @@ class ChatMemoryStore(BaseStore):
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """읽기·검색·적재를 기억 API 호출로 옮겨 부른 자리에서 끝낸다."""
-        return [await self._run(op) for op in ops]
+        batch = list(ops)
+        # 기억 API 는 사실 전체를 한 번에 돌려주므로 이 배치의 읽기들이 그 한 번을 나눠 갖는다.
+        rows = await self._rows() if any(isinstance(op, GetOp | SearchOp) for op in batch) else []
+        return [self._run(op, rows) for op in batch]
 
-    async def _run(self, op: Op) -> Result:
+    def _run(self, op: Op, rows: list[dict[str, Any]]) -> Result:
         if isinstance(op, SearchOp):
-            return await self._search(op)
+            return self._search(op, rows)
         if isinstance(op, GetOp):
-            return await self._get(op.key)
+            return self._get(op, rows)
         if isinstance(op, PutOp):
-            await self._put(op)
-            return None
+            # 사용자에 대한 사실은 승인을 거쳐 적히므로 이 저장소는 되읽기만 한다.
+            raise NotImplementedError("chat memory is written through the confirmation flow")
         if isinstance(op, ListNamespacesOp):
             return [MEMORY_NAMESPACE]
         raise NotImplementedError(f"chat memory does not support {type(op).__name__}")
 
-    async def _search(self, op: SearchOp) -> list[SearchItem]:
-        rows = await self._rows()
-        window = rows[op.offset : op.offset + op.limit]
-        return [
-            SearchItem(
-                namespace=MEMORY_NAMESPACE,
-                key=str(row[KEY_FIELD]),
-                value=_value(row),
-                created_at=_at(row),
-                updated_at=_at(row),
-            )
-            for row in window
-        ]
+    @staticmethod
+    def _search(op: SearchOp, rows: list[dict[str, Any]]) -> list[SearchItem]:
+        if not _covered(op.namespace_prefix):
+            return []
+        matched = [row for row in rows if _passes(row, op.filter) and _mentions(row, op.query)]
+        return [_search_item(row) for row in matched[op.offset : op.offset + op.limit]]
 
-    async def _get(self, key: str) -> Item | None:
-        for row in await self._rows():
-            if str(row[KEY_FIELD]) != key:
-                continue
-            return Item(
-                namespace=MEMORY_NAMESPACE,
-                key=key,
-                value=_value(row),
-                created_at=_at(row),
-                updated_at=_at(row),
-            )
+    @staticmethod
+    def _get(op: GetOp, rows: list[dict[str, Any]]) -> Item | None:
+        if op.namespace != MEMORY_NAMESPACE:
+            return None
+        for row in rows:
+            if str(row[KEY_FIELD]) == op.key:
+                return _item(row)
         return None
-
-    async def _put(self, op: PutOp) -> None:
-        # 사용자에 대한 사실은 승인을 거쳐 적히므로 이 저장소는 되읽기만 한다.
-        raise NotImplementedError("chat memory is written through the confirmation flow")
 
     async def _rows(self) -> list[dict[str, Any]]:
         payload = json.loads(_unwrapped(await self._client.recall()))
@@ -122,6 +110,46 @@ def _unwrapped(result: ChatMemoryResult) -> str:
     if not result.ok:
         raise ChatMemoryUnavailable(result.status_code)
     return result.text
+
+
+def _search_item(row: dict[str, Any]) -> SearchItem:
+    return SearchItem(
+        namespace=MEMORY_NAMESPACE,
+        key=str(row[KEY_FIELD]),
+        value=_value(row),
+        created_at=_at(row),
+        updated_at=_at(row),
+    )
+
+
+def _item(row: dict[str, Any]) -> Item:
+    return Item(
+        namespace=MEMORY_NAMESPACE,
+        key=str(row[KEY_FIELD]),
+        value=_value(row),
+        created_at=_at(row),
+        updated_at=_at(row),
+    )
+
+
+def _covered(namespace_prefix: tuple[str, ...]) -> bool:
+    """이 저장소가 가진 네임스페이스가 요청한 접두사 아래에 있는지 판정한다."""
+    return MEMORY_NAMESPACE[: len(namespace_prefix)] == namespace_prefix
+
+
+def _passes(row: dict[str, Any], criteria: dict[str, Any] | None) -> bool:
+    """행의 값이 요청한 조건을 모두 만족하는지 판정한다."""
+    if not criteria:
+        return True
+    value = _value(row)
+    return all(value.get(name) == expected for name, expected in criteria.items())
+
+
+def _mentions(row: dict[str, Any], query: str | None) -> bool:
+    """기억 API 가 검색을 제공하지 않으므로 받은 행 안에서 질의어를 찾는다."""
+    if not query:
+        return True
+    return query.casefold() in json.dumps(_value(row), ensure_ascii=False).casefold()
 
 
 def _value(row: dict[str, Any]) -> dict[str, Any]:

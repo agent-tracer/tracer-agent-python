@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from langgraph.store.base import GetOp, SearchOp
 
 from tests.support.chat_api import FakeChatMemoryApi
 from tracer_agent.worker.agents.chat.memory import ChatMemoryClient
@@ -55,6 +56,67 @@ async def test_검색이_상한과_시작점을_지킨다() -> None:
         window = await store.asearch(MEMORY_NAMESPACE, limit=2, offset=1)
 
     assert [item.key for item in window] == ["b", "c"]
+
+
+async def test_질의어가_오면_그_말이_담긴_사실만_낸다() -> None:
+    # 기억 API 는 검색을 제공하지 않으므로 받은 행 안에서 걸러야 질의어가 무시되지 않는다.
+    api = FakeChatMemoryApi()
+    api.facts.update({"lang": "한국어를 쓴다", "tone": "짧게 답한다"})
+    store, http = _store(httpx.MockTransport(api.handle))
+
+    async with http:
+        found = await store.asearch(MEMORY_NAMESPACE, query="한국어")
+
+    assert [item.key for item in found] == ["lang"]
+
+
+async def test_조건이_오면_그_조건을_만족하는_사실만_낸다() -> None:
+    api = FakeChatMemoryApi()
+    api.facts.update({"lang": "한국어를 쓴다", "tone": "짧게 답한다"})
+    store, http = _store(httpx.MockTransport(api.handle))
+
+    async with http:
+        found = await store.asearch(MEMORY_NAMESPACE, filter={"content": "짧게 답한다"})
+
+    assert [item.key for item in found] == ["tone"]
+
+
+async def test_다른_네임스페이스는_이_저장소가_답하지_않는다() -> None:
+    api = FakeChatMemoryApi()
+    api.facts["lang"] = "한국어를 쓴다"
+    store, http = _store(httpx.MockTransport(api.handle))
+
+    async with http:
+        found = await store.asearch(("other",))
+        missing = await store.aget(("other",), "lang")
+
+    assert found == []
+    assert missing is None
+
+
+async def test_한_배치의_읽기들이_조회_한_번을_나눠_갖는다() -> None:
+    api = FakeChatMemoryApi()
+    api.facts.update({"lang": "한국어를 쓴다", "tone": "짧게 답한다"})
+    store, http = _store(httpx.MockTransport(api.handle))
+
+    async with http:
+        results = await store.abatch(
+            [
+                GetOp(namespace=MEMORY_NAMESPACE, key="lang", refresh_ttl=False),
+                SearchOp(
+                    namespace_prefix=MEMORY_NAMESPACE,
+                    filter=None,
+                    limit=10,
+                    offset=0,
+                    query=None,
+                    refresh_ttl=False,
+                ),
+            ]
+        )
+
+    assert api.reads == 1
+    assert results[0] is not None
+    assert len(results[1]) == 2
 
 
 async def test_저장소는_되읽기만_하고_적재하지_않는다() -> None:
