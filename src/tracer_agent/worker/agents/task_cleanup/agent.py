@@ -9,7 +9,7 @@ from tracer_agent.shared.agents.task_cleanup.models import CleanupResult, TaskCl
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import execution_config, job_durability, resume_input
+from ..runtime.durable_graph import execution_config, job_durability, prior_spend, resume_input
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.job_agent import JobAgent
 from ..runtime.llm.budget import ExecutionBudget
@@ -60,12 +60,29 @@ async def run_task_cleanup(
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
     resume_key = req.executionId or req.jobId
     saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
+    graph = TASK_CLEANUP_GRAPH.compiled(saver)
+    config = execution_config(
+        _RECURSION_LIMIT,
+        TraceSafeMetadata(
+            agent_name=AgentJobKind.TASK_CLEANUP,
+            model_requested=req.model,
+            prompt_version=prompt.version(),
+            job_id=req.jobId,
+        ),
+        resume_key,
+    )
+    prior = await prior_spend(graph, config, saver)
     deps = CleanupDeps(
         req=req,
         reader=CleanupLedgerReader(tracer),
         usage=usage,
         chats=chats or make_chat_pair(req),
-        budget=ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates)),
+        budget=ExecutionBudget(
+            req.limits.budgetUsd,
+            ModelRates(req.modelRates),
+            spent_usd=prior.cost_usd,
+            turns_used=prior.turns,
+        ),
         prompts=build_prompt_bundle(prompt),
         language_directives=prompt.language_directives,
     )
@@ -85,17 +102,6 @@ async def run_task_cleanup(
             TASK_CLEANUP_NODE_NAMES,
         ),
         build_routes(usage, ValidateDecisionsNode.name),
-    )
-    graph = TASK_CLEANUP_GRAPH.compiled(saver)
-    config = execution_config(
-        _RECURSION_LIMIT,
-        TraceSafeMetadata(
-            agent_name=AgentJobKind.TASK_CLEANUP,
-            model_requested=req.model,
-            prompt_version=prompt.version(),
-            job_id=req.jobId,
-        ),
-        resume_key,
     )
     initial: dict[str, Any] = {
         "scanned_at": req.scannedAt,
@@ -117,7 +123,7 @@ async def run_task_cleanup(
         "result": None,
     }
     final = await graph.ainvoke(
-        await resume_input(graph, config, initial, saver),
+        resume_input(initial, prior),
         context=context,
         config=config,
         durability=job_durability(saver),

@@ -159,13 +159,22 @@ class ToolLoopBudget:
 class ExecutionBudget:
     """병렬 노드까지 한 실행의 달러 상한을 함께 쓰는 장부이며 팬아웃 전에 뗄 턴 원장도 갖는다."""
 
-    def __init__(self, max_cost_usd: float, rates: ModelRates, max_turns: int | None = None) -> None:
+    def __init__(
+        self,
+        max_cost_usd: float,
+        rates: ModelRates,
+        max_turns: int | None = None,
+        *,
+        spent_usd: float = 0.0,
+        turns_used: int = 0,
+    ) -> None:
         self._max = max_cost_usd
         self._rates = rates
-        self._spent = 0.0
+        # 이어받은 실행은 앞선 시도의 지출을 안고 시작해야 상한이 실행 하나에 한 번만 열린다.
+        self._spent = spent_usd
         self._peak = 0.0
-        self._remaining_turns = max_turns
-        self._remaining_budget_usd = max_cost_usd
+        self._remaining_turns = None if max_turns is None else max(max_turns - turns_used, 0)
+        self._remaining_budget_usd = max(max_cost_usd - spent_usd, 0.0)
         self._reservations: dict[int, _ReservedShare] = {}
         self._settled: set[int] = set()
 

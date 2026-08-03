@@ -92,8 +92,10 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
     assert report.exhausted is True
     assert report.verdict == "Investigation failed: agent blew up"
     assert report.excerpts == []
-    # 실패해도 지출은 합산에 실린다.
-    assert "model_cost_usd" in result
+    # 실패한 호출도 실제로 쓴 만큼만 정산해야 남은 단계가 쓰지 않은 돈까지 잃지 않는다.
+    assert result["model_cost_usd"] == 0.0
+    # 턴은 사용량으로 알 수 없으므로 배분받은 몫 전부를 쓴 것으로 본다.
+    assert result["model_turns_used"] == 4
 
 
 async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강등되고_다른_전문가의_보고는_남는다() -> None:

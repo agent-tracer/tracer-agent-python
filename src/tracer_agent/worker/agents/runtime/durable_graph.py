@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
@@ -13,6 +14,10 @@ from .telemetry.disclosure import TraceSafeMetadata
 
 # 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 입진행 중인 노드 하나면 충분하다.
 _JOB_DURABILITY: Literal["sync", "async", "exit"] = "async"
+
+# 실행이 그때까지 쓴 달러와 턴을 그래프 상태가 싣고 다니는 자리다.
+_COST_FIELD = "model_cost_usd"
+_TURNS_FIELD = "model_turns_used"
 
 type CompiledGraph = CompiledStateGraph[Any, Any, Any, Any]
 
@@ -46,17 +51,46 @@ def job_durability(
     return None if saver is None else _JOB_DURABILITY
 
 
-async def resume_input[StateT](
+@dataclass(frozen=True)
+class PriorSpend:
+    """이어받을 체크포인트가 남긴, 이 실행이 앞선 시도까지 쓴 달러와 턴이다."""
+
+    resumed: bool
+    cost_usd: float
+    turns: int
+
+
+_FRESH_SPEND = PriorSpend(resumed=False, cost_usd=0.0, turns=0)
+
+
+async def prior_spend(
     graph: CompiledGraph,
     config: RunnableConfig,
-    initial: StateT,
     saver: BaseCheckpointSaver[Any] | None,
-) -> StateT | None:
-    """이어갈 체크포인트가 있으면 상태를 다시 넣지 않아야 끝난 노드를 다시 실행하지 않는다."""
+) -> PriorSpend:
+    """이어갈 체크포인트가 있으면 그 실행이 이미 쓴 몫을 읽어 상한이 처음부터 다시 열리지 않게 한다."""
     if saver is None or config.get("configurable") is None:
-        return initial
+        return _FRESH_SPEND
     restored = await graph.aget_state(config)
-    return None if restored.created_at is not None else initial
+    if restored.created_at is None:
+        return _FRESH_SPEND
+    values = restored.values
+    if not isinstance(values, dict):
+        return _FRESH_SPEND
+    return PriorSpend(
+        resumed=True,
+        cost_usd=_number(values.get(_COST_FIELD), 0.0),
+        turns=int(_number(values.get(_TURNS_FIELD), 0.0)),
+    )
+
+
+def _number(value: object, fallback: float) -> float:
+    return float(value) if isinstance(value, int | float) else fallback
+
+
+def resume_input[StateT](initial: StateT, prior: PriorSpend) -> StateT | None:
+    """이어갈 상태가 있으면 상태를 다시 넣지 않아야 끝난 노드를 다시 실행하지 않는다."""
+    return None if prior.resumed else initial
 
 
 def with_thread(config: RunnableConfig, thread_id: str) -> RunnableConfig:

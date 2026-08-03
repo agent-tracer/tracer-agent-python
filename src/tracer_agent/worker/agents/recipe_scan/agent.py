@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import execution_config, job_durability, resume_input
+from ..runtime.durable_graph import execution_config, job_durability, prior_spend, resume_input
 from ..runtime.execution.trace import ExecutionTrace
 from ..runtime.job_agent import JobAgent
 from ..runtime.llm.budget import ExecutionBudget
@@ -57,7 +57,25 @@ async def run_recipe_scan(
     # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
     resume_key = req.executionId or req.jobId
     saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
-    budget = ExecutionBudget(req.limits.budgetUsd, ModelRates(req.modelRates), max_turns=req.limits.maxTurns)
+    graph = RECIPE_SCAN_GRAPH.compiled(saver)
+    config = execution_config(
+        _RECURSION_LIMIT,
+        TraceSafeMetadata(
+            agent_name=AgentJobKind.RECIPE_SCAN,
+            model_requested=req.model,
+            prompt_version=prompt.version(),
+            job_id=req.jobId,
+        ),
+        resume_key,
+    )
+    prior = await prior_spend(graph, config, saver)
+    budget = ExecutionBudget(
+        req.limits.budgetUsd,
+        ModelRates(req.modelRates),
+        max_turns=req.limits.maxTurns,
+        spent_usd=prior.cost_usd,
+        turns_used=prior.turns,
+    )
     # 뗄 순서를 바꾸면 그 시점 잔량에 곱하는 비율이 달라지므로 repair → survey → synthesisFloor 순서를 지킨다.
     policy = load_reservation_policy()
     repair_lease = budget.reserve(policy.repair.turns, policy.repair.budget_share)
@@ -91,17 +109,6 @@ async def run_recipe_scan(
         ),
         build_routes(usage, ValidateCandidateNode.name),
     )
-    graph = RECIPE_SCAN_GRAPH.compiled(saver)
-    config = execution_config(
-        _RECURSION_LIMIT,
-        TraceSafeMetadata(
-            agent_name=AgentJobKind.RECIPE_SCAN,
-            model_requested=req.model,
-            prompt_version=prompt.version(),
-            job_id=req.jobId,
-        ),
-        resume_key,
-    )
     initial: dict[str, Any] = {
         "task_id": req.taskId,
         "language": req.language,
@@ -122,7 +129,7 @@ async def run_recipe_scan(
         "result": None,
     }
     final = await graph.ainvoke(
-        await resume_input(graph, config, initial, saver),
+        resume_input(initial, prior),
         context=context,
         config=config,
         durability=job_durability(saver),
