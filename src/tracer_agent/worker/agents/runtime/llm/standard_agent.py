@@ -22,6 +22,7 @@ from ..errors import OutputTruncated
 from ..execution.trace import ExecutionTrace
 from .budget import ModelCallBudget
 from .pacing import finalize_directive, progress_notice
+from .prompt_cache import volatile
 from .trajectory import is_truncated
 
 # 이 토큰 수를 넘는 실행에서 오래된 도구 결과를 정리한다.
@@ -31,7 +32,7 @@ CONTEXT_EDITING_KEEP_TOOL_RESULTS = 2
 
 
 def context_editing_middleware() -> ContextEditingMiddleware:
-    """메시지 꼬리의 오래된 도구 결과만 비워 캐시 경계와 겹치지 않는 맥락 정리 미들웨어를 만든다."""
+    """캐시 접두사 안쪽인 앞선 도구 결과를 비워 자리를 되찾는 맥락 정리 미들웨어를 만든다."""
     return ContextEditingMiddleware(
         edits=[
             ClearToolUsesEdit(
@@ -114,12 +115,17 @@ def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[St
         spent = dict(request.state).get("run_model_call_count", 0)
         used = spent if isinstance(spent, int) else 0
         notice = progress_notice(used, context.max_model_turns)
-        return request.override(messages=[*messages, HumanMessage(content=notice)])
+        return request.override(messages=[*messages, _tail(notice)])
     context.budget.land()
     context.trace.mark_landed()
     # 구조화 출력 도구는 이 목록 밖에서 붙어 조사 도구만 거두며, 남은 산출 형태는 response_format이 구분한다.
     directive = finalize_directive(structured_output=request.response_format is not None)
     return request.override(
-        messages=[*messages, HumanMessage(content=directive)],
+        messages=[*messages, _tail(directive)],
         tools=[],
     )
+
+
+def _tail(content: str) -> HumanMessage:
+    """남은 몫을 알리는 꼬리는 호출마다 다시 쓰이므로 캐시 경계가 그 앞에서 멈추도록 표시한다."""
+    return volatile(HumanMessage(content=content))
