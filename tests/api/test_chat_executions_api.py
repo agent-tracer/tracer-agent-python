@@ -69,7 +69,7 @@ class Test되읽기:
         seed_message(store, "m2", "assistant", "네", offset=1)
         seed_message(store, "m3", "user", "이어서", offset=2)
         seed_message(store, "m4", "assistant", "아직", offset=3)
-        seed_execution(store, "e1", user_message_id="m3")
+        seed_execution(store, "e1", replay_anchor_message_id="m3")
         seed_memory(store)
 
         data = client.get(f"{THREADS}/t1/executions/e1/replay").json()["data"]
@@ -82,7 +82,7 @@ class Test되읽기:
         self, client: TestClient, store: SqliteLedgerSql
     ) -> None:
         seed_thread(store)
-        seed_execution(store, "e1", user_message_id="없음")
+        seed_execution(store, "e1", replay_anchor_message_id="없음")
 
         res = client.get(f"{THREADS}/t1/executions/e1/replay")
 

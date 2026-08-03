@@ -77,7 +77,7 @@ async def get_chat_replay(
 
     summary = None if thread["summary"] is None else str(thread["summary"])
     try:
-        replayed = build_chat_replay(messages, str(execution["user_message_id"]), summary)
+        replayed = build_chat_replay(messages, str(execution["replay_anchor_message_id"]), summary)
     except ChatReplayMessageMissing:
         return rejection(ChatIntakeRejected(*REPLAY_UNBUILDABLE))
     return ok(

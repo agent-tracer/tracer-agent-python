@@ -95,7 +95,7 @@ async def test_접수가_사용자_메시지와_대기_실행을_함께_세운�
     assert message["role"] == "user"
     assert message["content"] == "안녕"
     assert execution["status"] == "queued"
-    assert execution["user_message_id"] == message["id"]
+    assert execution["replay_anchor_message_id"] == message["id"]
     assert execution["attempt"] == 0
     assert execution["draft_text"] == ""
     assert accepted.execution["id"] == execution["id"]

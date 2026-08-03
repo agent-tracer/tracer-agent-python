@@ -16,15 +16,15 @@ MESSAGE_NOT_FOUND = "Chat replay message not found"
 
 
 class ChatReplayMessageMissing(LookupError):
-    """실행이 가리키는 사용자 메시지가 이력에 없어 재생을 만들 수 없다."""
+    """실행이 가리키는 앵커 메시지가 이력에 없어 재생을 만들 수 없다."""
 
 
 def build_chat_replay(
-    messages: list[SqlRow], user_message_id: str, summary: str | None
+    messages: list[SqlRow], replay_anchor_message_id: str, summary: str | None
 ) -> list[dict[str, Any]]:
     """이번 턴의 재생 이력을 만드는 유일한 규칙이며 자르기와 접기를 함께 소유한다."""
     window = select_replay_messages(
-        _until_user_message(messages, user_message_id),
+        _until_anchor(messages, replay_anchor_message_id),
         summary is not None and bool(summary.strip()),
     )
     paired = _paired_call_ids(window)
@@ -48,10 +48,10 @@ def select_replay_messages(messages: list[SqlRow], has_summary: bool) -> list[Sq
     return messages
 
 
-def _until_user_message(messages: list[SqlRow], user_message_id: str) -> list[SqlRow]:
-    """이번 턴의 사용자 메시지까지가 이력이며 그 뒤 행은 이 턴이 만들 것이다."""
+def _until_anchor(messages: list[SqlRow], replay_anchor_message_id: str) -> list[SqlRow]:
+    """앵커 메시지까지가 이력이며 그 뒤 행은 이 턴이 만들 것이다."""
     for index, row in enumerate(messages):
-        if row["id"] == user_message_id:
+        if row["id"] == replay_anchor_message_id:
             return messages[: index + 1]
     raise ChatReplayMessageMissing(MESSAGE_NOT_FOUND)
 

@@ -43,7 +43,7 @@ CREATE TABLE chat_executions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     thread_id TEXT NOT NULL,
-    user_message_id TEXT NOT NULL,
+    replay_anchor_message_id TEXT NOT NULL,
     client_request_id TEXT NOT NULL,
     input_hash TEXT NOT NULL,
     status TEXT NOT NULL,

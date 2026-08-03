@@ -43,7 +43,7 @@ def seed_row(case_row: Mapping[str, Any]) -> dict[str, Any]:
     identifier = str(case_row["id"])
     row: dict[str, Any] = {
         "id": identifier,
-        "user_message_id": f"message-{identifier}",
+        "replay_anchor_message_id": f"message-{identifier}",
         "client_request_id": f"request-{identifier}",
         "input_hash": f"hash-{identifier}",
         "status": "queued",

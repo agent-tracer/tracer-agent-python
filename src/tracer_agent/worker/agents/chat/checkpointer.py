@@ -16,7 +16,7 @@ async def seed_checkpoint(
     config: RunnableConfig,
     replayed: list[BaseMessage],
 ) -> list[BaseMessage]:
-    """실행 체크포인트가 비어 있을 때만 과거 이력을 심고 최신 사용자 메시지를 돌려준다."""
+    """실행 체크포인트가 비어 있을 때만 앞선 이력을 심고 이번 턴이 이어받을 마지막 줄을 돌려준다."""
     if await saver.aget_tuple(config) is not None:
         return []
     if not replayed:

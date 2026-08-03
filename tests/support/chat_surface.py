@@ -124,7 +124,7 @@ def seed_message(
 
 
 def seed_execution(
-    store: SqliteLedgerSql, execution_id: str = "e1", user_message_id: str = "m1", **extra: Any
+    store: SqliteLedgerSql, execution_id: str = "e1", replay_anchor_message_id: str = "m1", **extra: Any
 ) -> None:
     """조회가 읽을 실행 한 행을 기록한다."""
     store.seed(
@@ -134,7 +134,7 @@ def seed_execution(
                 "id": execution_id,
                 "user_id": extra.get("user_id", "local"),
                 "thread_id": extra.get("thread_id", "t1"),
-                "user_message_id": user_message_id,
+                "replay_anchor_message_id": replay_anchor_message_id,
                 "client_request_id": execution_id,
                 "input_hash": "hash",
                 "status": extra.get("status", "running"),

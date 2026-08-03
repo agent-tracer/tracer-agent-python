@@ -108,7 +108,7 @@ class ChatTurnIntake:
     async def _existing(self, execution: SqlRow, input_hash: str) -> AcceptedChatTurn:
         if execution["input_hash"] != input_hash:
             raise ChatIntakeRejected(*IDEMPOTENCY_CONFLICT)
-        message = await self._ledger.find_message(str(execution["user_message_id"]))
+        message = await self._ledger.find_message(str(execution["replay_anchor_message_id"]))
         if message is None:
             raise RuntimeError("접수된 실행이 인용하는 사용자 메시지가 없다")
         return AcceptedChatTurn(message=message, execution=execution)

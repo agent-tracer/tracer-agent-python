@@ -33,7 +33,7 @@ RETURNING *
 
 _INSERT_QUEUED_EXECUTION = """
 INSERT INTO chat_executions (
-    id, user_id, thread_id, user_message_id, client_request_id, input_hash, status,
+    id, user_id, thread_id, replay_anchor_message_id, client_request_id, input_hash, status,
     requested_backend, model, language, draft_text, draft_seq, attempt, usage,
     created_at, updated_at
 )
@@ -66,7 +66,7 @@ class ChatIntakeLedger:
         return len(rows) > 0
 
     async def find_message(self, message_id: str) -> SqlRow | None:
-        """실행이 인용하는 사용자 메시지 행을 읽는다."""
+        """실행이 앵커로 인용하는 메시지 행을 읽는다."""
         rows = await self._sql.fetch(_SELECT_MESSAGE, message_id)
         return rows[0] if rows else None
 
@@ -82,7 +82,7 @@ class ChatIntakeLedger:
         execution_id: str,
         user_id: str,
         thread_id: str,
-        user_message_id: str,
+        replay_anchor_message_id: str,
         client_request_id: str,
         input_hash: str,
         model: str | None,
@@ -95,7 +95,7 @@ class ChatIntakeLedger:
             execution_id,
             user_id,
             thread_id,
-            user_message_id,
+            replay_anchor_message_id,
             client_request_id,
             input_hash,
             AGENT_BACKEND,

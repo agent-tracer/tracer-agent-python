@@ -80,7 +80,7 @@ def seed_execution(store: SqliteLedgerSql, model: str | None = None) -> None:
                 "id": "e1",
                 "user_id": "u1",
                 "thread_id": "t1",
-                "user_message_id": "m1",
+                "replay_anchor_message_id": "m1",
                 "client_request_id": "c1",
                 "input_hash": "h1",
                 "status": "running",

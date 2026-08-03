@@ -64,7 +64,7 @@ def _seed_all(store: SqliteLedgerSql) -> None:
     )
     seed_message(store, "m3", "tool", "결과", offset=2, tool_call_id="call-1")
     seed_message(store, "m4", "user", "이어서", offset=3)
-    seed_execution(store, "e1", user_message_id="m4", draft_token_hash=DRAFT_TOKEN_HASH)
+    seed_execution(store, "e1", replay_anchor_message_id="m4", draft_token_hash=DRAFT_TOKEN_HASH)
     seed_pending_tool(store)
     seed_step(
         store,
@@ -266,7 +266,7 @@ class Test재생_규칙:
     ) -> None:
         seed_message(store, "m5", "tool", "짝 없는 결과", offset=4, tool_call_id="call-없음")
         seed_message(store, "m6", "user", "그다음", offset=5)
-        seed_execution(store, "e2", user_message_id="m6", status="completed")
+        seed_execution(store, "e2", replay_anchor_message_id="m6", status="completed")
 
         messages = client.get(f"{THREADS}/t1/executions/e2/replay").json()["data"]["messages"]
 
@@ -285,7 +285,7 @@ class Test재생_규칙:
             tool_calls=[{"id": "call-2", "name": "delete_task", "args": {}}],
         )
         seed_message(store, "m6", "user", "그다음", offset=5)
-        seed_execution(store, "e2", user_message_id="m6", status="completed")
+        seed_execution(store, "e2", replay_anchor_message_id="m6", status="completed")
 
         messages = client.get(f"{THREADS}/t1/executions/e2/replay").json()["data"]["messages"]
 
@@ -299,7 +299,7 @@ class Test스트림:
         seed_execution(
             store,
             "e-done",
-            user_message_id="m4",
+            replay_anchor_message_id="m4",
             status="completed",
             draft_text="끝난 답변",
             draft_seq=7,

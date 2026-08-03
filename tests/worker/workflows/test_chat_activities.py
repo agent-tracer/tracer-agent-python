@@ -63,7 +63,7 @@ def execution_row(**overrides: Any) -> dict[str, Any]:
         "id": "e1",
         "user_id": "u1",
         "thread_id": "t1",
-        "user_message_id": "m1",
+        "replay_anchor_message_id": "m1",
         "client_request_id": "r1",
         "input_hash": "h1",
         "status": "queued",
