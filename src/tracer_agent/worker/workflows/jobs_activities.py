@@ -32,7 +32,7 @@ from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.job_agent import JobAgent
 from ..agents.runtime.llm.client import ChatPair, make_chat_pair
 from ..agents.runtime.pricing import ModelRates
-from ..agents.runtime.tracer_client import TracerApiClient
+from ..agents.runtime.tracer_client import TracerApiClient, TracerApiPort
 from ..agents.shared.prompt_source_port import AgentPrompt
 from ..agents.task_cleanup.agent import TASK_CLEANUP_JOB
 from ..agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
@@ -115,7 +115,7 @@ class AgentJobActivities:
             payload["taskId"] = task_id
         await self._notifier.job_updated(user_id, payload)
 
-    def _tracer(self, user_id: str) -> TracerApiClient:
+    def _tracer(self, user_id: str) -> TracerApiPort:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
         return TracerApiClient(self._http, self._tracer_api_url, user_id)
 

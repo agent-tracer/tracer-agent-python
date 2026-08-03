@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support.fakes import FakeTracerApi
 from tracer_agent.worker.agents.recipe_scan.outputs import (
     MAX_RECIPES,
     RECIPES_PATH,
     deliver_recipes,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 
 
 async def test_레시피_후보를_한_벌로_보내고_출처_잡을_함께_싣는다() -> None:

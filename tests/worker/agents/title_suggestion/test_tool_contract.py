@@ -15,12 +15,12 @@ from tests.support.contract import (
     tool_arg_partition,
     tool_descriptions,
 )
-from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.title_suggestion.models import (
     MAX_CONTEXT_TURNS,
     RECENT_TURN_LIMIT,
     TitleSuggestionContext,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.title_suggestion.reader import TitleLedgerReader
 from tracer_agent.worker.agents.title_suggestion.tools import (
     DEFAULT_EVENT_LIMIT,
@@ -40,7 +40,7 @@ def _contract() -> Any:
 
 def _langchain_tool() -> Any:
     registry = build_title_registry(
-        TitleLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        TitleLedgerReader(FakeTracerApi()),
         agent_name="title-suggestion",
     )
     return registry.langchain_tools()[0]
@@ -130,7 +130,7 @@ def test_읽기_방향의_기본값과_허용_값이_계약과_같다() -> None:
 
 async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     responses = _contract()["responses"][GET_TASK_EVENTS]
-    reader = TitleLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))  # type: ignore[arg-type]
+    reader = TitleLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))
 
     page = await reader.task_events("task-1", 1, None, "asc")
 

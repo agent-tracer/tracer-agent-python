@@ -18,7 +18,7 @@ from ..runtime.scoped_event_reader import (
     slim_event,
     timeline_path,
 )
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 
 RULES_PATH = "/api/v1/rules"
 # 실행에 적용되는 규칙만 인용할 수 있으므로 승인 대기 상태는 목록에서 걸러낸다.
@@ -51,7 +51,7 @@ class TaskEventWindow:
 class RecipeLedgerReader:
     """한 사용자의 추적 창구만 읽도록 생성 시점에 범위가 묶인 조회 진입점이다."""
 
-    def __init__(self, tracer: TracerApiClient) -> None:
+    def __init__(self, tracer: TracerApiPort) -> None:
         self._tracer = tracer
 
     async def task_with_events(self, task_id: str, window: int) -> TaskEventWindow | None:

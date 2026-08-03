@@ -14,7 +14,6 @@ from tests.support.contract import (
     tool_arg_partition,
     tool_descriptions,
 )
-from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.task_cleanup.models import (
     CLEANUP_REVIEWER_ROLE,
     MAX_EVIDENCE_EVENT_IDS,
@@ -30,6 +29,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
     InspectReport,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.task_cleanup.failures import WORKER_FAILED
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
 from tracer_agent.worker.agents.task_cleanup.tools import (
@@ -56,7 +56,7 @@ def _contract() -> Any:
 
 def _langchain_tools() -> dict[str, Any]:
     registry = build_cleanup_registry(
-        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        CleanupLedgerReader(FakeTracerApi()),
         CleanupBatch(),
         {},
         {},

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.support.fakes import FakeTracerApi
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.task_cleanup.outputs import (
     CLEANUP_SUGGESTIONS_PATH,
     MAX_SUGGESTIONS,

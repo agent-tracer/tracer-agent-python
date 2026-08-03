@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, TITLE_SUGGESTION_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod

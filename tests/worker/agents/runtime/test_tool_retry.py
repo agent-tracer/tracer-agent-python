@@ -7,12 +7,13 @@ from typing import Any
 import pytest
 from langchain.tools import tool
 
-from tests.support.fakes import FakeToolLoopChat, FakeTracerApi, mk_rates
+from tests.support.fakes import FakeToolLoopChat, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeDraft
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.recipe_scan.tools import build_recipe_registry
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
 from tracer_agent.worker.agents.runtime.llm.standard_agent import StandardAgentContext
@@ -20,8 +21,8 @@ from tracer_agent.worker.agents.runtime.tracer_client import TracerApiUnavailabl
 from tracer_agent.worker.agents.task_cleanup.tools import GetTaskEventsTool
 
 RECIPE_TRANSIENT = build_recipe_registry(
-    RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-    RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
+    RecipeLedgerReader(FakeTracerApi()),
+    RecipeSearchReader(FakeTracerApi()),
     ProvenanceCatalog(),
     agent_name="recipe-scan",
 ).transient_errors()

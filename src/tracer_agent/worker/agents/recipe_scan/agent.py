@@ -20,7 +20,7 @@ from ..runtime.llm.client import ChatPair, make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
 from .deps import RecipeDeps
@@ -40,14 +40,14 @@ from .search import RecipeSearchReader
 _RECURSION_LIMIT = 30
 
 
-async def prepare_recipe_scan(payload: dict[str, Any], _tracer: TracerApiClient) -> RecipeScanRequest:
+async def prepare_recipe_scan(payload: dict[str, Any], _tracer: TracerApiPort) -> RecipeScanRequest:
     """접수가 실은 값만으로 스캔 요청을 세운다."""
     return RecipeScanRequest.model_validate(payload)
 
 
 async def run_recipe_scan(
     req: RecipeScanRequest,
-    tracer: TracerApiClient,
+    tracer: TracerApiPort,
     usage: ExecutionTrace,
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi, mk_rates
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, mk_rates
 from tests.support.prompts import TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
     InspectDispatch,
     TaskCleanupRequest,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ExecutionBudget
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
@@ -58,7 +59,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     node = InspectNode(
         CleanupDeps(
             req=req,
-            reader=CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+            reader=CleanupLedgerReader(FakeTracerApi()),
             usage=ExecutionTrace(),
             chats=ChatPair(BoomChat([]), None),  # type: ignore[arg-type]
             budget=ExecutionBudget(1.0, mk_rates()),

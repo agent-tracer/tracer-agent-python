@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.shared.json_view import (
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext, TitleSuggestionTurn
 
 from ..runtime.scoped_event_reader import ScopedEventReader, timeline_path
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 from .policy import windowed_turns
 
 # 조회 로직이 task-cleanup과 완전히 같아 새 서브클래스 대신 이름만 이 슬라이스로 가져온다.
@@ -29,7 +29,7 @@ TASK_HAS_NO_EVENTS = "title.task-has-no-events"
 COUNT_PROBE_LIMIT = 1
 
 
-async def load_title_context(tracer: TracerApiClient, task_id: str) -> TitleSuggestionContext:
+async def load_title_context(tracer: TracerApiPort, task_id: str) -> TitleSuggestionContext:
     """SDK 축의 buildTitleContext와 같은 창 규칙으로 대화 컨텍스트를 추적 창구에서 조립한다."""
     detail = await tracer.get(f"/api/v1/tasks/{task_id}")
     if detail is None:

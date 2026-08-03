@@ -19,7 +19,7 @@ from ..runtime.llm.client import ChatPair, make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
 from .deps import TitleDeps
@@ -39,9 +39,7 @@ from .reader import TitleLedgerReader, load_title_context
 _RECURSION_LIMIT = 20
 
 
-async def prepare_title_suggestion(
-    payload: dict[str, Any], tracer: TracerApiClient
-) -> TitleSuggestionRequest:
+async def prepare_title_suggestion(payload: dict[str, Any], tracer: TracerApiPort) -> TitleSuggestionRequest:
     """접수가 대화 발췌를 싣지 않았으면 이 시점에 스스로 조립해 요청을 세운다."""
     if "context" not in payload:
         context = await load_title_context(tracer, payload["taskId"])
@@ -51,7 +49,7 @@ async def prepare_title_suggestion(
 
 async def run_title_suggestion(
     req: TitleSuggestionRequest,
-    tracer: TracerApiClient,
+    tracer: TracerApiPort,
     usage: ExecutionTrace,
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,

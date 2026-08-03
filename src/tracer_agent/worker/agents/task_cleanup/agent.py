@@ -17,7 +17,7 @@ from ..runtime.llm.client import ChatPair, make_chat_pair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
 from .deps import CleanupDeps
@@ -34,7 +34,7 @@ from .reader import CleanupLedgerReader, load_cleanup_batch
 _RECURSION_LIMIT = 30
 
 
-async def prepare_task_cleanup(payload: dict[str, Any], tracer: TracerApiClient) -> TaskCleanupRequest:
+async def prepare_task_cleanup(payload: dict[str, Any], tracer: TracerApiPort) -> TaskCleanupRequest:
     """접수가 후보 배치를 싣지 않았으면 이 시점에 스스로 조립해 요청을 세운다."""
     if "batch" not in payload:
         now = datetime.now(UTC)
@@ -49,7 +49,7 @@ async def prepare_task_cleanup(payload: dict[str, Any], tracer: TracerApiClient)
 
 async def run_task_cleanup(
     req: TaskCleanupRequest,
-    tracer: TracerApiClient,
+    tracer: TracerApiPort,
     usage: ExecutionTrace,
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,

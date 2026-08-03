@@ -7,12 +7,13 @@ from typing import Any
 import httpx
 from anthropic import AuthenticationError
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, FakeTracerApi
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair

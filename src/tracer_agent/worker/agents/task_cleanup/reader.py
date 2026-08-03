@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.shared.json_view import (
 from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch, CleanupTaskStatus
 
 from ..runtime.scoped_event_reader import ScopedEventReader
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 from .policy import CleanupTaskSnapshot, qualify_candidates, without_active_children
 
 # 조회 로직이 title-suggestion과 완전히 같아 새 서브클래스 대신 이름만 이 슬라이스로 가져온다.
@@ -29,7 +29,7 @@ TASKS_PATH = "/api/v1/tasks"
 TASK_PAGE_LIMIT = 100
 
 
-async def load_cleanup_batch(tracer: TracerApiClient, now: datetime) -> CleanupBatch:
+async def load_cleanup_batch(tracer: TracerApiPort, now: datetime) -> CleanupBatch:
     """정리 후보 판정에 들어가는 배치를 추적 창구의 목록에서 조립한다."""
     tasks, batch_truncated = await _scan_tasks(tracer)
     shortlisted = qualify_candidates(tasks, now)
@@ -39,7 +39,7 @@ async def load_cleanup_batch(tracer: TracerApiClient, now: datetime) -> CleanupB
     )
 
 
-async def _scan_tasks(tracer: TracerApiClient) -> tuple[list[CleanupTaskSnapshot], bool]:
+async def _scan_tasks(tracer: TracerApiPort) -> tuple[list[CleanupTaskSnapshot], bool]:
     """보관도 감춤도 되지 않은 태스크를 상한까지 여러 장에 걸쳐 읽는다."""
     # 상한은 조회하는 창의 크기이므로 걸러내기 전의 원본을 세고, 자른 뒤에 server-sdk를 뺀다.
     visible = await _read_pages(tracer, TASK_SCAN_LIMIT + 1)
@@ -49,7 +49,7 @@ async def _scan_tasks(tracer: TracerApiClient) -> tuple[list[CleanupTaskSnapshot
     return tasks, truncated
 
 
-async def _read_pages(tracer: TracerApiClient, cap: int) -> list[JsonObject]:
+async def _read_pages(tracer: TracerApiPort, cap: int) -> list[JsonObject]:
     """목록 창구를 여러 장에 걸쳐 상한까지 읽는다."""
     read: list[JsonObject] = []
     cursor: str | None = None
@@ -66,7 +66,7 @@ async def _read_pages(tracer: TracerApiClient, cap: int) -> list[JsonObject]:
     return read[:cap]
 
 
-async def _active_child_counts(tracer: TracerApiClient, task_ids: list[str]) -> dict[str, int]:
+async def _active_child_counts(tracer: TracerApiPort, task_ids: list[str]) -> dict[str, int]:
     """후보마다 아직 진행 중인 자식이 몇인지 센다."""
     counts: dict[str, int] = {}
     for task_id in task_ids:

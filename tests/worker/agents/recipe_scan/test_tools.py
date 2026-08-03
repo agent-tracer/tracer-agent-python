@@ -7,7 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from tests.support.fakes import FakeToolLoopChat, FakeTracerApi
+from tests.support.fakes import FakeToolLoopChat
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_EXCERPT_CHARS,
     MAX_EXCERPTS_PER_PROBE,
@@ -34,6 +34,7 @@ from tracer_agent.worker.agents.recipe_scan.tools import (
     build_recipe_registry,
     validate_tool_args,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.tooling import ToolRegistry
 
 
@@ -52,11 +53,11 @@ def _registry(
 
 
 def _reader() -> RecipeLedgerReader:
-    return RecipeLedgerReader(FakeTracerApi())  # type: ignore[arg-type]
+    return RecipeLedgerReader(FakeTracerApi())
 
 
 def _search() -> RecipeSearchReader:
-    return RecipeSearchReader(FakeTracerApi())  # type: ignore[arg-type]
+    return RecipeSearchReader(FakeTracerApi())
 
 
 def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> None:

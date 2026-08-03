@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tracer_agent.shared.agents.shared.json_view import JsonObject, JsonValue, as_objects, text
 
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 
 EVENT_SEARCH_PATH = "/api/v1/events/search"
 TASK_SEARCH_PATH = "/api/v1/tasks/search"
@@ -21,7 +21,7 @@ _RECIPE_KEYS = ("title", "intent", "status", "userEdited", "rev", "updatedAt")
 class RecipeSearchReader:
     """한 사용자의 검색 창구만 읽도록 생성 시점에 범위가 묶인 검색 진입점이다."""
 
-    def __init__(self, tracer: TracerApiClient) -> None:
+    def __init__(self, tracer: TracerApiPort) -> None:
         self._tracer = tracer
 
     async def search_events(

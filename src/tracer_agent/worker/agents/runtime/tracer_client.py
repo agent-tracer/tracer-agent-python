@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -36,7 +36,19 @@ TRANSIENT_TRACER_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-class TracerApiClient:
+class TracerApiPort(Protocol):
+    """한 사용자 범위로 추적 창구를 읽고 쓰는 자리이며 대역이 이 모양을 지킨다."""
+
+    async def get(self, path: str, params: Mapping[str, Any] | None = None) -> JsonValue:
+        """창구 하나를 읽어 봉투를 벗긴 본문을 낸다."""
+        ...
+
+    async def post(self, path: str, body: Mapping[str, Any]) -> JsonValue:
+        """창구 하나에 본문을 보내고 봉투를 벗긴 응답을 낸다."""
+        ...
+
+
+class TracerApiClient(TracerApiPort):
     """한 사용자의 추적 창구만 부르도록 생성 시점에 범위가 묶인 HTTP 진입점이다."""
 
     def __init__(self, client: httpx.AsyncClient, base_url: str, user_id: str) -> None:

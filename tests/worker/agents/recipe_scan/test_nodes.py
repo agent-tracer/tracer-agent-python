@@ -11,7 +11,6 @@ from tests.support.fakes import (
     WIRE_LIMITS,
     WIRE_MODEL_RATES,
     FakeToolLoopChat,
-    FakeTracerApi,
     mk_rates,
 )
 from tests.support.prompts import RECIPE_SCAN_PROMPT
@@ -30,6 +29,7 @@ from tracer_agent.worker.agents.recipe_scan.nodes.survey import SurveyNode
 from tracer_agent.worker.agents.recipe_scan.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import AgentBudgetLease, ExecutionBudget
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
@@ -40,8 +40,8 @@ _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"
 def _deps(chat: FakeToolLoopChat, req: RecipeScanRequest) -> RecipeDeps:
     return RecipeDeps(
         req=req,
-        reader=RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        search=RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
+        reader=RecipeLedgerReader(FakeTracerApi()),
+        search=RecipeSearchReader(FakeTracerApi()),
         usage=ExecutionTrace(),
         chats=ChatPair(chat, None),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),

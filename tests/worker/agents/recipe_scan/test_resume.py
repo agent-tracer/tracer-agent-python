@@ -11,11 +11,11 @@ from tests.support.fakes import (
     WIRE_LIMITS,
     WIRE_MODEL_RATES,
     FakeToolLoopChat,
-    FakeTracerApi,
 )
 from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.runtime.serde import graph_serde

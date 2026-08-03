@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.job_agent import JobAgent
 from tracer_agent.worker.agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
 
@@ -31,7 +31,7 @@ async def test_산출물이_없으면_배달을_부르지_않는다() -> None:
         deliver=deliver,
     )
 
-    await job.settle_outputs(FakeTracerApi(), "job-7", None)  # type: ignore[arg-type]
-    await job.settle_outputs(FakeTracerApi(), "job-8", {})  # type: ignore[arg-type]
+    await job.settle_outputs(FakeTracerApi(), "job-7", None)
+    await job.settle_outputs(FakeTracerApi(), "job-8", {})
 
     assert delivered == []

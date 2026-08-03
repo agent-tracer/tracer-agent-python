@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.shared.json_view import (
     text_list,
 )
 
-from .tracer_client import TracerApiClient
+from .tracer_client import TracerApiPort
 
 EventView = Callable[[JsonObject], JsonObject]
 # 타임라인 창구가 한 장에 내주는 상한이며 그보다 넓은 창은 여러 장으로 읽는다.
@@ -46,7 +46,7 @@ def slim_event(item: JsonObject, optional_keys: tuple[str, ...] = OPTIONAL_EVENT
 
 
 async def read_event_window(
-    tracer: TracerApiClient, task_id: str, wanted: int
+    tracer: TracerApiPort, task_id: str, wanted: int
 ) -> tuple[list[JsonObject], int] | None:
     """이른 이벤트부터 원하는 만큼 여러 장에 걸쳐 읽고 전체 건수를 함께 낸다."""
     collected: list[JsonObject] = []
@@ -89,7 +89,7 @@ def event_page(payload: JsonObject, view: EventView = slim_event) -> JsonObject:
 class ScopedEventReader:
     """한 사용자가 소유한 태스크의 이벤트만 페이지 단위로 읽는다."""
 
-    def __init__(self, tracer: TracerApiClient) -> None:
+    def __init__(self, tracer: TracerApiPort) -> None:
         self._tracer = tracer
 
     async def task_events(

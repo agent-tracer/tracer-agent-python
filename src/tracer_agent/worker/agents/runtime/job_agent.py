@@ -13,14 +13,14 @@ from ..shared.prompt_source_port import AgentPrompt
 from .checkpoint import GraphCheckpointProvider
 from .execution.trace import ExecutionTrace
 from .llm.client import ChatPair
-from .tracer_client import TracerApiClient
+from .tracer_client import TracerApiPort
 
-type JobPrepare[RequestT] = Callable[[JsonObject, TracerApiClient], Awaitable[RequestT]]
+type JobPrepare[RequestT] = Callable[[JsonObject, TracerApiPort], Awaitable[RequestT]]
 type JobRun[RequestT] = Callable[
-    [RequestT, TracerApiClient, ExecutionTrace, AgentPrompt, GraphCheckpointProvider | None, ChatPair | None],
+    [RequestT, TracerApiPort, ExecutionTrace, AgentPrompt, GraphCheckpointProvider | None, ChatPair | None],
     Awaitable[dict[str, JsonValue]],
 ]
-type JobDeliver = Callable[[TracerApiClient, str, JsonObject], Awaitable[None]]
+type JobDeliver = Callable[[TracerApiPort, str, JsonObject], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,7 @@ class JobAgent[RequestT: AgentExecutionRequest]:
     run: JobRun[RequestT]
     deliver: JobDeliver | None = None
 
-    async def settle_outputs(
-        self, tracer: TracerApiClient, execution_id: str, data: JsonObject | None
-    ) -> None:
+    async def settle_outputs(self, tracer: TracerApiPort, execution_id: str, data: JsonObject | None) -> None:
         """종결한 잡의 산출물을 배달하며 보낼 것이 없는 잡은 아무 창구도 부르지 않는다."""
         if self.deliver is None or not data:
             return

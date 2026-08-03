@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from .tracer_client import TracerApiClient
+from .tracer_client import TracerApiPort
 
 _log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ _log = logging.getLogger(__name__)
 AGENT_AUTHOR = "agent"
 
 
-async def post_output(tracer: TracerApiClient, path: str, body: Mapping[str, Any], execution_id: str) -> None:
+async def post_output(tracer: TracerApiPort, path: str, body: Mapping[str, Any], execution_id: str) -> None:
     """창구가 자기 트랜잭션으로 한 벌을 쓰며, 실패하면 원장의 결과가 남고 산출물은 서지 않는다."""
     try:
         await tracer.post(path, body)

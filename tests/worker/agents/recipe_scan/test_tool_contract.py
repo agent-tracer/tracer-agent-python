@@ -16,7 +16,6 @@ from tests.support.contract import (
     tool_arg_partition,
     tool_descriptions,
 )
-from tests.support.fakes import FakeTracerApi
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_PROBE_TURNS,
     MAX_RECIPE_CANDIDATES,
@@ -44,6 +43,7 @@ from tracer_agent.worker.agents.recipe_scan.tools import (
     build_recipe_registry,
     validate_tool_args,
 )
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 
 VALID_ARGS: dict[str, dict[str, Any]] = {
     "get_task_summary": {"taskId": "task-1"},
@@ -80,8 +80,8 @@ def _tools() -> Any:
 
 def _langchain_tools() -> list[Any]:
     registry = build_recipe_registry(
-        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeLedgerReader(FakeTracerApi()),
+        RecipeSearchReader(FakeTracerApi()),
         ProvenanceCatalog(),
         agent_name="recipe-scan",
     )
@@ -196,7 +196,7 @@ def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_�
     response = _tools()["search_events"]["responseEvent"]
     catalog = ProvenanceCatalog()
     hit = dict.fromkeys(response["required"], "") | {"id": "event-9", "taskId": "other-task"}
-    tool = SearchEventsTool(RecipeSearchReader(FakeTracerApi()), catalog)  # type: ignore[arg-type]
+    tool = SearchEventsTool(RecipeSearchReader(FakeTracerApi()), catalog)
 
     tool.record(SearchEventsArgs(q="migration"), json.dumps({"events": [hit]}))
 
@@ -206,7 +206,7 @@ def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_�
 
 async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     responses = _contract()["responses"]["get_task_events"]
-    reader = RecipeLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))  # type: ignore[arg-type]
+    reader = RecipeLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))
 
     page = await reader.task_events("task-1", 1, None, "asc")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..runtime.outputs import object_items, post_output
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 
 CLEANUP_SUGGESTIONS_PATH = "/api/v1/task-cleanup/suggestions"
 
@@ -13,7 +13,7 @@ CLEANUP_SUGGESTIONS_PATH = "/api/v1/task-cleanup/suggestions"
 MAX_SUGGESTIONS = 50
 
 
-async def deliver_suggestions(tracer: TracerApiClient, execution_id: str, data: dict[str, Any]) -> None:
+async def deliver_suggestions(tracer: TracerApiPort, execution_id: str, data: dict[str, Any]) -> None:
     """스캔이 세운 정리 제안을 창구로 보내며 제안이 없으면 부르지 않는다."""
     suggestions = object_items(data, "suggestions")
     if not suggestions:

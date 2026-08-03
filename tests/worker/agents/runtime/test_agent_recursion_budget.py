@@ -7,13 +7,14 @@ from typing import Any
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
-from tests.support.fakes import FakeToolLoopChat, FakeTracerApi
+from tests.support.fakes import FakeToolLoopChat
 from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.recipe_scan.tools import build_recipe_registry as build_recipe_tool_registry
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_limit_for
 from tracer_agent.worker.agents.task_cleanup.langchain_agent import build_cleanup_agent
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
@@ -33,20 +34,20 @@ def _loop_supersteps(agent: CompiledStateGraph[Any, Any, Any, Any]) -> int:
 def _agents() -> list[tuple[str, CompiledStateGraph[Any, Any, Any, Any], int, int]]:
     chat = FakeToolLoopChat([])
     cleanup_registry = build_cleanup_registry(
-        CleanupLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        CleanupLedgerReader(FakeTracerApi()),
         CleanupBatch(),
         {},
         {},
         agent_name="task-cleanup",
     )
     recipe_registry = build_recipe_tool_registry(
-        RecipeLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
-        RecipeSearchReader(FakeTracerApi()),  # type: ignore[arg-type]
+        RecipeLedgerReader(FakeTracerApi()),
+        RecipeSearchReader(FakeTracerApi()),
         ProvenanceCatalog(),
         agent_name="recipe-scan",
     )
     title_registry = build_title_registry(
-        TitleLedgerReader(FakeTracerApi()),  # type: ignore[arg-type]
+        TitleLedgerReader(FakeTracerApi()),
         agent_name="title-suggestion",
     )
     return [

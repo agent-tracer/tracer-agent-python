@@ -6,11 +6,12 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeTracerApi, mk_ai
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, mk_ai
 from tests.support.prompts import CHAT_PROMPT, CONTRACT_VERSION, TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
+from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair

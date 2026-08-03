@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..runtime.outputs import AGENT_AUTHOR, object_items, post_output
-from ..runtime.tracer_client import TracerApiClient
+from ..runtime.tracer_client import TracerApiPort
 
 RECIPES_PATH = "/api/v1/recipes"
 
@@ -13,7 +13,7 @@ RECIPES_PATH = "/api/v1/recipes"
 MAX_RECIPES = 20
 
 
-async def deliver_recipes(tracer: TracerApiClient, execution_id: str, data: dict[str, Any]) -> None:
+async def deliver_recipes(tracer: TracerApiPort, execution_id: str, data: dict[str, Any]) -> None:
     """스캔이 세운 레시피 후보를 창구로 보내며 후보가 없으면 부르지 않는다."""
     recipes = object_items(data, "recipes")
     if not recipes:
