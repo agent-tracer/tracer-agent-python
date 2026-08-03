@@ -156,7 +156,9 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         context_prompt = build_context_prompt(
             self._language_directives[state["language"]], state["summary"], state["facts"]
         )
-        messages_in = await self._seed(agent, checkpointer, config, state["history"], context_prompt)
+        # 판이 바뀌기 전에 선 체크포인트에는 이 칸이 없으므로 없으면 실린 이력으로 되돌린다.
+        history = state.get("history") or self._req.messages
+        messages_in = await self._seed(agent, checkpointer, config, history, context_prompt)
         return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
 
     def _config(self) -> RunnableConfig:

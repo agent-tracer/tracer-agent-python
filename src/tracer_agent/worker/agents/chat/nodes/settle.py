@@ -19,8 +19,8 @@ class SettleNode(GraphNode[ChatState, SettleUpdate]):
 
     async def run(self, state: ChatState) -> SettleUpdate:
         result = ChatResult(
-            assistantText=redact_text(final_text(state["messages"]), stage=RedactionStage.OUTPUT),
-            proposedWrites=state["proposals"],
+            assistantText=redact_text(final_text(state.get("messages") or []), stage=RedactionStage.OUTPUT),
+            proposedWrites=state.get("proposals") or [],
         )
         return {"result": result.model_dump(mode="json")}
 

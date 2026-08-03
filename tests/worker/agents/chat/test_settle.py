@@ -63,3 +63,20 @@ class Test종결노드:
         update = await SettleNode().run(_state([AIMessage(content=content)]))
 
         assert update["result"]["assistantText"] == "앞뒤"
+
+
+class Test판이바뀌기전의체크포인트:
+    async def test_새_칸이_없는_상태에서도_결과를_낸다(self) -> None:
+        old: Any = {
+            "language": "auto",
+            "summary": None,
+            "facts": [],
+            "messages": [AIMessage(content="답변")],
+            "model_cost_usd": 0.0,
+            "result": None,
+        }
+
+        update = await SettleNode().run(old)
+
+        assert update["result"]["assistantText"] == "답변"
+        assert update["result"]["proposedWrites"] == []
