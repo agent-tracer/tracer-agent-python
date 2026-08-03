@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from tracer_agent.shared.agents.shared.json_view import JsonObject, JsonValue, as_objects, text
 
 from ..runtime.tracer_client import TracerApiClient
 
@@ -32,7 +32,7 @@ class RecipeSearchReader:
         task_id: str | None,
         kind: str | None,
         tool_name: str | None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """제목과 본문에서 이벤트를 찾아 최신순 한 페이지를 낸다."""
         payload = await self._tracer.get(
             EVENT_SEARCH_PATH,
@@ -47,24 +47,26 @@ class RecipeSearchReader:
         )
         hits = _hits(payload)
         truncated = len(hits) > limit
-        events = [{"id": hit.get("id", ""), **_pick(hit, _EVENT_KEYS)} for hit in hits[:limit]]
+        events: list[JsonValue] = [
+            {"id": hit.get("id", ""), **_pick(hit, _EVENT_KEYS)} for hit in hits[:limit]
+        ]
         return {"events": events, "truncated": truncated, "total": _total(payload, offset + len(events))}
 
-    async def similar_tasks(self, anchor_title: str, anchor_task_id: str, limit: int) -> list[dict[str, Any]]:
+    async def similar_tasks(self, anchor_title: str, anchor_task_id: str, limit: int) -> list[JsonObject]:
         """앵커와 제목이 닮은 다른 태스크를 찾는다."""
         payload = await self._tracer.get(TASK_SEARCH_PATH, {"q": anchor_title, "limit": limit + 1})
         similar = [hit for hit in _hits(payload) if hit.get("id") != anchor_task_id]
         return [{"id": hit.get("id", ""), **_pick(hit, _TASK_KEYS)} for hit in similar[:limit]]
 
-    async def search_recipes(self, q: str, limit: int) -> list[dict[str, Any]]:
+    async def search_recipes(self, q: str, limit: int) -> list[JsonObject]:
         """수정 대상이 될 수 있는 레시피를 찾아 순위대로 원장 행을 낸다."""
         found = _items(await self._tracer.get(RECIPE_SEARCH_PATH, {"q": q, "limit": limit}))
-        ranked = [hit["recipeId"] for hit in found if isinstance(hit.get("recipeId"), str)]
+        ranked = [text(hit["recipeId"]) for hit in found if isinstance(hit.get("recipeId"), str)]
         if not ranked:
             return []
         # 검색 창구는 판단에 필요한 값만 내므로 개정 근거가 되는 판은 원장 목록에서 읽는다.
         owned = {
-            recipe["id"]: recipe
+            text(recipe["id"]): recipe
             for recipe in _items(await self._tracer.get(RECIPES_PATH))
             if isinstance(recipe.get("id"), str)
         }
@@ -75,20 +77,20 @@ class RecipeSearchReader:
         ]
 
 
-def _items(payload: Any) -> list[dict[str, Any]]:
+def _items(payload: JsonValue) -> list[JsonObject]:
     if not isinstance(payload, dict):
         return []
-    return [item for item in payload.get("items") or [] if isinstance(item, dict)]
+    return as_objects(payload.get("items"))
 
 
-def _hits(payload: Any) -> list[dict[str, Any]]:
+def _hits(payload: JsonValue) -> list[JsonObject]:
     return [item for item in _items(payload) if item.get("hitType") != MEMO_HIT_TYPE]
 
 
-def _pick(source: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+def _pick(source: JsonObject, keys: tuple[str, ...]) -> JsonObject:
     return {key: source[key] for key in keys if source.get(key) is not None}
 
 
-def _total(payload: Any, counted: int) -> int:
+def _total(payload: JsonValue, counted: int) -> int:
     total = payload.get("total") if isinstance(payload, dict) else None
     return total if isinstance(total, int) else counted

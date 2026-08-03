@@ -57,5 +57,5 @@ class GetTaskSummaryTool(AgentTool[GetTaskSummaryArgs]):
         loaded = await self._reader.task_with_events(args.taskId, args.window)
         if loaded is None:
             return f"Task {args.taskId} not found."
-        summary = build_task_summary(loaded["task"], loaded["rows"], loaded["total"])
+        summary = build_task_summary(loaded)
         return json.dumps(summary, ensure_ascii=False)

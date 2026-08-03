@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
-from .reader import slim_event
+from tracer_agent.shared.agents.shared.json_view import (
+    JsonObject,
+    JsonValue,
+    as_object,
+    text,
+    text_list,
+)
+
+from .reader import TaskEventWindow, slim_recipe_event
 
 TOP_ENTRIES = 12
 
@@ -14,33 +21,37 @@ COMMAND_ATTR = "agent_tracer.command"
 USER_MESSAGE_KIND = "agent_tracer.user.message"
 
 
-def _top(counts: Counter[str], key: str, value: str) -> list[dict[str, Any]]:
-    return [{key: name, value: count} for name, count in counts.most_common(TOP_ENTRIES)]
+def _top(counts: Counter[str], key: str, value: str) -> list[JsonValue]:
+    entries: list[JsonValue] = [{key: name, value: count} for name, count in counts.most_common(TOP_ENTRIES)]
+    return entries
 
 
-def build_task_summary(task: dict[str, Any], rows: list[dict[str, Any]], total: int) -> dict[str, Any]:
+def build_task_summary(window: TaskEventWindow) -> JsonObject:
     """태스크 하나와 그 이벤트 창으로 저비용 요약을 만든다."""
-    first_user_message: dict[str, Any] | None = None
+    task, rows, total = window.task, window.rows, window.total
+    first_user_message: JsonObject | None = None
     tools: Counter[str] = Counter()
     files: Counter[str] = Counter()
     commands: Counter[str] = Counter()
 
     for row in rows:
-        event = slim_event(row)
+        event = slim_recipe_event(row)
         if first_user_message is None and event["kind"] == USER_MESSAGE_KIND:
             first_user_message = {
                 "title": event["title"],
                 **({"body": event["body"]} if "body" in event else {}),
             }
         if "toolName" in event:
-            tools[event["toolName"]] += 1
-        for path in event["filePaths"]:
+            tools[text(event["toolName"])] += 1
+        for path in text_list(event["filePaths"]):
             files[path] += 1
-        command = str((row.get("metadata") or {}).get(COMMAND_ATTR, "")).strip()
-        if command and event["title"].strip():
-            commands[event["title"].strip()] += 1
+        metadata = as_object(row.get("metadata") or {})
+        command = str(metadata.get(COMMAND_ATTR) or "").strip()
+        title = text(event["title"]).strip()
+        if command and title:
+            commands[title] += 1
 
-    summary: dict[str, Any] = {
+    summary: JsonObject = {
         "id": task["id"],
         "title": task["title"],
         "status": task["status"],

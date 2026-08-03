@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from temporalio.exceptions import ApplicationError
 
+from tracer_agent.shared.agents.shared.json_view import (
+    JsonObject,
+    as_int,
+    as_object,
+    as_objects,
+    opt_text,
+    text,
+)
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext, TitleSuggestionTurn
 
 from ..runtime.scoped_event_reader import ScopedEventReader, timeline_path
@@ -28,30 +34,33 @@ async def load_title_context(tracer: TracerApiClient, task_id: str) -> TitleSugg
     detail = await tracer.get(f"/api/v1/tasks/{task_id}")
     if detail is None:
         raise ApplicationError(f"task not found: {task_id}", type=TASK_NOT_FOUND, non_retryable=True)
-    task: dict[str, Any] = detail["task"]
+    task = as_object(as_object(detail)["task"])
 
     timeline = await tracer.get(timeline_path(task_id), {"limit": COUNT_PROBE_LIMIT})
-    total_event_count = int((timeline or {}).get("total") or 0)
+    total_event_count = 0 if timeline is None else as_int(as_object(timeline).get("total"))
     if total_event_count == 0:
         raise ApplicationError(f"task has no events: {task_id}", type=TASK_HAS_NO_EVENTS, non_retryable=True)
 
     listed = await tracer.get(f"/api/v1/tasks/{task_id}/turns")
-    turns = [
-        TitleSuggestionTurn(
-            turnIndex=row["turnIndex"],
-            askedText=row["askedText"] if row["askedText"] is not None else "",
-            assistantText=row["assistantText"],
-        )
-        for row in sorted((listed or {}).get("items") or [], key=lambda row: row["turnIndex"])
-    ]
+    rows = [] if listed is None else as_objects(as_object(listed).get("items"))
+    turns = [_turn(row) for row in sorted(rows, key=lambda row: as_int(row.get("turnIndex")))]
     included, truncated = windowed_turns(turns)
 
     return TitleSuggestionContext(
-        title=task["title"],
-        status=task["status"],
-        workspacePath=task.get("workspacePath"),
+        title=text(task["title"]),
+        status=text(task["status"]),
+        workspacePath=opt_text(task.get("workspacePath")),
         totalEventCount=total_event_count,
         totalTurnCount=len(turns),
         truncated=truncated,
         turns=included,
+    )
+
+
+def _turn(row: JsonObject) -> TitleSuggestionTurn:
+    """대화 한 턴을 제목 조사가 읽는 모양으로 옮기며 빈 발화는 빈 문자열로 둔다."""
+    return TitleSuggestionTurn(
+        turnIndex=as_int(row.get("turnIndex")),
+        askedText=opt_text(row.get("askedText")) or "",
+        assistantText=opt_text(row.get("assistantText")),
     )
