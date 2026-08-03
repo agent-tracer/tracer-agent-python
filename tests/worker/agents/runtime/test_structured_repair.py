@@ -10,7 +10,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from tracer_agent.worker.agents.runtime.llm.structured_repair import (
     REPAIR_DIRECTIVE,
@@ -28,22 +28,24 @@ class _Draft(BaseModel):
 class _ProviderModel(GenericFakeChatModel):
     """공급자 강제 경로를 밟도록 구조화 출력을 지원한다고 알리는 대역이다."""
 
-    seen: list[list[Any]] = []
+    _seen: list[list[Any]] = PrivateAttr(default_factory=list)
 
-    def bind_tools(self, tools: Any, **kwargs: Any) -> _ProviderModel:
+    @property
+    def seen(self) -> list[list[Any]]:
+        return self._seen
+
+    def bind_tools(self, _tools: Any, **_kwargs: Any) -> _ProviderModel:
         return self
 
-    async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> AIMessage:  # noqa: A002
-        messages = list(input) if isinstance(input, list) else [input]
-        self.seen.append(messages)
+    async def ainvoke(self, _input: Any, _config: Any = None, **_kwargs: Any) -> AIMessage:
+        messages = list(_input) if isinstance(_input, list) else [_input]
+        self._seen.append(messages)
         return next(iter(self.messages))  # type: ignore[arg-type]
 
 
 def _model(payloads: list[str]) -> _ProviderModel:
     replies = iter([AIMessage(content=text) for text in payloads])
-    model = _ProviderModel(messages=replies, profile={"structured_output": True})
-    model.seen = []
-    return model
+    return _ProviderModel(messages=replies, profile={"structured_output": True})
 
 
 def _too_long() -> str:
