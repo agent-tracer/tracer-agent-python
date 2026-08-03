@@ -5,11 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    ModelCallLimitMiddleware,
-    ToolRetryMiddleware,
-)
+from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddleware
 from langchain.agents.structured_output import ToolStrategy
 from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.language_models import BaseChatModel
@@ -21,23 +17,12 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
-from ..runtime.llm.retry import model_retry_middleware
+from ..runtime.llm.retry import model_retry_middleware, tool_retry_middleware
 from ..runtime.llm.standard_agent import (
     StandardAgentContext,
     StandardAgentMiddleware,
     context_editing_middleware,
 )
-
-
-def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddleware:
-    return ToolRetryMiddleware(
-        max_retries=2,
-        retry_on=transient_errors,
-        on_failure="error",
-        backoff_factor=2.0,
-        initial_delay=0.5,
-        jitter=False,
-    )
 
 
 def recipe_middleware(
@@ -54,7 +39,7 @@ def recipe_middleware(
         # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
         context_editing_middleware(),
         StandardAgentMiddleware(),
-        _tool_retry(transient_errors),
+        tool_retry_middleware(transient_errors),
     ]
     # 재시도가 더 안쪽이어야 같은 모델로 소진된 뒤에만 FallbackModelMiddleware가 대체로 넘어간다.
     if fallback_chat is not None:

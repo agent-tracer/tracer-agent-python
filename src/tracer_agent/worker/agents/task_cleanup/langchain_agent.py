@@ -5,11 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    ModelCallLimitMiddleware,
-    ToolRetryMiddleware,
-)
+from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddleware
 from langchain.agents.structured_output import ToolStrategy
 from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.language_models import BaseChatModel
@@ -21,18 +17,8 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.task_cleanup.models import CleanupDraft
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
+from ..runtime.llm.retry import tool_retry_middleware
 from ..runtime.llm.standard_agent import StandardAgentContext, StandardAgentMiddleware
-
-
-def _tool_retry(transient_errors: tuple[type[Exception], ...]) -> ToolRetryMiddleware:
-    return ToolRetryMiddleware(
-        max_retries=2,
-        retry_on=transient_errors,
-        on_failure="error",
-        backoff_factor=2.0,
-        initial_delay=0.5,
-        jitter=False,
-    )
 
 
 def build_cleanup_agent(
@@ -52,7 +38,7 @@ def build_cleanup_agent(
         AnthropicPromptCachingMiddleware(ttl="1h"),
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="error"),
         StandardAgentMiddleware(serialize_tools=True),
-        _tool_retry(transient_errors),
+        tool_retry_middleware(transient_errors),
     ]
     if fallback_chat is not None:
         middleware.append(FallbackModelMiddleware(fallback_chat))
