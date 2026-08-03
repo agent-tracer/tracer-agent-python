@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tracer_agent.shared.agents.chat.models import ChatFact
+from tracer_agent.shared.agents.chat.tools.surface import chat_tool_note
 
 from ..shared.prompt_source_port import AgentPrompt
 from .safety_policy import SAFETY_POLICY
@@ -35,9 +36,18 @@ def build_system_prompt(prompt: AgentPrompt) -> str:
     )
 
 
-def build_context_prompt(directive: str, summary: str | None, facts: list[ChatFact]) -> str:
+def build_context_prompt(
+    directive: str,
+    summary: str | None,
+    facts: list[ChatFact],
+    resumes_from_approval: bool = False,
+) -> str:
     """이번 턴의 요약과 사용자 사실과 출력 언어를 담은 선행 컨텍스트 메시지다."""
     lines = [directive]
+    # 이력이 도구 결과로 끝나면 사용자는 승인만 했으므로 답할 발화가 없고 알릴 결과가 있다.
+    if resumes_from_approval:
+        lines.append("")
+        lines.append(chat_tool_note("approvalReportNote"))
     if facts:
         lines.append("")
         lines.append('<memory source="untrusted">')

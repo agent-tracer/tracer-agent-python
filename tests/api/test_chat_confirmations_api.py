@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.support.chat_surface import RecordingExecutor, seed_thread
+from tests.support.chat_surface import RecordingDispatch, RecordingExecutor, seed_thread
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 THREADS = "/api/agent/chat/threads"
@@ -51,13 +51,44 @@ class Test확인_대기:
 
         assert res.status_code == 200
         data = res.json()["data"]
-        assert list(data) == ["confirmationId", "toolName", "status", "result"]
+        assert list(data) == ["confirmationId", "toolName", "status", "result", "execution"]
         assert data["status"] == "approved"
         assert executor.calls == [("local", "archive_task", {"taskId": "task-1"})]
         message = store.rows("chat_messages")[0]
         assert message["role"] == "tool"
         assert message["tool_call_id"] == confirmation
         assert message["content"] == data["result"]
+
+    def test_승인은_그_결과를_앵커로_삼는_턴을_세우고_기동한다(
+        self, client: TestClient, store: SqliteLedgerSql, dispatch: RecordingDispatch
+    ) -> None:
+        seed_thread(store)
+        confirmation = client.post(
+            f"{THREADS}/t1/confirmations",
+            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+        ).json()["data"]["confirmationId"]
+
+        res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
+
+        execution = res.json()["data"]["execution"]
+        anchor = store.rows("chat_messages")[0]
+        assert execution["status"] == "queued"
+        assert execution["replayAnchorMessageId"] == anchor["id"]
+        assert dispatch.started == [(execution["id"], "t1")]
+
+    def test_거절은_이어_말할_턴을_세우지_않는다(
+        self, client: TestClient, store: SqliteLedgerSql, dispatch: RecordingDispatch
+    ) -> None:
+        seed_thread(store)
+        confirmation = client.post(
+            f"{THREADS}/t1/confirmations",
+            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+        ).json()["data"]["confirmationId"]
+
+        res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "reject"})
+
+        assert res.json()["data"]["execution"] is None
+        assert dispatch.started == []
 
     def test_거절은_도구를_부르지_않고_거절_문장을_남긴다(
         self, client: TestClient, store: SqliteLedgerSql, executor: RecordingExecutor

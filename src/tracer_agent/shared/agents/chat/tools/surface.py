@@ -21,10 +21,20 @@ READ_SURFACES = frozenset({READ_SURFACE, AGENT_READ_SURFACE, MEMORY_SURFACE})
 
 
 @lru_cache(maxsize=1)
+def _chat_tool_contract() -> Mapping[str, Any]:
+    contract: Mapping[str, Any] = json.loads(CHAT_TOOLS_PATH.read_text(encoding="utf-8"))
+    return contract
+
+
 def chat_tool_declarations() -> Mapping[str, Mapping[str, Any]]:
     """도구 이름마다 열리는 표면과 인자 선언을 낸다."""
-    declared = json.loads(CHAT_TOOLS_PATH.read_text(encoding="utf-8"))["tools"]
+    declared = _chat_tool_contract()["tools"]
     return {str(name): dict(tool) for name, tool in declared.items()}
+
+
+def chat_tool_note(name: str) -> str:
+    """확인 절차가 모델에게 보이는 문장이며 두 구현체가 계약의 같은 칸을 읽는다."""
+    return str(_chat_tool_contract()[name])
 
 
 def tool_surface(name: str) -> str:

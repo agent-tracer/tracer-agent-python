@@ -154,11 +154,14 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             max_model_turns=self._req.limits.maxTurns,
         )
         config = self._config()
-        context_prompt = build_context_prompt(
-            self._language_directives[state["language"]], state["summary"], state["facts"]
-        )
         # 판이 바뀌기 전에 선 체크포인트에는 이 칸이 없으므로 없으면 실린 이력으로 되돌린다.
         history = state.get("history") or self._req.messages
+        context_prompt = build_context_prompt(
+            self._language_directives[state["language"]],
+            state["summary"],
+            state["facts"],
+            bool(history) and history[-1].role == "tool",
+        )
         messages_in = await self._seed(agent, checkpointer, config, history, context_prompt)
         return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
 

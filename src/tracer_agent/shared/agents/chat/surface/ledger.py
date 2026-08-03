@@ -147,9 +147,10 @@ class ChatSurfaceLedger:
 
     async def insert_tool_message(
         self, message_id: str, thread_id: str, content: str, tool_call_id: str, now: datetime
-    ) -> None:
-        """도구 결과 한 줄을 대화에 남긴다."""
+    ) -> str:
+        """도구 결과 한 줄을 대화에 남기고 그 줄의 식별자를 낸다."""
         await self._sql.fetch(_INSERT_TOOL_MESSAGE, message_id, thread_id, content, tool_call_id, now)
+        return message_id
 
     async def list_executions(self, thread_id: str) -> list[SqlRow]:
         """스레드의 실행을 최근순으로 낸다."""

@@ -33,13 +33,15 @@ class SingleSql:
 
 
 class RecordingDispatch:
-    """워크플로 중단 요청이 갔는지만 기록한다."""
+    """워크플로 기동과 중단 요청이 갔는지만 기록한다."""
 
     def __init__(self) -> None:
+        self.started: list[tuple[str, str]] = []
         self.canceled: list[str] = []
 
-    async def start(self, _execution_id: str, _thread_id: str, _user_id: str) -> None:
-        """이 대역은 실행을 수행하지 않는다."""
+    async def start(self, execution_id: str, thread_id: str) -> None:
+        """기동 요청을 받은 실행을 적고 이 대역은 실행을 수행하지 않는다."""
+        self.started.append((execution_id, thread_id))
 
     async def cancel(self, execution_id: str) -> None:
         """중단 요청을 받은 실행을 적는다."""

@@ -5,17 +5,21 @@ from __future__ import annotations
 import pytest
 
 from tests.support.contract import agent_tools
-from tracer_agent.shared.agents.chat.surface.confirmations import PROPOSAL_NOTE
 from tracer_agent.shared.agents.chat.surface.tool_calls import (
     CONFIRMABLE_TOOLS,
     ChatToolArgsInvalid,
     plan_chat_tool_call,
 )
-from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, tool_names_on
+from tracer_agent.shared.agents.chat.tools.surface import (
+    CONFIRM_SURFACE,
+    chat_tool_note,
+    tool_names_on,
+)
 
 
-def test_확인_대기_안내가_계약과_같다() -> None:
-    assert agent_tools("chat")["proposalNote"] == PROPOSAL_NOTE
+@pytest.mark.parametrize("note", ["proposalNote", "approvalReportNote"])
+def test_확인_절차의_안내를_계약에서_읽는다(note: str) -> None:
+    assert chat_tool_note(note) == agent_tools("chat")[note]
 
 
 def test_확인을_받는_표면의_도구만_계획을_갖는다() -> None:

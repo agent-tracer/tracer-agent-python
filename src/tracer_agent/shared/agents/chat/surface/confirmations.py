@@ -10,11 +10,17 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...runtime.ledger import SqlRow
 from ...shared.wire import SuccessEnvelope, error_responses, ok
-from ..dependencies import ToolExecutor, Updates
+from ..dependencies import Dispatch, ToolExecutor, Updates
 from ..intake.cancel import UpdateSignal
+from ..intake.dispatch import ExecutionDispatch
+from ..intake.follow_up import follow_up_client_request_id, follow_up_input_hash
 from ..intake.ids import generate_ulid
+from ..intake.ledger import ChatIntakeLedger
+from ..intake.models import execution_dto
 from ..intake.turn import ChatIntakeRejected
+from ..tools.surface import chat_tool_note
 from .access import CONFIRMATION_NOT_FOUND, CONFIRMATION_RESOLVED, owned_thread
 from .envelope import CREATED_STATUS, invalid_request, read_payload, rejection
 from .ledger import APPROVED, REJECTED, ChatSurfaceLedger
@@ -27,13 +33,6 @@ CHAT_CONFIRMATIONS_PATH = f"{CHAT_THREAD_PATH}/confirmations"
 CHAT_CONFIRMATION_PATH = f"{CHAT_CONFIRMATIONS_PATH}/{{confirmation_id}}"
 
 TOOL_UNAVAILABLE = (502, "chat.tool-failed", "Approved tool call did not succeed")
-
-# 승인 전에는 실행되지 않았음을 모델이 오해하지 않게 두 구현체가 같은 문장을 보인다.
-PROPOSAL_NOTE = (
-    "Queued for user confirmation. This action has NOT run yet and will only run after the user "
-    "approves it. Tell the user you are awaiting their confirmation; never claim the change is "
-    "already done."
-)
 
 _SUMMARY_VALUE_LIMIT = 80
 
@@ -80,7 +79,7 @@ async def propose_chat_tool(
             "toolName": pending["tool_name"],
             "status": pending["status"],
             "summary": _summarize(body.toolName, args),
-            "note": PROPOSAL_NOTE,
+            "note": chat_tool_note("proposalNote"),
         },
         status=CREATED_STATUS,
     )
@@ -99,6 +98,7 @@ async def decide_chat_tool(
     user_id: UserId,
     updates: Updates,
     executor: ToolExecutor,
+    dispatch: Dispatch,
 ) -> JSONResponse:
     """대기 중인 도구 호출 하나를 승인이나 거절로 해소한다."""
     body = await read_payload(request, DecideToolBody)
@@ -107,7 +107,15 @@ async def decide_chat_tool(
     try:
         async with source.connect() as sql:
             return await _resolve(
-                ChatSurfaceLedger(sql), executor, updates, user_id, thread_id, confirmation_id, body
+                ChatSurfaceLedger(sql),
+                ChatIntakeLedger(sql),
+                executor,
+                dispatch,
+                updates,
+                user_id,
+                thread_id,
+                confirmation_id,
+                body,
             )
     except ChatIntakeRejected as rejected:
         return rejection(rejected)
@@ -119,7 +127,9 @@ async def decide_chat_tool(
 
 async def _resolve(
     ledger: ChatSurfaceLedger,
+    intake: ChatIntakeLedger,
     executor: ChatToolExecutor,
+    dispatch: ExecutionDispatch,
     updates: UpdateSignal | None,
     user_id: str,
     thread_id: str,
@@ -140,7 +150,13 @@ async def _resolve(
     resolved = await ledger.resolve_pending_tool(confirmation_id, status, now)
     if resolved is None:
         raise ChatIntakeRejected(*CONFIRMATION_RESOLVED)
-    await ledger.insert_tool_message(generate_ulid(now), thread_id, content, confirmation_id, now)
+    anchor = await ledger.insert_tool_message(generate_ulid(now), thread_id, content, confirmation_id, now)
+    execution = (
+        None
+        if status == REJECTED
+        # 하지 말라고 이미 답한 자리라 이어 말할 턴을 세우지 않는다.
+        else await _follow_up(ledger, intake, dispatch, user_id, thread_id, confirmation_id, anchor, now)
+    )
     await _announce(updates, ledger, thread_id)
     return ok(
         {
@@ -148,8 +164,39 @@ async def _resolve(
             "toolName": tool_name,
             "status": resolved["status"],
             "result": content,
+            "execution": None if execution is None else execution_dto(execution),
         }
     )
+
+
+async def _follow_up(
+    ledger: ChatSurfaceLedger,
+    intake: ChatIntakeLedger,
+    dispatch: ExecutionDispatch,
+    user_id: str,
+    thread_id: str,
+    confirmation_id: str,
+    anchor: str,
+    now: datetime,
+) -> SqlRow | None:
+    """실행한 결과를 모델이 읽고 이어 말하도록 그 결과를 앵커로 삼는 턴을 세운다."""
+    # 이미 도는 턴이 있으면 그 턴이 결과를 이력으로 읽으므로 줄을 하나 더 세우지 않는다.
+    if await ledger.latest_active_execution(thread_id) is not None:
+        return None
+    previous = await ledger.list_executions(thread_id)
+    execution = await intake.insert_queued_execution(
+        generate_ulid(now),
+        user_id,
+        thread_id,
+        anchor,
+        follow_up_client_request_id(confirmation_id),
+        follow_up_input_hash(confirmation_id),
+        previous[0]["model"] if previous else None,
+        previous[0]["language"] if previous else None,
+        now,
+    )
+    await dispatch.start(str(execution["id"]), thread_id)
+    return execution
 
 
 async def _pending(ledger: ChatSurfaceLedger, thread_id: str, confirmation_id: str) -> dict[str, Any]:
