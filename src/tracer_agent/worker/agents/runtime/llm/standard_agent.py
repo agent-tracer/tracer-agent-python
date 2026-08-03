@@ -21,9 +21,8 @@ from langgraph.types import Command
 from ..errors import OutputTruncated
 from ..execution.trace import ExecutionTrace
 from .budget import ModelCallBudget
+from .pacing import finalize_directive, progress_notice
 from .trajectory import is_truncated
-
-BUDGET_NOTICE = "You have used {used} of {total} tool-calling turns; converge as you approach the limit."
 
 # 이 토큰 수를 넘는 실행에서 오래된 도구 결과를 정리한다.
 CONTEXT_EDITING_TRIGGER_TOKENS = 100_000
@@ -41,22 +40,6 @@ def context_editing_middleware() -> ContextEditingMiddleware:
             )
         ]
     )
-
-
-FINALIZE_STRUCTURED_DIRECTIVE = (
-    "The investigation budget is exhausted. Stop calling tools and produce the final structured "
-    "output now using only the evidence you already verified."
-)
-
-FINALIZE_TEXT_DIRECTIVE = (
-    "The investigation budget is exhausted. Stop calling tools and write your final answer to the "
-    "user now in plain prose, using only what you already retrieved."
-)
-
-
-def finalize_directive(*, structured_output: bool) -> str:
-    """예산이 바닥난 실행에 그 실행의 최종 산출 형태에 맞는 마무리 지시를 고른다."""
-    return FINALIZE_STRUCTURED_DIRECTIVE if structured_output else FINALIZE_TEXT_DIRECTIVE
 
 
 @dataclass(kw_only=True)
@@ -130,7 +113,7 @@ def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[St
     if not context.budget.landing:
         spent = dict(request.state).get("run_model_call_count", 0)
         used = spent if isinstance(spent, int) else 0
-        notice = BUDGET_NOTICE.format(used=used, total=context.max_model_turns)
+        notice = progress_notice(used, context.max_model_turns)
         return request.override(messages=[*messages, HumanMessage(content=notice)])
     context.budget.land()
     context.trace.mark_landed()

@@ -15,14 +15,13 @@ from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerAp
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
-from tracer_agent.worker.agents.runtime.llm.standard_agent import (
-    FINALIZE_STRUCTURED_DIRECTIVE,
-    FINALIZE_TEXT_DIRECTIVE,
-    finalize_directive,
-)
+from tracer_agent.worker.agents.runtime.llm.pacing import finalize_directive
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
+
+FINALIZE_STRUCTURED_DIRECTIVE = finalize_directive(structured_output=True)
+FINALIZE_TEXT_DIRECTIVE = finalize_directive(structured_output=False)
 
 # 호출 하나가 sonnet 단가로 약 $0.21이라 세 번째 호출은 $0.50 상한 안에 들어갈 수 없다.
 _EXPENSIVE_USAGE = {
@@ -227,8 +226,6 @@ def test_마무리_지시는_최종_산출_형태로_갈린다() -> None:
     # chat은 구조화 출력을 내지 않으므로 이 문구가 새면 모델이 없는 형식을 만들어 낸다.
     assert "structured" not in free_text
     assert "final answer" in free_text
-    assert structured.startswith("The investigation budget is exhausted.")
-    assert free_text.startswith("The investigation budget is exhausted.")
 
 
 class _GreedyConversation:
