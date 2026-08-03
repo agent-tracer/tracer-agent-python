@@ -235,6 +235,7 @@ class AgentRunObservationDTO(BaseModel):
     toolContractVersion: TrimmedStr
     status: ObservationStatus
     durationMs: int = Field(ge=0)
+    ttftMs: int | None = Field(default=None, ge=0)
     usage: ObservationUsageDTO
     costUsd: float | None = Field(default=None, ge=0)
     landed: bool

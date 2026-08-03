@@ -133,6 +133,7 @@ async def _execute(
             prompt_version=prompt_version,
             tool_contract_version=tool_contract_version,
             duration_ms=duration_ms,
+            ttft_ms=_ttft_ms(trace.first_token_at, started),
             error_subtype=error_subtype,
         )
     )
@@ -149,3 +150,10 @@ async def _execute(
         providerRequestId=trace.provider_request_id,
         observation=observation,
     )
+
+
+def _ttft_ms(first_token_at: float | None, started: float) -> int | None:
+    """첫 조각을 받은 실행만 값을 가지며 받지 못한 실행은 비운 채로 둔다."""
+    if first_token_at is None:
+        return None
+    return max(0, int((first_token_at - started) * 1000))

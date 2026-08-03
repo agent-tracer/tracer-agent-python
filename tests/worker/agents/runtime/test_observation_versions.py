@@ -16,6 +16,7 @@ def _observation(agent_name: str) -> object:
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
         duration_ms=10,
+        ttft_ms=None,
         error_subtype=None,
     )
 

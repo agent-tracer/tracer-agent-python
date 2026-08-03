@@ -192,7 +192,8 @@ CREATE TABLE agent_run_observations (
     agent_name TEXT NOT NULL, backend TEXT NOT NULL, model_requested TEXT NOT NULL,
     model_actual TEXT, prompt_version TEXT NOT NULL,
     tool_contract_version TEXT NOT NULL, status TEXT NOT NULL,
-    duration_ms INTEGER NOT NULL, usage TEXT NOT NULL, cost_usd REAL, landed INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL, ttft_ms INTEGER, usage TEXT NOT NULL,
+    cost_usd REAL, landed INTEGER NOT NULL,
     repair_attempted INTEGER NOT NULL, validation TEXT NOT NULL, model_calls TEXT NOT NULL,
     tool_calls TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (execution_id, attempt_id)
@@ -268,6 +269,7 @@ class SqliteLedgerSql(LedgerSql):
             "tool_contract_version": payload["toolContractVersion"],
             "status": payload["status"],
             "duration_ms": payload["durationMs"],
+            "ttft_ms": payload.get("ttftMs"),
             "usage": payload["usage"],
             "cost_usd": payload.get("costUsd"),
             "landed": payload["landed"],

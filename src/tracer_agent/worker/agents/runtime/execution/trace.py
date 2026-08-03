@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from langchain_core.messages import AIMessage, BaseMessage
@@ -42,6 +43,12 @@ class ExecutionTrace:
     steps: list[AgentStepDTO] = field(default_factory=list)
     actual_model: str | None = None
     provider_request_id: str | None = None
+    first_token_at: float | None = None
+
+    def mark_first_token(self) -> None:
+        """스트리밍이 첫 조각을 내놓은 시각을 한 번만 남긴다."""
+        if self.first_token_at is None:
+            self.first_token_at = time.monotonic()
 
     def add_message(self, message: BaseMessage) -> None:
         """AI 응답의 모델 식별자와 토큰 사용량을 더한다."""
@@ -122,6 +129,7 @@ class ExecutionTrace:
         prompt_version: str,
         tool_contract_version: str,
         duration_ms: int,
+        ttft_ms: int | None,
         error_subtype: str | None,
     ) -> AgentRunObservationDTO:
         """원문 content와 도구 payload를 버리고 공통 terminal observation만 만든다."""
@@ -162,6 +170,7 @@ class ExecutionTrace:
             toolContractVersion=tool_contract_version,
             status=status,
             durationMs=duration_ms,
+            ttftMs=ttft_ms,
             usage=usage,
             landed=self.landed,
             repairAttempted=any(step.nodeName == REPAIR for step in self.steps),

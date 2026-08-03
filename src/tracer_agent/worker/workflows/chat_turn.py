@@ -94,6 +94,8 @@ def canceled_turn(
             prompt_version=prompt.version(),
             tool_contract_version=prompt.tool_contract_version,
             duration_ms=0,
+            # 이 산출은 실행을 잰 자리 밖에서 만들어지므로 잰 값을 옮겨 적을 기준 시각이 없다.
+            ttft_ms=None,
             error_subtype="cancelled",
         ).model_dump(mode="json"),
     )

@@ -110,6 +110,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             if mode == "messages":
                 message = chunk[0]
                 if isinstance(message, AIMessage):
+                    self._usage.mark_first_token()
                     await drafts.push(step_content_text(message.content))
                     for call in message.tool_calls:
                         await drafts.push_tool(str(call.get("name", "")))
