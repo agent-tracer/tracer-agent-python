@@ -1,12 +1,10 @@
-"""요청별 의존을 받아 title-suggestion 도구 레지스트리를 조립한다."""
+"""title-suggestion 도구 레지스트리 하나를 소유한다."""
 
 from __future__ import annotations
 
 from ...runtime.tooling import ToolRegistry
-from ..reader import TitleLedgerReader
+from .context import TitleToolContext
 from .get_task_events import GetTaskEventsTool
 
-
-def build_title_registry(reader: TitleLedgerReader, *, agent_name: str) -> ToolRegistry:
-    """요청별 사용자 범위 원장 조회를 쥔 도구 레지스트리를 만든다."""
-    return ToolRegistry((GetTaskEventsTool(reader),), agent_name=agent_name)
+# 도구가 요청별 조회를 호출 컨텍스트로 받으므로 레지스트리 하나가 모든 실행을 함께 쓴다.
+TITLE_TOOLS: ToolRegistry[TitleToolContext] = ToolRegistry((GetTaskEventsTool(),))

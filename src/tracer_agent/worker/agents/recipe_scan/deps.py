@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
@@ -12,9 +12,9 @@ from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, Rec
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.execution.trace import ExecutionTrace
+from ..runtime.llm.agent_cache import CompiledAgentCache
 from ..runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
 from ..runtime.llm.client import ChatPair
-from ..runtime.llm.standard_agent import StandardAgentContext
 from ..runtime.llm.structured_agent import (
     StructuredAgentResult,
     invoke_structured_agent,
@@ -25,7 +25,7 @@ from .langchain_agent import build_recipe_agent
 from .prompts import RecipePrompts
 from .reader import RecipeLedgerReader
 from .search import RecipeSearchReader
-from .tools import build_recipe_registry
+from .tools import RECIPE_TOOLS, RecipeToolContext
 
 AGENT_NAME = AgentJobKind.RECIPE_SCAN
 
@@ -43,6 +43,7 @@ class RecipeDeps:
     prompts: RecipePrompts
     prompt: AgentPrompt
     language_directives: Mapping[str, str]
+    agents: CompiledAgentCache = field(default_factory=CompiledAgentCache)
 
     def new_loop(self, role: str | None = None, *, max_cost_usd: float | None = None) -> SharedToolLoopBudget:
         """노드가 자기 역할 이름으로 여는 도구 루프의 예산이며 역할이 없으면 조율자가 연 것이다."""
@@ -68,26 +69,31 @@ class RecipeDeps:
         tool_owner: str = AGENT_NAME,
     ) -> StructuredAgentResult[OutputT]:
         """맡은 도구만 연 채 모델을 돌려 구조화 출력과 그 호출이 그은 턴을 낸다."""
-        registry = build_recipe_registry(
-            self.reader, self.search, catalog, tuple(tools), agent_name=tool_owner
-        )
-        agent = build_recipe_agent(
-            self.chats.primary,
-            system_prompt,
-            registry.langchain_tools(),
-            registry.transient_errors(),
-            output=output,
-            fallback_chat=self.chats.fallback,
-            max_turns=max_turns,
+        names = tuple(tools)
+        agent = self.agents.compiled(
+            (system_prompt, names, output, max_turns),
+            lambda: build_recipe_agent(
+                self.chats.primary,
+                system_prompt,
+                RECIPE_TOOLS.langchain_tools(names),
+                RECIPE_TOOLS.transient_errors(names),
+                output=output,
+                fallback_chat=self.chats.fallback,
+                max_turns=max_turns,
+            ),
         )
         return await invoke_structured_agent(
             agent,
             messages=messages,
-            context=StandardAgentContext(
+            context=RecipeToolContext(
                 agent_name=budget.agent_name,
                 trace=self.usage,
                 budget=budget,
                 max_model_turns=max_turns,
+                tool_owner=tool_owner,
+                reader=self.reader,
+                search=self.search,
+                catalog=catalog,
             ),
             response_type=output,
             recursion_limit=recursion_limit_for(max_turns),

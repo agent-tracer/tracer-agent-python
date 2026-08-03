@@ -29,10 +29,9 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
     InspectReport,
 )
-from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.task_cleanup.failures import WORKER_FAILED
-from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
 from tracer_agent.worker.agents.task_cleanup.tools import (
+    CLEANUP_TOOLS,
     COORDINATOR_TOOL_NAMES,
     DEFAULT_CANDIDATE_LIMIT,
     DEFAULT_EVENT_LIMIT,
@@ -44,7 +43,6 @@ from tracer_agent.worker.agents.task_cleanup.tools import (
     EventOrder,
     GetTaskEventsArgs,
     ListCandidateTasksArgs,
-    build_cleanup_registry,
     candidate_page,
     validate_tool_args,
 )
@@ -55,14 +53,7 @@ def _contract() -> Any:
 
 
 def _langchain_tools() -> dict[str, Any]:
-    registry = build_cleanup_registry(
-        CleanupLedgerReader(FakeTracerApi()),
-        CleanupBatch(),
-        {},
-        {},
-        agent_name="task-cleanup",
-    )
-    return {tool.name: tool for tool in registry.langchain_tools()}
+    return {tool.name: tool for tool in CLEANUP_TOOLS.langchain_tools()}
 
 
 def _partition(args_model: type[BaseModel]) -> tuple[set[str], set[str]]:

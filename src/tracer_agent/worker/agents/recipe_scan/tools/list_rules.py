@@ -6,12 +6,11 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
-from ..reader import RecipeLedgerReader
+from .context import RecipeToolContext
 from .provenance import add_rule_ids, loaded
 
 LIST_RULES = "list_rules"
@@ -29,7 +28,7 @@ LIST_RULES_DESCRIPTION = (
 )
 
 
-class ListRulesTool(AgentTool[ListRulesArgs]):
+class ListRulesTool(AgentTool[ListRulesArgs, RecipeToolContext]):
     """앵커 태스크에 적용되는 살아 있는 규칙을 읽고 규칙 식별자를 근거로 올린다."""
 
     name = LIST_RULES
@@ -38,13 +37,9 @@ class ListRulesTool(AgentTool[ListRulesArgs]):
     # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
-    def __init__(self, reader: RecipeLedgerReader, catalog: ProvenanceCatalog) -> None:
-        self._reader = reader
-        self._catalog = catalog
-
-    async def execute(self, args: ListRulesArgs) -> str:
-        rules = await self._reader.applicable_rules(args.taskId)
+    async def execute(self, args: ListRulesArgs, context: RecipeToolContext) -> str:
+        rules = await context.reader.applicable_rules(args.taskId)
         return json.dumps(rules, ensure_ascii=False)
 
-    def record(self, _args: ListRulesArgs, content: str, /) -> None:
-        add_rule_ids(self._catalog, loaded(content))
+    def record(self, _args: ListRulesArgs, content: str, context: RecipeToolContext, /) -> None:
+        add_rule_ids(context.catalog, loaded(content))

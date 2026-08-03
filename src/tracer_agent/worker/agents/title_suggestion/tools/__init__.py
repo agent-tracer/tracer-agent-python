@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .context import TitleToolContext
 from .get_task_events import (
     DEFAULT_EVENT_LIMIT,
     DEFAULT_EVENT_ORDER,
@@ -13,7 +14,7 @@ from .get_task_events import (
     GetTaskEventsArgs,
     GetTaskEventsTool,
 )
-from .registry import build_title_registry
+from .registry import TITLE_TOOLS
 
 __all__ = [
     "DEFAULT_EVENT_LIMIT",
@@ -22,8 +23,9 @@ __all__ = [
     "GET_TASK_EVENTS_DESCRIPTION",
     "MAX_EVENT_LIMIT",
     "MIN_EVENT_LIMIT",
+    "TITLE_TOOLS",
     "EventOrder",
     "GetTaskEventsArgs",
     "GetTaskEventsTool",
-    "build_title_registry",
+    "TitleToolContext",
 ]

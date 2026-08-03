@@ -141,6 +141,8 @@ flowchart LR
 
 `runtime.tooling.AgentTool`은 도구 이름, 설명, Pydantic 인자 모델, 실행 함수, 일시 오류 목록, 근거 기록을 하나의 타입으로 결합한다. `ToolRegistry`는 인자를 검증한 뒤 도구 span을 열고, 실행 결과를 provenance/evidence ledger에 기록하며, LangChain `StructuredTool`로 변환한다.
 
+도구는 상태를 갖지 않고 요청별 조회 진입점과 근거 장부를 `execute(args, context)`의 컨텍스트로 받는다. 그 컨텍스트는 `StandardAgentContext`를 확장한 `RecipeToolContext`·`CleanupToolContext`·`TitleToolContext`이며 `create_agent(context_schema=...)`로 선언하고 `ainvoke(context=...)`로 호출마다 싣는다. 도구는 `langgraph.runtime.get_runtime()`으로 그 호출의 컨텍스트만 읽으므로 팬아웃이 병렬로 돌아도 장부가 섞이지 않는다. 에이전트별 `tools/registry.py`가 레지스트리 하나(`RECIPE_TOOLS`·`CLEANUP_TOOLS`·`TITLE_TOOLS`)를 소유하고 모든 실행이 그것을 함께 쓴다.
+
 ```mermaid
 sequenceDiagram
     participant Model as 모델
@@ -152,7 +154,7 @@ sequenceDiagram
     Model->>LC: tool call(name, raw args)
     LC->>Registry: invoke(name, raw args)
     Registry->>Registry: Pydantic args validation
-    Registry->>Tool: execute(validated args)
+    Registry->>Tool: execute(validated args, run context)
     Tool->>API: 사용자 범위 HTTP 요청
     API-->>Tool: JSON response
     Tool-->>Registry: content
@@ -162,6 +164,10 @@ sequenceDiagram
 ```
 
 Chat 도구는 `read`, `agentRead`, `memory`, `confirm` surface로 나뉜다. Recipe Scan과 Task Cleanup은 조사 단계별 provenance ledger를 사용하며, 조율 단계는 조사 보고와 ledger에 기록된 근거만 사용한다.
+
+## 컴파일된 agent 재사용
+
+`create_agent`는 StateGraph를 컴파일하므로 잡 에이전트는 `runtime/llm/agent_cache.py`의 `CompiledAgentCache`를 실행 의존성(`RecipeDeps`·`CleanupDeps`·`TitleDeps`)에 두고 시스템 프롬프트와 도구 이름 집합과 출력 타입과 모델 턴 상한이 같은 호출에 같은 agent를 다시 쓴다. 캐시는 한 실행에 속하며 그 실행의 채팅 클라이언트만 담는다. 도구 직렬화 락은 `StandardAgentContext.tool_lock`이 갖고 호출마다 새로 서므로 agent를 함께 쓰는 팬아웃이 서로를 기다리지 않는다.
 
 ## 프롬프트 실행 구조
 

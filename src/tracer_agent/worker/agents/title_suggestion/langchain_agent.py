@@ -16,7 +16,8 @@ from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionDr
 
 from ..runtime.llm.fallback import FallbackModelMiddleware
 from ..runtime.llm.prompt_cache import PromptCacheMiddleware
-from ..runtime.llm.standard_agent import StandardAgentContext, StandardAgentMiddleware
+from ..runtime.llm.standard_agent import StandardAgentMiddleware
+from .tools import TitleToolContext
 
 
 def build_title_agent(
@@ -43,6 +44,6 @@ def build_title_agent(
         system_prompt=system,
         middleware=middleware,
         response_format=ToolStrategy(TitleSuggestionDraft, handle_errors=True),
-        context_schema=StandardAgentContext,
+        context_schema=TitleToolContext,
         name="title-suggestion-investigator",
     )

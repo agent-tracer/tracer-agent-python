@@ -19,10 +19,10 @@ from ..runtime.llm.fallback import FallbackModelMiddleware
 from ..runtime.llm.prompt_cache import PromptCacheMiddleware
 from ..runtime.llm.retry import model_retry_middleware, tool_retry_middleware
 from ..runtime.llm.standard_agent import (
-    StandardAgentContext,
     StandardAgentMiddleware,
     context_editing_middleware,
 )
+from .tools import RecipeToolContext
 
 
 def recipe_middleware(
@@ -67,6 +67,6 @@ def build_recipe_agent(
         system_prompt=system,
         middleware=middleware,
         response_format=ToolStrategy(output, handle_errors=True),
-        context_schema=StandardAgentContext,
+        context_schema=RecipeToolContext,
         name="recipe-scan-investigator",
     )

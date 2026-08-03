@@ -16,6 +16,7 @@ from tests.support.contract import (
     tool_arg_partition,
     tool_descriptions,
 )
+from tests.support.tool_contexts import mk_recipe_context
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_PROBE_TURNS,
     MAX_RECIPE_CANDIDATES,
@@ -32,15 +33,14 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 from tracer_agent.worker.agents.recipe_scan.failures import WORKER_FAILED
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
-from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.recipe_scan.tools import (
     COORDINATOR_TOOLS,
     PROBE_TOOLS,
     RECIPE_TOOL_CLASSES,
+    RECIPE_TOOLS,
     SearchEventsArgs,
     SearchEventsTool,
     TimelineEventKind,
-    build_recipe_registry,
     validate_tool_args,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
@@ -79,13 +79,7 @@ def _tools() -> Any:
 
 
 def _langchain_tools() -> list[Any]:
-    registry = build_recipe_registry(
-        RecipeLedgerReader(FakeTracerApi()),
-        RecipeSearchReader(FakeTracerApi()),
-        ProvenanceCatalog(),
-        agent_name="recipe-scan",
-    )
-    return registry.langchain_tools()
+    return RECIPE_TOOLS.langchain_tools()
 
 
 def _fields(tool: str) -> Any:
@@ -196,9 +190,9 @@ def test_search_events_응답의_taskId로_태스크를_가로지른_근거를_�
     response = _tools()["search_events"]["responseEvent"]
     catalog = ProvenanceCatalog()
     hit = dict.fromkeys(response["required"], "") | {"id": "event-9", "taskId": "other-task"}
-    tool = SearchEventsTool(RecipeSearchReader(FakeTracerApi()), catalog)
-
-    tool.record(SearchEventsArgs(q="migration"), json.dumps({"events": [hit]}))
+    SearchEventsTool().record(
+        SearchEventsArgs(q="migration"), json.dumps({"events": [hit]}), mk_recipe_context(catalog)
+    )
 
     assert "taskId" in response["required"]
     assert catalog.eventIdsByTask == {"other-task": {"event-9"}}

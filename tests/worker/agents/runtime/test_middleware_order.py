@@ -68,4 +68,4 @@ class Test미들웨어순서:
             for one in chat_middleware(_TRANSIENT, max_turns=4)
             if type(one).__name__ == "StandardAgentMiddleware"
         )
-        assert standard._tool_lock is not None  # noqa: SLF001
+        assert standard._serializes_tools  # noqa: SLF001

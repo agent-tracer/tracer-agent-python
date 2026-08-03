@@ -1,4 +1,4 @@
-"""요청별 의존을 받아 task-cleanup 도구 레지스트리를 조립하고 인자를 검증한다."""
+"""task-cleanup 도구 레지스트리 하나를 소유하고 모델이 고른 인자를 검증한다."""
 
 from __future__ import annotations
 
@@ -6,10 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch, CleanupCandidate
-
 from ...runtime.tooling import ToolRegistry
-from ..reader import CleanupLedgerReader
+from .context import CleanupToolContext
 from .get_events import GET_TASK_EVENTS, GetTaskEventsTool
 from .list_candidates import LIST_CANDIDATE_TASKS, ListCandidateTasksTool
 
@@ -31,19 +29,7 @@ def validate_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     return args_model.model_validate(args).model_dump(exclude_none=True)
 
 
-def build_cleanup_registry(
-    reader: CleanupLedgerReader,
-    batch: CleanupBatch,
-    exposed_candidates: dict[str, CleanupCandidate],
-    event_ids_by_task: dict[str, set[str]],
-    *,
-    agent_name: str,
-) -> ToolRegistry:
-    """요청별 원장 조회와 후보 배치와 근거 장부를 쥔 도구 레지스트리를 만든다."""
-    return ToolRegistry(
-        (
-            ListCandidateTasksTool(batch, exposed_candidates),
-            GetTaskEventsTool(reader, event_ids_by_task),
-        ),
-        agent_name=agent_name,
-    )
+# 도구가 요청별 조회와 장부를 호출 컨텍스트로 받으므로 레지스트리 하나가 모든 실행을 함께 쓴다.
+CLEANUP_TOOLS: ToolRegistry[CleanupToolContext] = ToolRegistry(
+    (ListCandidateTasksTool(), GetTaskEventsTool())
+)

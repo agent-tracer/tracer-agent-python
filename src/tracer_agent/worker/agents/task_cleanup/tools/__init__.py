@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .context import CleanupToolContext
 from .get_events import (
     DEFAULT_EVENT_LIMIT,
     DEFAULT_EVENT_ORDER,
@@ -22,14 +23,15 @@ from .list_candidates import (
     candidate_page,
 )
 from .registry import (
+    CLEANUP_TOOLS,
     COORDINATOR_TOOL_NAMES,
     INSPECT_TOOL_NAMES,
     TRIAGE_TOOL_NAMES,
-    build_cleanup_registry,
     validate_tool_args,
 )
 
 __all__ = [
+    "CLEANUP_TOOLS",
     "COORDINATOR_TOOL_NAMES",
     "DEFAULT_CANDIDATE_LIMIT",
     "DEFAULT_EVENT_LIMIT",
@@ -42,12 +44,12 @@ __all__ = [
     "MAX_CANDIDATE_LIMIT",
     "MAX_EVENT_LIMIT",
     "TRIAGE_TOOL_NAMES",
+    "CleanupToolContext",
     "EventOrder",
     "GetTaskEventsArgs",
     "GetTaskEventsTool",
     "ListCandidateTasksArgs",
     "ListCandidateTasksTool",
-    "build_cleanup_registry",
     "candidate_page",
     "validate_tool_args",
 ]

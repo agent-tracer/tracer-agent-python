@@ -9,6 +9,7 @@ from .check_citations import (
     CheckCitationsArgs,
     CheckCitationsTool,
 )
+from .context import RecipeToolContext
 from .find_similar_tasks import (
     DEFAULT_SIMILAR_LIMIT,
     FIND_SIMILAR_TASKS,
@@ -43,8 +44,8 @@ from .registry import (
     COORDINATOR_TOOLS,
     PROBE_TOOLS,
     RECIPE_TOOL_CLASSES,
+    RECIPE_TOOLS,
     SURVEY_TOOLS,
-    build_recipe_registry,
     validate_tool_args,
 )
 from .search_events import (
@@ -91,6 +92,7 @@ __all__ = [
     "MAX_SIMILAR_LIMIT",
     "MAX_SUMMARY_WINDOW",
     "PROBE_TOOLS",
+    "RECIPE_TOOLS",
     "RECIPE_TOOL_CLASSES",
     "SEARCH_EVENTS",
     "SEARCH_EVENTS_DESCRIPTION",
@@ -107,11 +109,11 @@ __all__ = [
     "GetTaskSummaryTool",
     "ListRulesArgs",
     "ListRulesTool",
+    "RecipeToolContext",
     "SearchEventsArgs",
     "SearchEventsTool",
     "SearchRecipesArgs",
     "SearchRecipesTool",
     "TimelineEventKind",
-    "build_recipe_registry",
     "validate_tool_args",
 ]

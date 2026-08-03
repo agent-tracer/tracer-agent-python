@@ -11,8 +11,7 @@ from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
-from ..reader import RecipeLedgerReader
-from ..search import RecipeSearchReader
+from .context import RecipeToolContext
 
 FIND_SIMILAR_TASKS = "find_similar_tasks"
 DEFAULT_SIMILAR_LIMIT = 5
@@ -32,7 +31,7 @@ FIND_SIMILAR_TASKS_DESCRIPTION = (
 )
 
 
-class FindSimilarTasksTool(AgentTool[FindSimilarTasksArgs]):
+class FindSimilarTasksTool(AgentTool[FindSimilarTasksArgs, RecipeToolContext]):
     """앵커의 제목을 읽어 제목이 닮은 태스크를 찾는다."""
 
     name = FIND_SIMILAR_TASKS
@@ -41,13 +40,11 @@ class FindSimilarTasksTool(AgentTool[FindSimilarTasksArgs]):
     # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
-    def __init__(self, reader: RecipeLedgerReader, search: RecipeSearchReader) -> None:
-        self._reader = reader
-        self._search = search
-
-    async def execute(self, args: FindSimilarTasksArgs) -> str:
-        anchor = await self._reader.task_with_events(args.anchorTaskId, 1)
+    async def execute(self, args: FindSimilarTasksArgs, context: RecipeToolContext) -> str:
+        anchor = await context.reader.task_with_events(args.anchorTaskId, 1)
         if anchor is None:
             return f"Task {args.anchorTaskId} not found."
-        similar = await self._search.similar_tasks(text(anchor.task["title"]), args.anchorTaskId, args.limit)
+        similar = await context.search.similar_tasks(
+            text(anchor.task["title"]), args.anchorTaskId, args.limit
+        )
         return json.dumps(similar, ensure_ascii=False)

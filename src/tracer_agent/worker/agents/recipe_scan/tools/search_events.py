@@ -7,12 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
-from ..search import RecipeSearchReader
+from .context import RecipeToolContext
 from .provenance import add_events, loaded
 
 SEARCH_EVENTS = "search_events"
@@ -72,7 +71,7 @@ SEARCH_EVENTS_DESCRIPTION = (
 )
 
 
-class SearchEventsTool(AgentTool[SearchEventsArgs]):
+class SearchEventsTool(AgentTool[SearchEventsArgs, RecipeToolContext]):
     """교정과 지시와 마찰 근거 이벤트를 찾고 돌려준 이벤트를 근거로 올린다."""
 
     name = SEARCH_EVENTS
@@ -81,17 +80,13 @@ class SearchEventsTool(AgentTool[SearchEventsArgs]):
     # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
-    def __init__(self, search: RecipeSearchReader, catalog: ProvenanceCatalog) -> None:
-        self._search = search
-        self._catalog = catalog
-
-    async def execute(self, args: SearchEventsArgs) -> str:
-        result = await self._search.search_events(
+    async def execute(self, args: SearchEventsArgs, context: RecipeToolContext) -> str:
+        result = await context.search.search_events(
             args.q, args.limit, args.offset, args.taskId, args.kind, args.toolName
         )
         return json.dumps(result, ensure_ascii=False)
 
-    def record(self, args: SearchEventsArgs, content: str) -> None:
+    def record(self, args: SearchEventsArgs, content: str, context: RecipeToolContext, /) -> None:
         parsed = loaded(content)
         if isinstance(parsed, dict):
-            add_events(self._catalog, parsed.get("events"), args.taskId)
+            add_events(context.catalog, parsed.get("events"), args.taskId)

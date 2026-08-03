@@ -7,9 +7,10 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 
 from tracer_agent.shared.agents.shared.models import TrimmedStr
-from tracer_agent.shared.agents.task_cleanup.models import CandidatePage, CleanupBatch, CleanupCandidate
+from tracer_agent.shared.agents.task_cleanup.models import CandidatePage, CleanupBatch
 
 from ...runtime.tooling import AgentTool
+from .context import CleanupToolContext
 
 LIST_CANDIDATE_TASKS = "list_candidate_tasks"
 DEFAULT_CANDIDATE_LIMIT = 30
@@ -63,25 +64,21 @@ def candidate_page(batch: CleanupBatch, limit: int | None, cursor: str | None) -
     )
 
 
-class ListCandidateTasksTool(AgentTool[ListCandidateTasksArgs]):
+class ListCandidateTasksTool(AgentTool[ListCandidateTasksArgs, CleanupToolContext]):
     """후보 배치를 페이지로 내주고 노출한 후보만 인용 가능한 근거로 올린다."""
 
     name = LIST_CANDIDATE_TASKS
     description = LIST_CANDIDATE_TASKS_DESCRIPTION
     args_model = ListCandidateTasksArgs
 
-    def __init__(self, batch: CleanupBatch, exposed: dict[str, CleanupCandidate]) -> None:
-        self._batch = batch
-        self._exposed = exposed
-
-    async def execute(self, args: ListCandidateTasksArgs) -> str:
-        page = candidate_page(self._batch, args.limit, args.cursor)
+    async def execute(self, args: ListCandidateTasksArgs, context: CleanupToolContext) -> str:
+        page = candidate_page(context.batch, args.limit, args.cursor)
         dumped = page.model_dump(mode="json")
         # null lastEventAt은 이벤트 없음을 뜻해 남기고 nextCursor는 없을 때만 뺀다.
         if dumped["nextCursor"] is None:
             del dumped["nextCursor"]
         return json.dumps(dumped, ensure_ascii=False)
 
-    def record(self, _args: ListCandidateTasksArgs, content: str, /) -> None:
+    def record(self, _args: ListCandidateTasksArgs, content: str, context: CleanupToolContext, /) -> None:
         for candidate in CandidatePage.model_validate_json(content).candidates:
-            self._exposed[candidate.id] = candidate
+            context.exposed_candidates[candidate.id] = candidate

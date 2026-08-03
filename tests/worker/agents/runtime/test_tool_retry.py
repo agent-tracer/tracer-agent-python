@@ -7,29 +7,17 @@ from typing import Any
 import pytest
 from langchain.tools import tool
 
-from tests.support.fakes import FakeToolLoopChat, mk_rates
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, RecipeDraft
+from tests.support.fakes import FakeToolLoopChat
+from tests.support.tool_contexts import mk_recipe_context
+from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
-from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
-from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
-from tracer_agent.worker.agents.recipe_scan.tools import build_recipe_registry
-from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
-from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
-from tracer_agent.worker.agents.runtime.llm.standard_agent import StandardAgentContext
+from tracer_agent.worker.agents.recipe_scan.tools import RECIPE_TOOLS, RecipeToolContext
 from tracer_agent.worker.agents.runtime.tracer_client import TracerApiUnavailable
 from tracer_agent.worker.agents.task_cleanup.tools import GetTaskEventsTool
 
-RECIPE_TRANSIENT = build_recipe_registry(
-    RecipeLedgerReader(FakeTracerApi()),
-    RecipeSearchReader(FakeTracerApi()),
-    ProvenanceCatalog(),
-    agent_name="recipe-scan",
-).transient_errors()
+RECIPE_TRANSIENT = RECIPE_TOOLS.transient_errors()
 
 CLEANUP_TRANSIENT = GetTaskEventsTool.transient_errors
-
-_MODEL = "claude-sonnet-4-6"
 
 
 def _flaky_tool(fail_times: int, error: BaseException) -> tuple[Any, list[int]]:
@@ -46,13 +34,8 @@ def _flaky_tool(fail_times: int, error: BaseException) -> tuple[Any, list[int]]:
     return get_task_events, calls
 
 
-def _context() -> StandardAgentContext:
-    return StandardAgentContext(
-        agent_name="recipe-scan",
-        trace=ExecutionTrace(),
-        budget=ToolLoopBudget("recipe-scan", _MODEL, 2.0, mk_rates(), 0.0),
-        max_model_turns=5,
-    )
+def _context() -> RecipeToolContext:
+    return mk_recipe_context()
 
 
 def test_재시도_대상은_연결_계열_일시_오류만이다() -> None:

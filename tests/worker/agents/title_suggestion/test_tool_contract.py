@@ -29,8 +29,8 @@ from tracer_agent.worker.agents.title_suggestion.tools import (
     GET_TASK_EVENTS_DESCRIPTION,
     MAX_EVENT_LIMIT,
     MIN_EVENT_LIMIT,
+    TITLE_TOOLS,
     GetTaskEventsArgs,
-    build_title_registry,
 )
 
 
@@ -39,11 +39,7 @@ def _contract() -> Any:
 
 
 def _langchain_tool() -> Any:
-    registry = build_title_registry(
-        TitleLedgerReader(FakeTracerApi()),
-        agent_name="title-suggestion",
-    )
-    return registry.langchain_tools()[0]
+    return TITLE_TOOLS.langchain_tools()[0]
 
 
 # 계약이 선언한 선택 필드까지 채운 행이라야 렌더링이 필드를 빠뜨렸는지 드러난다.

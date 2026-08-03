@@ -7,12 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
-from ..reader import RecipeLedgerReader
+from .context import RecipeToolContext
 from .provenance import add_events, loaded
 
 GET_TASK_EVENTS = "get_task_events"
@@ -54,7 +53,7 @@ GET_TASK_EVENTS_DESCRIPTION = (
 )
 
 
-class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
+class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, RecipeToolContext]):
     """앵커 태스크의 원본 이벤트를 사용자 범위로 읽고 조회한 이벤트를 근거로 올린다."""
 
     name = GET_TASK_EVENTS
@@ -63,17 +62,13 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
     # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
-    def __init__(self, reader: RecipeLedgerReader, catalog: ProvenanceCatalog) -> None:
-        self._reader = reader
-        self._catalog = catalog
-
-    async def execute(self, args: GetTaskEventsArgs) -> str:
-        page = await self._reader.task_events(args.taskId, args.limit, args.cursor, args.order)
+    async def execute(self, args: GetTaskEventsArgs, context: RecipeToolContext) -> str:
+        page = await context.reader.task_events(args.taskId, args.limit, args.cursor, args.order)
         if page is None:
             return f"Task {args.taskId} not found."
         return json.dumps(page, ensure_ascii=False)
 
-    def record(self, args: GetTaskEventsArgs, content: str) -> None:
+    def record(self, args: GetTaskEventsArgs, content: str, context: RecipeToolContext, /) -> None:
         parsed = loaded(content)
         if isinstance(parsed, dict):
-            add_events(self._catalog, parsed.get("events"), args.taskId)
+            add_events(context.catalog, parsed.get("events"), args.taskId)

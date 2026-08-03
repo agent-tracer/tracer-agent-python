@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from langchain.agents.middleware import (
@@ -52,15 +52,17 @@ class StandardAgentContext:
     budget: ModelCallBudget
     # 모델이 자기 페이싱을 가늠하는 표시용 턴 총량이며 이 값 자체는 종료를 결정하지 않는다.
     max_model_turns: int
+    # 컴파일된 agent를 여러 호출이 함께 써도 직렬화가 이 호출 안에서만 걸리도록 락을 컨텍스트가 갖는다.
+    tool_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
     """모델 비용과 실행 궤적과 도구 결과를 제품 계약으로 기록한다."""
 
     def __init__(self, *, serialize_tools: bool = False) -> None:
-        """공유 장부를 쓰는 도구를 이 인스턴스가 쥔 락으로 직렬화할지 정한다."""
+        """공유 장부를 쓰는 도구를 이 호출의 락으로 직렬화할지 정한다."""
         super().__init__()
-        self._tool_lock = asyncio.Lock() if serialize_tools else None
+        self._serializes_tools = serialize_tools
 
     async def awrap_model_call(
         self,
@@ -84,9 +86,9 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
     ) -> ToolMessage | Command[Any]:
-        if self._tool_lock is None:
+        if not self._serializes_tools:
             return await self._invoke_tool(request, handler)
-        async with self._tool_lock:
+        async with tool_context(request, StandardAgentContext).tool_lock:
             return await self._invoke_tool(request, handler)
 
     @staticmethod

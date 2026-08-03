@@ -18,7 +18,8 @@ from tracer_agent.shared.agents.task_cleanup.models import CleanupDraft
 from ..runtime.llm.fallback import FallbackModelMiddleware
 from ..runtime.llm.prompt_cache import PromptCacheMiddleware
 from ..runtime.llm.retry import tool_retry_middleware
-from ..runtime.llm.standard_agent import StandardAgentContext, StandardAgentMiddleware
+from ..runtime.llm.standard_agent import StandardAgentMiddleware
+from .tools import CleanupToolContext
 
 
 def build_cleanup_agent(
@@ -48,6 +49,6 @@ def build_cleanup_agent(
         system_prompt=system,
         middleware=middleware,
         response_format=ToolStrategy(output, handle_errors=True),
-        context_schema=StandardAgentContext,
+        context_schema=CleanupToolContext,
         name="task-cleanup-investigator",
     )

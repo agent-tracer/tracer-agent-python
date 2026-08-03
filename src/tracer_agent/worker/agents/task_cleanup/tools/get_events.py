@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.task_cleanup.models import EventPage
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
-from ..reader import CleanupLedgerReader
+from .context import CleanupToolContext
 
 GET_TASK_EVENTS = "get_task_events"
 DEFAULT_EVENT_LIMIT = 100
@@ -58,7 +58,7 @@ GET_TASK_EVENTS_DESCRIPTION = (
 )
 
 
-class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
+class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, CleanupToolContext]):
     """태스크 이벤트를 사용자 범위로 읽고 읽은 이벤트 id만 근거로 올린다."""
 
     name = GET_TASK_EVENTS
@@ -67,12 +67,8 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
     # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
-    def __init__(self, reader: CleanupLedgerReader, event_ids: dict[str, set[str]]) -> None:
-        self._reader = reader
-        self._event_ids = event_ids
-
-    async def execute(self, args: GetTaskEventsArgs) -> str:
-        events = await self._reader.task_events(
+    async def execute(self, args: GetTaskEventsArgs, context: CleanupToolContext) -> str:
+        events = await context.reader.task_events(
             args.taskId,
             args.limit if args.limit is not None else DEFAULT_EVENT_LIMIT,
             args.cursor,
@@ -82,11 +78,11 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
             return f"Task {args.taskId} not found."
         return json.dumps(events, ensure_ascii=False)
 
-    def record(self, args: GetTaskEventsArgs, content: str) -> None:
+    def record(self, args: GetTaskEventsArgs, content: str, context: CleanupToolContext, /) -> None:
         try:
             page = EventPage.model_validate_json(content)
         except ValidationError:
             return
-        known = self._event_ids.setdefault(args.taskId, set())
+        known = context.event_ids_by_task.setdefault(args.taskId, set())
         for event in page.events:
             known.add(event.id)

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
-from ..reader import TitleLedgerReader
+from .context import TitleToolContext
 
 GET_TASK_EVENTS = "get_task_events"
 DEFAULT_EVENT_LIMIT = 100
@@ -58,18 +58,15 @@ GET_TASK_EVENTS_DESCRIPTION = (
 )
 
 
-class GetTaskEventsTool(AgentTool[GetTaskEventsArgs]):
+class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, TitleToolContext]):
     """태스크 이벤트를 사용자 범위로 읽어 대화 발췌만으로 부족한 근거를 채운다."""
 
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION
     args_model = GetTaskEventsArgs
 
-    def __init__(self, reader: TitleLedgerReader) -> None:
-        self._reader = reader
-
-    async def execute(self, args: GetTaskEventsArgs) -> str:
-        page = await self._reader.task_events(args.taskId, args.limit, args.cursor, args.order)
+    async def execute(self, args: GetTaskEventsArgs, context: TitleToolContext) -> str:
+        page = await context.reader.task_events(args.taskId, args.limit, args.cursor, args.order)
         if page is None:
             return f"Task {args.taskId} not found."
         return json.dumps(page, ensure_ascii=False)

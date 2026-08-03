@@ -6,10 +6,10 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from .context import RecipeToolContext
 
 CHECK_CITATIONS = "check_citations"
 MAX_CITED_IDS = 200
@@ -41,18 +41,15 @@ CHECK_CITATIONS_DESCRIPTION = (
 )
 
 
-class CheckCitationsTool(AgentTool[CheckCitationsArgs]):
+class CheckCitationsTool(AgentTool[CheckCitationsArgs, RecipeToolContext]):
     """도구가 아니라 근거 장부를 읽어 인용 불가한 식별자를 알려준다."""
 
     name = CHECK_CITATIONS
     description = CHECK_CITATIONS_DESCRIPTION
     args_model = CheckCitationsArgs
 
-    def __init__(self, catalog: ProvenanceCatalog) -> None:
-        self._catalog = catalog
-
-    async def execute(self, args: CheckCitationsArgs) -> str:
-        catalog = self._catalog
+    async def execute(self, args: CheckCitationsArgs, context: RecipeToolContext) -> str:
+        catalog = context.catalog
         seen_events = catalog.eventIdsByTask.get(args.taskId, set())
         seen_turns = catalog.turnIdsByTask.get(args.taskId, set())
         unsupported = {

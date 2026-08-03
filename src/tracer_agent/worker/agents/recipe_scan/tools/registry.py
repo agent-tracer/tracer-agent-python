@@ -1,4 +1,4 @@
-"""요청별 의존을 받아 recipe-scan 도구 레지스트리를 조립하고 인자를 검증한다."""
+"""recipe-scan 도구 레지스트리 하나를 소유하고 모델이 고른 인자를 검증한다."""
 
 from __future__ import annotations
 
@@ -6,12 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from tracer_agent.shared.agents.recipe_scan.models import ProbeName, ProvenanceCatalog
+from tracer_agent.shared.agents.recipe_scan.models import ProbeName
 
 from ...runtime.tooling import AgentTool, ToolRegistry
-from ..reader import RecipeLedgerReader
-from ..search import RecipeSearchReader
 from .check_citations import CHECK_CITATIONS, CheckCitationsTool
+from .context import RecipeToolContext
 from .find_similar_tasks import FIND_SIMILAR_TASKS, FindSimilarTasksTool
 from .get_task_events import GET_TASK_EVENTS, GetTaskEventsTool
 from .get_task_summary import GET_TASK_SUMMARY, GetTaskSummaryTool
@@ -19,7 +18,7 @@ from .list_rules import LIST_RULES, ListRulesTool
 from .search_events import SEARCH_EVENTS, SearchEventsTool
 from .search_recipes import SEARCH_RECIPES, SearchRecipesTool
 
-RECIPE_TOOL_CLASSES: tuple[type[AgentTool[Any]], ...] = (
+RECIPE_TOOL_CLASSES: tuple[type[AgentTool[Any, RecipeToolContext]], ...] = (
     GetTaskSummaryTool,
     GetTaskEventsTool,
     ListRulesTool,
@@ -53,23 +52,15 @@ def validate_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     return args_model.model_validate(args).model_dump(exclude_none=True)
 
 
-def build_recipe_registry(
-    reader: RecipeLedgerReader,
-    search: RecipeSearchReader,
-    catalog: ProvenanceCatalog,
-    names: tuple[str, ...] | None = None,
-    *,
-    agent_name: str,
-) -> ToolRegistry:
-    """요청별 추적 조회와 공유 근거 장부를 쥔 도구 레지스트리를 만들되 이름으로 부분집합을 고른다."""
-    built: tuple[AgentTool[Any], ...] = (
-        GetTaskSummaryTool(reader),
-        GetTaskEventsTool(reader, catalog),
-        ListRulesTool(reader, catalog),
-        SearchEventsTool(search, catalog),
-        FindSimilarTasksTool(reader, search),
-        SearchRecipesTool(search, catalog),
-        CheckCitationsTool(catalog),
+# 도구가 요청별 조회와 장부를 호출 컨텍스트로 받으므로 레지스트리 하나가 모든 실행을 함께 쓴다.
+RECIPE_TOOLS: ToolRegistry[RecipeToolContext] = ToolRegistry(
+    (
+        GetTaskSummaryTool(),
+        GetTaskEventsTool(),
+        ListRulesTool(),
+        SearchEventsTool(),
+        FindSimilarTasksTool(),
+        SearchRecipesTool(),
+        CheckCitationsTool(),
     )
-    chosen = built if names is None else tuple(tool for tool in built if tool.name in names)
-    return ToolRegistry(chosen, agent_name=agent_name)
+)

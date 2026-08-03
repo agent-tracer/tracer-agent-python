@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.support.fakes import FakeToolLoopChat
+from tests.support.tool_contexts import mk_recipe_context
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_EXCERPT_CHARS,
     MAX_EXCERPTS_PER_PROBE,
@@ -18,11 +19,10 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     merged_provenance,
 )
 from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
-from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
-from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.recipe_scan.tools import (
     PROBE_TOOLS,
     RECIPE_TOOL_CLASSES,
+    RECIPE_TOOLS,
     GetTaskEventsArgs,
     GetTaskEventsTool,
     ListRulesArgs,
@@ -31,33 +31,9 @@ from tracer_agent.worker.agents.recipe_scan.tools import (
     SearchEventsTool,
     SearchRecipesArgs,
     SearchRecipesTool,
-    build_recipe_registry,
     validate_tool_args,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.tooling import ToolRegistry
-
-
-def _registry(
-    catalog: ProvenanceCatalog | None = None,
-    *,
-    tracer: FakeTracerApi | None = None,
-) -> ToolRegistry:
-    api = tracer or FakeTracerApi()
-    return build_recipe_registry(
-        RecipeLedgerReader(api),  # type: ignore[arg-type]
-        RecipeSearchReader(api),  # type: ignore[arg-type]
-        catalog or ProvenanceCatalog(),
-        agent_name="recipe-scan",
-    )
-
-
-def _reader() -> RecipeLedgerReader:
-    return RecipeLedgerReader(FakeTracerApi())
-
-
-def _search() -> RecipeSearchReader:
-    return RecipeSearchReader(FakeTracerApi())
 
 
 def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> None:
@@ -67,7 +43,7 @@ def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> Non
             "description": tool.description,
             "input_schema": tool.tool_call_schema.model_json_schema(),
         }
-        for tool in _registry().langchain_tools()
+        for tool in RECIPE_TOOLS.langchain_tools()
     ]
 
     assert [tool["name"] for tool in catalog] == [
@@ -122,9 +98,10 @@ async def test_유효하지_않은_도구_인자는_실제_조회를_하지_않�
     tracer = FakeTracerApi()
 
     with pytest.raises(ValidationError):
-        await _registry(tracer=tracer).invoke(
+        await RECIPE_TOOLS.invoke(
             "search_events",
             {"q": "failure", "taskId": "task-1", "kind": "drifted.kind"},
+            mk_recipe_context(tracer=tracer),
         )
 
     assert tracer.calls == []
@@ -137,11 +114,10 @@ def test_빈_이벤트_커서는_콜백_전에_거부한다() -> None:
 
 def test_revision이_있는_recipe만_수정_근거로_인정한다() -> None:
     catalog = ProvenanceCatalog()
-    tool = SearchRecipesTool(_search(), catalog)
-
-    tool.record(
+    SearchRecipesTool().record(
         SearchRecipesArgs(q="migration"),
         json.dumps([{"id": "versioned", "rev": 2}, {"id": "boolean", "rev": True}, {"id": "unversioned"}]),
+        mk_recipe_context(catalog),
     )
 
     assert catalog.recipeRevs == {"versioned": 2}
@@ -162,7 +138,9 @@ async def test_모델이_생략한_인자는_도구_기본값으로_채워_조�
         ]
     )
 
-    content = await _registry(tracer=tracer).invoke("get_task_events", {"taskId": "task-1"})
+    content = await RECIPE_TOOLS.invoke(
+        "get_task_events", {"taskId": "task-1"}, mk_recipe_context(tracer=tracer)
+    )
 
     assert tracer.calls == [
         {
@@ -175,11 +153,10 @@ async def test_모델이_생략한_인자는_도구_기본값으로_채워_조�
 
 def test_도구가_돌려준_이벤트만_인용_가능한_근거로_올린다() -> None:
     catalog = ProvenanceCatalog()
-    tool = GetTaskEventsTool(_reader(), catalog)
-
-    tool.record(
+    GetTaskEventsTool().record(
         GetTaskEventsArgs(taskId="task-1"),
         '{"events": [{"id": "event-1", "turnId": "turn-1"}]}',
+        mk_recipe_context(catalog),
     )
 
     assert catalog.eventIdsByTask == {"task-1": {"event-1"}}
@@ -188,7 +165,6 @@ def test_도구가_돌려준_이벤트만_인용_가능한_근거로_올린다()
 
 def test_이벤트_근거는_태스크별_원장으로_모으고_불완전한_행은_버린다() -> None:
     catalog = ProvenanceCatalog()
-    tool = SearchEventsTool(_search(), catalog)
     content = json.dumps(
         {
             "events": [
@@ -201,7 +177,9 @@ def test_이벤트_근거는_태스크별_원장으로_모으고_불완전한_�
         }
     )
 
-    tool.record(SearchEventsArgs(q="failure", taskId="anchor-task"), content)
+    SearchEventsTool().record(
+        SearchEventsArgs(q="failure", taskId="anchor-task"), content, mk_recipe_context(catalog)
+    )
 
     assert catalog.eventIdsByTask == {
         "anchor-task": {"event-1"},
@@ -211,9 +189,9 @@ def test_이벤트_근거는_태스크별_원장으로_모으고_불완전한_�
 
 def test_규칙_ID를_근거_원장에_기록한다() -> None:
     catalog = ProvenanceCatalog()
-    tool = ListRulesTool(_reader(), catalog)
-
-    tool.record(ListRulesArgs(taskId="task-1"), json.dumps([{"id": "rule-1"}]))
+    ListRulesTool().record(
+        ListRulesArgs(taskId="task-1"), json.dumps([{"id": "rule-1"}]), mk_recipe_context(catalog)
+    )
 
     assert catalog.ruleIds == {"rule-1"}
 
@@ -221,7 +199,7 @@ def test_규칙_ID를_근거_원장에_기록한다() -> None:
 async def test_요약이_돌려준_태스크는_근거_원장에_오르지_않는다() -> None:
     catalog = ProvenanceCatalog()
 
-    await _registry(catalog).invoke("get_task_summary", {"taskId": "task-1"})
+    await RECIPE_TOOLS.invoke("get_task_summary", {"taskId": "task-1"}, mk_recipe_context(catalog))
 
     assert catalog.eventIdsByTask == {}
 
@@ -230,7 +208,9 @@ async def test_유사_태스크가_돌려준_태스크는_근거_원장에_오�
     catalog = ProvenanceCatalog()
     tracer = FakeTracerApi(hits={"tasks": [{"id": "task-2", "title": "x", "status": "completed"}]})
 
-    await _registry(catalog, tracer=tracer).invoke("find_similar_tasks", {"anchorTaskId": "task-1"})
+    await RECIPE_TOOLS.invoke(
+        "find_similar_tasks", {"anchorTaskId": "task-1"}, mk_recipe_context(catalog, tracer=tracer)
+    )
 
     assert catalog.eventIdsByTask == {}
 
@@ -242,7 +222,7 @@ async def test_인용_확인은_장부에_없는_식별자를_짚어준다() -> 
         ruleIds={"rule-1"},
     )
 
-    content = await _registry(catalog).invoke(
+    content = await RECIPE_TOOLS.invoke(
         "check_citations",
         {
             "taskId": "task-1",
@@ -250,6 +230,7 @@ async def test_인용_확인은_장부에_없는_식별자를_짚어준다() -> 
             "turnIds": ["turn-9"],
             "ruleIds": ["rule-1"],
         },
+        mk_recipe_context(catalog),
     )
 
     assert json.loads(content) == {
@@ -261,9 +242,10 @@ async def test_인용_확인은_장부에_없는_식별자를_짚어준다() -> 
 
 
 async def test_인용_확인은_읽지_않은_태스크를_알려준다() -> None:
-    content = await _registry(ProvenanceCatalog()).invoke(
+    content = await RECIPE_TOOLS.invoke(
         "check_citations",
         {"taskId": "task-9", "eventIds": ["event-1"]},
+        mk_recipe_context(),
     )
 
     assert json.loads(content)["taskSupported"] is False
@@ -323,25 +305,19 @@ def test_전문가는_자기_근거_원천의_도구만_쥔다() -> None:
 
 
 def test_전문가는_후보가_아니라_보고를_내도록_조립된다() -> None:
-    probe_registry = build_recipe_registry(
-        _reader(), _search(), ProvenanceCatalog(), PROBE_TOOLS["rules"], agent_name="recipe-scan"
-    )
     probe = build_recipe_agent(
         FakeToolLoopChat([]),
         "system",
-        probe_registry.langchain_tools(),
-        probe_registry.transient_errors(),
+        RECIPE_TOOLS.langchain_tools(PROBE_TOOLS["rules"]),
+        RECIPE_TOOLS.transient_errors(PROBE_TOOLS["rules"]),
         max_turns=3,
         output=ProbeReport,
-    )
-    coordinator_registry = build_recipe_registry(
-        _reader(), _search(), ProvenanceCatalog(), agent_name="recipe-scan"
     )
     coordinator = build_recipe_agent(
         FakeToolLoopChat([]),
         "system",
-        coordinator_registry.langchain_tools(),
-        coordinator_registry.transient_errors(),
+        RECIPE_TOOLS.langchain_tools(),
+        RECIPE_TOOLS.transient_errors(),
         max_turns=15,
         output=RecipeDraft,
     )

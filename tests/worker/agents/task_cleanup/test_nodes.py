@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, mk_rates
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, mk_ai, mk_rates
 from tests.support.prompts import TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
@@ -21,6 +22,18 @@ from tracer_agent.worker.agents.task_cleanup.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
+
+_EVENT_ROWS = [
+    {
+        "id": "event-1",
+        "seq": "1",
+        "kind": "agent_tracer.user.message",
+        "title": "x",
+        "filePaths": [],
+        "metadata": {},
+        "occurredAt": "2026-07-14T00:00:00Z",
+    }
+]
 
 
 def _request(*candidates: dict[str, object]) -> TaskCleanupRequest:
@@ -79,3 +92,71 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     assert report.reason == "Investigation failed: inspect blew up"
     assert report.citedEventIds == []
     assert "model_cost_usd" in result
+
+
+class _ReadingChat:
+    """맡은 후보의 이벤트를 한 번 읽고 판정을 내는 도구 루프 대역이다."""
+
+    def __init__(self, gate: asyncio.Barrier) -> None:
+        self.gate = gate
+
+    def bind_tools(self, _tools: list[Any], **_kwargs: Any) -> _ReadingChat:
+        return self
+
+    def bind(self, **_kwargs: Any) -> _ReadingChat:
+        return self
+
+    async def ainvoke(self, messages: list[Any]) -> Any:
+        text = " ".join(str(getattr(message, "content", message)) for message in messages)
+        task_id = next(name for name in ("task-1", "task-2") if name in text)
+        if not any(getattr(message, "type", "") == "tool" for message in messages):
+            await self.gate.wait()
+            return mk_ai(
+                tool_calls=[
+                    {
+                        "name": "get_task_events",
+                        "args": {"taskId": task_id},
+                        "id": f"call-read-{task_id}",
+                        "type": "tool_call",
+                    }
+                ]
+            )
+        return mk_ai(
+            tool_calls=[
+                {
+                    "name": "InspectReport",
+                    "args": {
+                        "taskId": task_id,
+                        "archivable": True,
+                        "reason": "활동이 없다",
+                        "citedEventIds": ["event-1"],
+                    },
+                    "id": f"call-report-{task_id}",
+                    "type": "tool_call",
+                }
+            ]
+        )
+
+
+async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장부에_쌓는다() -> None:
+    req = _request(_candidate("task-1", has_events=True), _candidate("task-2", has_events=True))
+    deps = CleanupDeps(
+        req=req,
+        reader=CleanupLedgerReader(FakeTracerApi(_EVENT_ROWS)),  # type: ignore[arg-type]
+        usage=ExecutionTrace(),
+        chats=ChatPair(_ReadingChat(asyncio.Barrier(2)), None),  # type: ignore[arg-type]
+        budget=ExecutionBudget(1.0, mk_rates()),
+        prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
+        language_directives=TASK_CLEANUP_PROMPT.language_directives,
+    )
+    node = InspectNode(deps)
+
+    results = await asyncio.gather(
+        node.run(InspectDispatch(assignment=InspectAssignment(taskId="task-1", weight=1), cost_budget=0.25)),
+        node.run(InspectDispatch(assignment=InspectAssignment(taskId="task-2", weight=1), cost_budget=0.25)),
+    )
+
+    # 두 검토가 컴파일된 agent 하나를 함께 써도 장부는 각자의 것으로 남는다.
+    assert deps.agents.size() == 1
+    assert set(results[0]["event_ids_by_task"]) == {"task-1"}
+    assert set(results[1]["event_ids_by_task"]) == {"task-2"}
