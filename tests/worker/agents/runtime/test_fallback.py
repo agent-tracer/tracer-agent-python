@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
-from anthropic import APIConnectionError
+from anthropic import APIConnectionError, BadRequestError
 from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
@@ -73,6 +73,23 @@ async def test_취소는_대체_없이_그대로_재전파된다() -> None:
 
     with pytest.raises(asyncio.CancelledError):
         await middleware.awrap_model_call(_request(), handler)
+
+
+async def test_요청이_틀린_오류는_대체_없이_그대로_재전파된다() -> None:
+    # 같은 요청을 대체 모델에 보내도 같은 거절이 오므로 예산만 더 쓴다.
+    request = httpx.Request("POST", "https://api.anthropic.com")
+    invalid = BadRequestError(
+        message="max_tokens가 모델 상한을 넘는다",
+        response=httpx.Response(400, request=request),
+        body=None,
+    )
+    handler, calls = _handler(fails=1, error=invalid)
+    middleware = FallbackModelMiddleware(_FALLBACK)
+
+    with pytest.raises(BadRequestError):
+        await middleware.awrap_model_call(_request(), handler)
+
+    assert calls == [_PRIMARY]
 
 
 @pytest.mark.parametrize(
