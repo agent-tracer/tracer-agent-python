@@ -79,4 +79,4 @@ async def test_쓰기_도구는_읽기_진입점으로_부를_수_없다() -> No
     client, _ = _client({})
 
     with pytest.raises(ValueError):
-        await client.read("delete_task", {"taskId": "task-1"})
+        await client.read("propose_task_write", {"action": "delete", "taskId": "task-1"})

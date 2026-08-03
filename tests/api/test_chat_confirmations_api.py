@@ -18,16 +18,16 @@ class Test확인_대기:
 
         res = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         )
 
         assert res.status_code == 201
         data = res.json()["data"]
         assert list(data) == ["confirmationId", "toolName", "status", "summary", "note"]
         assert data["status"] == "pending"
-        assert data["summary"] == "archive_task(taskId=task-1)"
+        assert data["summary"] == "propose_task_write(action=archive, taskId=task-1)"
         assert executor.calls == []
-        assert store.rows("chat_pending_tools")[0]["tool_name"] == "archive_task"
+        assert store.rows("chat_pending_tools")[0]["tool_name"] == "propose_task_write"
 
     def test_확인_게이트가_없는_도구는_대기_행에_세우지_않는다(
         self, client: TestClient, store: SqliteLedgerSql
@@ -44,7 +44,7 @@ class Test확인_대기:
         seed_thread(store)
         confirmation = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         ).json()["data"]["confirmationId"]
 
         res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
@@ -53,7 +53,7 @@ class Test확인_대기:
         data = res.json()["data"]
         assert list(data) == ["confirmationId", "toolName", "status", "result", "execution"]
         assert data["status"] == "approved"
-        assert executor.calls == [("local", "archive_task", {"taskId": "task-1"})]
+        assert executor.calls == [("local", "propose_task_write", {"action": "archive", "taskId": "task-1"})]
         message = store.rows("chat_messages")[0]
         assert message["role"] == "tool"
         assert message["tool_call_id"] == confirmation
@@ -65,7 +65,7 @@ class Test확인_대기:
         seed_thread(store)
         confirmation = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         ).json()["data"]["confirmationId"]
 
         res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
@@ -82,7 +82,7 @@ class Test확인_대기:
         seed_thread(store)
         confirmation = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         ).json()["data"]["confirmationId"]
 
         res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "reject"})
@@ -96,7 +96,7 @@ class Test확인_대기:
         seed_thread(store)
         confirmation = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         ).json()["data"]["confirmationId"]
 
         res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "reject"})
@@ -111,7 +111,7 @@ class Test확인_대기:
         seed_thread(store)
         confirmation = client.post(
             f"{THREADS}/t1/confirmations",
-            json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
         ).json()["data"]["confirmationId"]
         client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "reject"})
 
@@ -131,7 +131,10 @@ class Test확인_대기:
     ) -> None:
         seed_thread(store)
 
-        res = client.post(f"{THREADS}/t1/confirmations", json={"toolName": "archive_task", "args": {}})
+        res = client.post(
+            f"{THREADS}/t1/confirmations",
+            json={"toolName": "propose_task_write", "args": {"action": "archive"}},
+        )
 
         assert res.status_code == 400
         assert store.rows("chat_pending_tools") == []

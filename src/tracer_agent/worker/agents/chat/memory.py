@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.bindings import binding_for, fill_path
 from tracer_agent.shared.agents.chat.tools.surface import (
     MEMORY_SURFACE,
     recall_tool_name,
@@ -48,7 +48,7 @@ class ChatMemoryClient:
         return await self._call(RECALL_TOOL, {})
 
     async def _call(self, tool_name: str, args: JsonObject) -> ChatMemoryResult:
-        binding = TOOL_BINDINGS[tool_name]
+        binding = binding_for(tool_name, args)
         if tool_surface(tool_name) != MEMORY_SURFACE:
             raise ValueError(f"{tool_name} is not a memory tool")
         url = f"{self._base_url}{fill_path(binding, args)}"

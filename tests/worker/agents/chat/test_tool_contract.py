@@ -97,8 +97,8 @@ def test_계약이_object라_적은_인자는_모델이_객체로_보낸다() ->
 
     assert declared == {
         ("enqueue_job", "input"),
-        ("create_rule", "expectation"),
-        ("update_rule", "expectation"),
+        ("propose_rule_write", "expectation"),
+        ("propose_rule_write", "expectation"),
     }
     for name, arg in declared:
         variant = _variants(_langchain_tools()[name].tool_call_schema["properties"][arg])[0]

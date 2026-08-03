@@ -200,36 +200,80 @@ def _one_id(key: str, sentence: str) -> Callable[[JsonObject], ChatToolCall]:
     return plan
 
 
+def _by_action(
+    plans: dict[str, Callable[[JsonObject], ChatToolCall]],
+) -> Callable[[JsonObject], ChatToolCall]:
+    """action 이 고른 계획을 실행하고 자리를 고르는 쪽이 읽도록 action 을 인자에 남긴다."""
+
+    def plan(args: JsonObject) -> ChatToolCall:
+        action = _req(args, "action")
+        chosen = plans.get(action)
+        if chosen is None:
+            raise ChatToolArgsInvalid(f"{action} is not an action of this tool")
+        call = chosen(args)
+        return ChatToolCall(args={**call.args, "action": action}, describe=call.describe)
+
+    return plan
+
+
+def _remember_fact(args: JsonObject) -> ChatToolCall:
+    key = _req(args, "key")
+    return _plain({"key": key, "content": _req(args, "content")}, f'Remembered "{key}" about you.')
+
+
+def _update_memo(args: JsonObject) -> ChatToolCall:
+    memo_id = _req(args, "memoId")
+    return _plain({"memoId": memo_id, "body": _req(args, "body")}, f"Updated memo {memo_id}.")
+
+
 _PLANS: dict[str, Callable[[JsonObject], ChatToolCall]] = {
-    "update_task": _update_task,
-    "archive_task": _one_id("taskId", "Archived task {}."),
-    "unarchive_task": _one_id("taskId", "Unarchived task {}."),
-    "delete_task": _one_id("taskId", "Deleted task {}."),
-    "remember_fact": lambda args: _plain(
-        {"key": _req(args, "key"), "content": _req(args, "content")},
-        f'Remembered "{_req(args, "key")}" about you.',
-    ),
-    "create_memo": _create_memo,
-    "update_memo": lambda args: _plain(
-        {"memoId": _req(args, "memoId"), "body": _req(args, "body")},
-        f"Updated memo {_req(args, 'memoId')}.",
-    ),
-    "delete_memo": _one_id("memoId", "Deleted memo {}."),
-    "create_rule": _create_rule,
-    "update_rule": _update_rule,
-    "delete_rule": _one_id("ruleId", "Deleted rule {}."),
-    "approve_rule": _approve_rule,
-    "reevaluate_rule": _reevaluate_rule,
-    "create_tag": _create_tag,
-    "update_tag": _update_tag,
-    "delete_tag": _one_id("tagId", "Deleted tag {}."),
-    "set_task_tags": _set_task_tags,
-    "accept_recipe": _one_id("recipeId", "Accepted recipe {}."),
-    "dismiss_recipe": _one_id("recipeId", "Dismissed recipe {}."),
-    "retire_recipe": _one_id("recipeId", "Retired recipe {}."),
-    "accept_cleanup": _one_id("suggestionId", "Accepted cleanup suggestion {}."),
-    "dismiss_cleanup": _one_id("suggestionId", "Dismissed cleanup suggestion {}."),
+    "remember_fact": _remember_fact,
     "enqueue_job": _enqueue_job,
+    "propose_task_write": _by_action(
+        {
+            "update": _update_task,
+            "archive": _one_id("taskId", "Archived task {}."),
+            "unarchive": _one_id("taskId", "Unarchived task {}."),
+            "delete": _one_id("taskId", "Deleted task {}."),
+        }
+    ),
+    "propose_memo_write": _by_action(
+        {
+            "create": _create_memo,
+            "update": _update_memo,
+            "delete": _one_id("memoId", "Deleted memo {}."),
+        }
+    ),
+    "propose_rule_write": _by_action(
+        {
+            "create": _create_rule,
+            "update": _update_rule,
+            "delete": _one_id("ruleId", "Deleted rule {}."),
+            "approve": _approve_rule,
+            "reevaluate": _reevaluate_rule,
+        }
+    ),
+    "propose_tag_write": _by_action(
+        {
+            "create": _create_tag,
+            "update": _update_tag,
+            "delete": _one_id("tagId", "Deleted tag {}."),
+            "assign": _set_task_tags,
+        }
+    ),
+    "propose_recipe_write": _by_action(
+        {
+            "accept": _one_id("recipeId", "Accepted recipe {}."),
+            "dismiss": _one_id("recipeId", "Dismissed recipe {}."),
+            "retire": _one_id("recipeId", "Retired recipe {}."),
+        }
+    ),
+    "propose_cleanup_write": _by_action(
+        {
+            "accept": _one_id("suggestionId", "Accepted cleanup suggestion {}."),
+            "dismiss": _one_id("suggestionId", "Dismissed cleanup suggestion {}."),
+        }
+    ),
 }
 
 CONFIRMABLE_TOOLS: frozenset[str] = frozenset(_PLANS)

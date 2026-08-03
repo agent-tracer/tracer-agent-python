@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import quote
+
+from .surface import chat_tool_bindings
 
 _PLACEHOLDER = re.compile(r"\{([^}]+)\}")
 
@@ -26,116 +29,54 @@ class ToolBinding:
         return tuple(_PLACEHOLDER.findall(self.path))
 
 
-def _get(path: str, *, path_args: tuple[str, ...] = (), query: tuple[str, ...] = ()) -> ToolBinding:
-    # 읽기 도구는 쿼리 이름이 도구 인자 이름과 같아 대응을 항등으로 만든다.
+def _binding(declared: Mapping[str, Any]) -> ToolBinding:
     return ToolBinding(
-        method="GET",
-        path=path,
-        path_args=path_args,
-        query={name: name for name in query},
+        method=str(declared["method"]),
+        path=str(declared["path"]),
+        path_args=tuple(str(name) for name in declared["pathArgs"]),
+        query=dict(declared["query"]),
+        body=dict(declared["body"]),
+        body_constants=dict(declared["bodyConstants"]),
     )
 
 
-def _write(
-    method: str,
-    path: str,
-    *,
-    path_args: tuple[str, ...] = (),
-    body: Mapping[str, str] | None = None,
-    body_constants: Mapping[str, str] | None = None,
-) -> ToolBinding:
-    return ToolBinding(
-        method=method,
-        path=path,
-        path_args=path_args,
-        body=dict(body or {}),
-        body_constants=dict(body_constants or {}),
-    )
-
-
-def _same(*names: str) -> dict[str, str]:
-    return {name: name for name in names}
+def _section() -> Mapping[str, Any]:
+    section: Mapping[str, Any] = chat_tool_bindings()
+    return section
 
 
 TOOL_BINDINGS: dict[str, ToolBinding] = {
-    "search_tasks": _get(
-        "/api/v1/tasks",
-        query=("status", "origin", "archived", "root", "parentTaskId", "cursor", "limit"),
-    ),
-    "get_task": _get("/api/v1/tasks/{taskId}", path_args=("taskId",)),
-    "get_timeline": _get("/api/v1/tasks/{taskId}/timeline", path_args=("taskId",), query=("cursor", "limit")),
-    "search_events": _get(
-        "/api/v1/events/search", query=("q", "taskId", "kind", "lane", "from", "to", "limit")
-    ),
-    "list_memos": _get("/api/v1/memos", query=("taskId", "eventId")),
-    "list_rules": _get("/api/v1/rules", query=("taskId", "all")),
-    "get_rule_evidence": _get("/api/v1/rules/{ruleId}/evidence", path_args=("ruleId",), query=("taskId",)),
-    "list_tags": _get("/api/v1/tags"),
-    "list_recipes": _get("/api/v1/recipes", query=("status",)),
-    "list_cleanup_suggestions": _get("/api/v1/task-cleanup/suggestions", query=("status",)),
-    "get_job": _get("/api/agent/jobs/{jobId}", path_args=("jobId",)),
-    "update_task": _write(
-        "PATCH", "/api/v1/tasks/{taskId}", path_args=("taskId",), body=_same("title", "status")
-    ),
-    "archive_task": _write("POST", "/api/v1/tasks/{taskId}/archive", path_args=("taskId",)),
-    "unarchive_task": _write("DELETE", "/api/v1/tasks/{taskId}/archive", path_args=("taskId",)),
-    "delete_task": _write("DELETE", "/api/v1/tasks/{taskId}", path_args=("taskId",)),
-    "create_memo": _write(
-        "POST",
-        "/api/v1/memos",
-        body=_same("taskId", "body", "eventId"),
-        # 저자는 모델이 정할 수 없고 에이전트가 쓴 메모임을 실행이 고정한다.
-        body_constants={"author": "agent"},
-    ),
-    "update_memo": _write("PATCH", "/api/v1/memos/{memoId}", path_args=("memoId",), body=_same("body")),
-    "delete_memo": _write("DELETE", "/api/v1/memos/{memoId}", path_args=("memoId",)),
-    "create_rule": _write(
-        "POST",
-        "/api/v1/rules",
-        body={
-            **_same("taskId", "anchorEventId", "name"),
-            "expectation": "expect",
-            **_same("severity", "rationale"),
-        },
-    ),
-    "update_rule": _write(
-        "PATCH",
-        "/api/v1/rules/{ruleId}",
-        path_args=("ruleId",),
-        body={"name": "name", "expectation": "expect", **_same("severity", "rationale")},
-    ),
-    "delete_rule": _write("DELETE", "/api/v1/rules/{ruleId}", path_args=("ruleId",)),
-    "approve_rule": _write("POST", "/api/v1/rules/{ruleId}/approve", path_args=("ruleId",)),
-    "reevaluate_rule": _write("POST", "/api/v1/rules/{ruleId}/reevaluate", path_args=("ruleId",)),
-    "create_tag": _write("POST", "/api/v1/tags", body=_same("name", "color", "description")),
-    "update_tag": _write(
-        "PATCH",
-        "/api/v1/tags/{tagId}",
-        path_args=("tagId",),
-        body=_same("name", "color", "description"),
-    ),
-    "delete_tag": _write("DELETE", "/api/v1/tags/{tagId}", path_args=("tagId",)),
-    "set_task_tags": _write("PUT", "/api/v1/task-tags", body=_same("taskId", "tagIds")),
-    "accept_recipe": _write("POST", "/api/v1/recipes/{recipeId}/accept", path_args=("recipeId",)),
-    "dismiss_recipe": _write("POST", "/api/v1/recipes/{recipeId}/dismiss", path_args=("recipeId",)),
-    "retire_recipe": _write("POST", "/api/v1/recipes/{recipeId}/retire", path_args=("recipeId",)),
-    "accept_cleanup": _write(
-        "POST", "/api/v1/task-cleanup/suggestions/{suggestionId}/accept", path_args=("suggestionId",)
-    ),
-    "dismiss_cleanup": _write(
-        "POST",
-        "/api/v1/task-cleanup/suggestions/{suggestionId}/dismiss",
-        path_args=("suggestionId",),
-    ),
-    "enqueue_job": _write("POST", "/api/agent/jobs", body=_same("kind", "input")),
-    "recall_facts": _get("/api/agent/chat/memories"),
-    "remember_fact": ToolBinding(
-        method="PUT",
-        path="/api/agent/chat/memories/{key}",
-        path_args=("key",),
-        body=_same("content"),
-    ),
+    str(name): _binding(declared) for name, declared in _section()["bindings"].items()
 }
+
+# action 을 받는 도구가 그 action 마다 갖는 자리이며 값은 계약이 소유한다.
+TOOL_ACTION_BINDINGS: dict[str, dict[str, ToolBinding]] = {
+    str(name): {str(action): _binding(one) for action, one in actions.items()}
+    for name, actions in _section()["actionBindings"].items()
+}
+
+
+def takes_action(tool_name: str) -> bool:
+    """이 도구가 action 으로 자리를 가르는지 알린다."""
+    return tool_name in TOOL_ACTION_BINDINGS
+
+
+def binding_for(tool_name: str, args: Mapping[str, object]) -> ToolBinding:
+    """도구 이름과 인자에 맞는 자리를 내며 계약에 없는 이름이나 action 이면 거절한다."""
+    actions = TOOL_ACTION_BINDINGS.get(tool_name)
+    if actions is None:
+        binding = TOOL_BINDINGS.get(tool_name)
+        if binding is None:
+            raise KeyError(f"{tool_name} is not a contract tool")
+        return binding
+    action = args.get("action")
+    if not isinstance(action, str):
+        raise KeyError(f"{tool_name} needs an action")
+    chosen = actions.get(action)
+    if chosen is None:
+        raise KeyError(f"{tool_name} has no {action} action")
+    return chosen
+
 
 # 대응하는 REST API가 아직 없어 실행 프로세스 안에서 처리되는 도구는 이제 없다.
 LOCAL_TOOL_NAMES: tuple[str, ...] = ()

@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from tracer_agent.shared.agents.chat.tools.bindings import TOOL_BINDINGS, fill_path
+from tracer_agent.shared.agents.chat.tools.bindings import binding_for, fill_path
 from tracer_agent.shared.agents.chat.tools.surface import READ_SURFACES, tool_surface
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 
@@ -62,7 +62,7 @@ class ChatReadClient:
 
     async def read(self, tool_name: str, args: JsonObject) -> ChatReadResult:
         """도구 이름에 맞는 읽기 API를 실행 범위 자격과 함께 되읽는다."""
-        binding = TOOL_BINDINGS[tool_name]
+        binding = binding_for(tool_name, args)
         if tool_surface(tool_name) not in READ_SURFACES:
             raise ValueError(f"{tool_name} is not a read tool")
         params: dict[str, Any] = {

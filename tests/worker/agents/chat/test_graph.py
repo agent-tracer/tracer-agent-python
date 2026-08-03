@@ -60,7 +60,7 @@ async def _run(
 async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변이_나온다() -> None:
     result = await _run(
         [
-            [{"name": "archive_task", "args": {"taskId": "task-1"}}],
+            [{"name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}],
             "task-1 아카이브를 제안했고 승인을 기다립니다.",
         ],
     )
@@ -71,9 +71,9 @@ async def test_쓰기_도구는_실행_대신_제안으로_기록되고_답변�
     # 확인 대기 행은 도구를 부른 그 자리에서 창구가 세우고, 산출물은 그 id를 인용만 한다.
     assert proposals == [
         {
-            "confirmationId": "conf-archive_task",
-            "toolName": "archive_task",
-            "args": {"taskId": "task-1"},
+            "confirmationId": "conf-propose_task_write",
+            "toolName": "propose_task_write",
+            "args": {"action": "archive", "taskId": "task-1"},
         }
     ]
     assert isinstance(data["assistantText"], str)
@@ -193,7 +193,7 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
     chat = FakeToolLoopChat(
         [
             [{"name": "get_task", "args": {"taskId": "task-1"}}],
-            [{"name": "archive_task", "args": {"taskId": "task-1"}}],
+            [{"name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}],
             [{"name": "recall_facts", "args": {}}],
             "정리했습니다.",
         ]

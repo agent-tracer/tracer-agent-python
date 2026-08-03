@@ -8,7 +8,7 @@ from typing import Any, Protocol
 import httpx
 
 from ...runtime.dependencies import MONITOR_USER_HEADER
-from ..tools.bindings import TOOL_BINDINGS, fill_path
+from ..tools.bindings import binding_for, fill_path
 from .tool_calls import plan_chat_tool_call
 
 TOOL_CALL_TIMEOUT_S = 20.0
@@ -41,9 +41,11 @@ class HttpChatToolExecutor:
 
     async def execute(self, user_id: str, tool_name: str, args: dict[str, Any]) -> str:
         """승인된 도구 하나를 부르고 그 응답에서 대화에 남길 문장을 만든다."""
-        binding = TOOL_BINDINGS[tool_name]
         call = plan_chat_tool_call(tool_name, args)
-        body = {key: value for key, value in call.args.items() if key not in binding.path_args}
+        binding = binding_for(tool_name, call.args)
+        body = {
+            key: value for key, value in call.args.items() if key not in binding.path_args and key != "action"
+        }
         body.update(binding.body_constants)
         base_url = self._agent_base_url if _calls_agent_upstream(binding.path) else self._tracer_base_url
         response = await self._client.request(

@@ -28,14 +28,16 @@ class Test실행_조회:
         seed_execution(store, "e1", offset=0, status="completed")
         seed_execution(store, "e2", offset=10)
         seed_pending_tool(store, "c1")
-        seed_pending_tool(store, "c2", status="approved", tool_name="delete_task", args={})
+        seed_pending_tool(
+            store, "c2", status="approved", tool_name="propose_task_write", args={"action": "delete"}
+        )
 
         data = client.get(f"{THREADS}/t1/executions").json()["data"]
 
         assert [execution["id"] for execution in data["items"]] == ["e2", "e1"]
         assert list(data["items"][0]) == EXECUTION_FIELDS
         assert data["confirmations"] == [
-            {"id": "c1", "toolName": "archive_task", "args": {"taskId": "task-1"}}
+            {"id": "c1", "toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
         ]
 
     def test_궤적은_시도와_순번의_오름차순으로_낸다(self, client: TestClient, store: SqliteLedgerSql) -> None:

@@ -53,3 +53,9 @@ def recall_tool_name() -> str:
     if len(names) != 1:
         raise ValueError("contract declares no single memory surface tool")
     return names[0]
+
+
+def chat_tool_bindings() -> Mapping[str, Any]:
+    """도구가 부르는 자리의 선언이며 action 을 받는 도구는 그 action 마다 자리를 갖는다."""
+    declared: Mapping[str, Any] = _chat_tool_contract()["bindings"]
+    return declared

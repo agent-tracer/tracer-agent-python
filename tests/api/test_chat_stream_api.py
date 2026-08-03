@@ -72,7 +72,7 @@ class Test실행_스냅샷_스트림:
         assert body.splitlines()[0] == "event: snapshot"
         assert frames[0]["execution"]["status"] == "completed"  # type: ignore[index]
         assert frames[0]["confirmations"] == [
-            {"id": "c1", "toolName": "archive_task", "args": {"taskId": "task-1"}}
+            {"id": "c1", "toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
         ]
 
     def test_남의_실행의_연결은_열지_않는다(self, client: TestClient, store: SqliteLedgerSql) -> None:

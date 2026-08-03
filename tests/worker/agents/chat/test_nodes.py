@@ -95,7 +95,7 @@ async def test_창구가_없으면_draft를_보내지_않는다() -> None:
 async def test_접수된_실행의_결과가_제안_쓰기를_실행_없이_담아_낸다() -> None:
     result, _posted = await _run(
         [
-            [{"name": "archive_task", "args": {"taskId": "task-1"}}],
+            [{"name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}],
             "task-1 아카이브를 제안했고 승인을 기다립니다.",
         ],
         readApiBaseUrl="http://tracer-api.test",
@@ -103,9 +103,9 @@ async def test_접수된_실행의_결과가_제안_쓰기를_실행_없이_담�
 
     assert result["proposedWrites"] == [
         {
-            "confirmationId": "conf-archive_task",
-            "toolName": "archive_task",
-            "args": {"taskId": "task-1"},
+            "confirmationId": "conf-propose_task_write",
+            "toolName": "propose_task_write",
+            "args": {"action": "archive", "taskId": "task-1"},
         }
     ]
     assert result["assistantText"] != ""

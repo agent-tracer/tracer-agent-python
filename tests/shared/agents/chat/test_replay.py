@@ -13,7 +13,7 @@ from tracer_agent.shared.agents.chat.surface.replay import (
     select_replay_messages,
 )
 
-CALL = {"id": "call-1", "name": "archive_task", "args": {"taskId": "task-1"}}
+CALL = {"id": "call-1", "name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
 
 
 def _row(message_id: str, role: str, content: str, **extra: Any) -> dict[str, Any]:

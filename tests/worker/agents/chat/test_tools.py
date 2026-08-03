@@ -24,7 +24,7 @@ _BASE_URL = "http://tracer-api.test"
 
 def _tool(client: ChatWriteClient | None, proposals: list[ProposedWrite]) -> Any:
     registry = build_chat_registry(None, proposals, {}, agent_name="chat", write_client=client)
-    return next(t for t in registry.langchain_tools() if t.name == "archive_task")
+    return next(t for t in registry.langchain_tools() if t.name == "propose_task_write")
 
 
 def _write_tool(name: str, client: ChatWriteClient | None, proposals: list[ProposedWrite]) -> Any:
@@ -65,15 +65,18 @@ async def test_쓰기_도구가_실행_대신_확인_창구에_대기_행을_세
     proposals: list[ProposedWrite] = []
     client, http = _client(httpx.MockTransport(handle))
     async with http:
-        payload = json.loads(await _tool(client, proposals).coroutine(taskId="task-1"))
+        payload = json.loads(await _tool(client, proposals).coroutine(action="archive", taskId="task-1"))
 
     assert seen[0].method == "POST"
     assert str(seen[0].url) == f"{_BASE_URL}/api/agent/chat/threads/thread-1/confirmations"
     # 사용자 범위는 도구 인자가 아니라 진입점을 만들 때 묶인 자격이 정한다.
     assert seen[0].headers["authorization"] == "Bearer scope-token"
-    assert json.loads(seen[0].content) == {"toolName": "archive_task", "args": {"taskId": "task-1"}}
+    assert json.loads(seen[0].content) == {
+        "toolName": "propose_task_write",
+        "args": {"action": "archive", "taskId": "task-1"},
+    }
     # 모델이 읽는 확인 대기 문장은 서버가 만들어 그대로 돌아오므로 두 백엔드가 같은 문장을 본다.
-    assert payload["confirmationId"] == "conf-archive_task"
+    assert payload["confirmationId"] == "conf-propose_task_write"
     assert payload["status"] == "pending"
 
 
@@ -81,13 +84,13 @@ async def test_세운_대기_행의_id를_산출물이_인용한다() -> None:
     proposals: list[ProposedWrite] = []
     client, http = _client(httpx.MockTransport(chat_confirmation_response))
     async with http:
-        await _tool(client, proposals).coroutine(taskId="task-1")
+        await _tool(client, proposals).coroutine(action="archive", taskId="task-1")
 
     assert proposals == [
         ProposedWrite(
-            confirmationId="conf-archive_task",
-            toolName="archive_task",
-            args={"taskId": "task-1"},
+            confirmationId="conf-propose_task_write",
+            toolName="propose_task_write",
+            args={"action": "archive", "taskId": "task-1"},
         )
     ]
 
@@ -99,9 +102,9 @@ async def test_창구가_거절하면_계약_문구로_알리고_산출물에_�
     proposals: list[ProposedWrite] = []
     client, http = _client(httpx.MockTransport(handle))
     async with http:
-        text = await _tool(client, proposals).coroutine(taskId="task-1")
+        text = await _tool(client, proposals).coroutine(action="archive", taskId="task-1")
 
-    assert "archive_task" in text
+    assert "propose_task_write" in text
     assert "404" in text
     assert proposals == []
 
@@ -109,9 +112,9 @@ async def test_창구가_거절하면_계약_문구로_알리고_산출물에_�
 async def test_확인_창구가_없는_실행은_제안을_지어내지_않는다() -> None:
     proposals: list[ProposedWrite] = []
 
-    text = await _tool(None, proposals).coroutine(taskId="task-1")
+    text = await _tool(None, proposals).coroutine(action="archive", taskId="task-1")
 
-    assert "archive_task" in text
+    assert "propose_task_write" in text
     assert "{" not in text
     assert proposals == []
 

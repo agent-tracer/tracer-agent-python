@@ -60,7 +60,9 @@ def _seed_all(store: SqliteLedgerSql) -> None:
         "assistant",
         "부른다",
         offset=1,
-        tool_calls=[{"id": "call-1", "name": "archive_task", "args": {"taskId": "task-1"}}],
+        tool_calls=[
+            {"id": "call-1", "name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
+        ],
     )
     seed_message(store, "m3", "tool", "결과", offset=2, tool_call_id="call-1")
     seed_message(store, "m4", "user", "이어서", offset=3)
@@ -71,8 +73,8 @@ def _seed_all(store: SqliteLedgerSql) -> None:
         "s1",
         1,
         0,
-        tool_calls=[{"id": "call-1", "name": "archive_task", "args": {}}],
-        tool_name="archive_task",
+        tool_calls=[{"id": "call-1", "name": "propose_task_write", "args": {"action": "archive"}}],
+        tool_name="propose_task_write",
         tool_call_id="call-1",
         input_tokens=1,
         output_tokens=2,
@@ -188,7 +190,7 @@ class Test창구의_칸:
         data = self._data(
             client.post(
                 f"{THREADS}/t1/confirmations",
-                json={"toolName": "archive_task", "args": {"taskId": "task-1"}},
+                json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
             )
         )
         self._assert_shape(data, WINDOWS[self.window]["data"])
@@ -282,7 +284,7 @@ class Test재생_규칙:
             "assistant",
             "",
             offset=4,
-            tool_calls=[{"id": "call-2", "name": "delete_task", "args": {}}],
+            tool_calls=[{"id": "call-2", "name": "propose_task_write", "args": {"action": "delete"}}],
         )
         seed_message(store, "m6", "user", "그다음", offset=5)
         seed_execution(store, "e2", replay_anchor_message_id="m6", status="completed")

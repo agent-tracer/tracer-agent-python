@@ -163,8 +163,8 @@ def seed_pending_tool(
             {
                 "id": confirmation_id,
                 "thread_id": extra.get("thread_id", "t1"),
-                "tool_name": extra.get("tool_name", "archive_task"),
-                "args": extra.get("args", {"taskId": "task-1"}),
+                "tool_name": extra.get("tool_name", "propose_task_write"),
+                "args": extra.get("args", {"action": "archive", "taskId": "task-1"}),
                 "status": status,
                 "created_at": NOW,
             }

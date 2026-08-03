@@ -8,6 +8,7 @@ from typing import Any
 from tests.support.contract import agent_tools
 from tracer_agent.shared.agents.chat.tools.bindings import (
     LOCAL_TOOL_NAMES,
+    TOOL_ACTION_BINDINGS,
     TOOL_BINDINGS,
     ToolBinding,
     fill_path,
@@ -44,7 +45,9 @@ def test_바인딩_표가_계약과_바이트로_같다() -> None:
 
 
 def test_바인딩과_로컬_도구를_합치면_도구_표면_전체다() -> None:
-    assert set(TOOL_BINDINGS) | set(LOCAL_TOOL_NAMES) == set(chat_tool_declarations())
+    assert set(TOOL_BINDINGS) | set(TOOL_ACTION_BINDINGS) | set(LOCAL_TOOL_NAMES) == set(
+        chat_tool_declarations()
+    )
     assert not set(TOOL_BINDINGS) & set(LOCAL_TOOL_NAMES)
 
 

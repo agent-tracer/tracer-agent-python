@@ -31,7 +31,9 @@ async def test_경로에_실린_인자는_본문에_다시_싣지_않는다() ->
 
     executor, client = _executor(handle)
     async with client:
-        sentence = await executor.execute("local", "archive_task", {"taskId": "task-1"})
+        sentence = await executor.execute(
+            "local", "propose_task_write", {"action": "archive", "taskId": "task-1"}
+        )
 
     assert seen == [("POST", "/api/v1/tasks/task-1/archive", {})]
     assert sentence == "Archived task task-1."
@@ -46,7 +48,9 @@ async def test_실행이_못박은_상수를_본문에_함께_싣는다() -> Non
 
     executor, client = _executor(handle)
     async with client:
-        await executor.execute("local", "create_memo", {"taskId": "task-1", "body": "메모"})
+        await executor.execute(
+            "local", "propose_memo_write", {"action": "create", "taskId": "task-1", "body": "메모"}
+        )
 
     assert seen == [{"taskId": "task-1", "body": "메모", "author": "agent"}]
 
@@ -60,7 +64,7 @@ async def test_요청자는_사용자_헤더로_실린다() -> None:
 
     executor, client = _executor(handle)
     async with client:
-        await executor.execute("u2", "archive_task", {"taskId": "task-1"})
+        await executor.execute("u2", "propose_task_write", {"action": "archive", "taskId": "task-1"})
 
     assert seen == ["u2"]
 
@@ -70,7 +74,7 @@ async def test_상류가_거절하면_대기_행을_닫지_못한다() -> None:
 
     async with client:
         with pytest.raises(ChatToolFailed):
-            await executor.execute("local", "archive_task", {"taskId": "task-1"})
+            await executor.execute("local", "propose_task_write", {"action": "archive", "taskId": "task-1"})
 
 
 async def test_결과_문장은_봉투를_벗긴_본문을_인용한다() -> None:
@@ -79,7 +83,9 @@ async def test_결과_문장은_봉투를_벗긴_본문을_인용한다() -> Non
     )
 
     async with client:
-        sentence = await executor.execute("local", "reevaluate_rule", {"ruleId": "rule-1"})
+        sentence = await executor.execute(
+            "local", "propose_rule_write", {"action": "reevaluate", "ruleId": "rule-1"}
+        )
 
     assert sentence == "Reevaluated rule rule-1 over 2 event(s)."
 
