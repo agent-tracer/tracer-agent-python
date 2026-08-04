@@ -97,7 +97,8 @@ flowchart TB
 
 `survey` 와 `investigate` 는 재시도 정책과 시간 상한을 갖고, `survey` 가 끝내 실패하면 오류 처리기가 빈 계획으로
 낮춰 결론 없는 성공으로 끝낸다. 전문가에게 나눠 줄 턴과 달러는 `runtime/llm/budget.py` 의 `lease_shares` 가
-최대잔여법으로 계산하며 모델은 몫의 비율만 낸다. 위상은 `recipe_scan/graph.py` 가 갖는다.
+최대잔여법으로 계산한다. 모델은 몫의 수치가 아니라 계약이 선언한 `shallow`·`normal`·`deep` 중 하나를 고르고,
+그 깊이가 받는 몫은 `shared/dispatch_depth.py` 가 계약에서 읽는다. 위상은 `recipe_scan/graph.py` 가 갖는다.
 
 ### task-cleanup
 

@@ -116,7 +116,7 @@ task-cleanup.inspect.system
 
 ## 미들웨어와 출력 타입
 
-`build_cleanup_agent`는 prompt cache, model call limit, standardization, tool retry, 선택적 fallback을 사용한다. context editing과 같은 model retry middleware는 사용하지 않는다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 후보 ID·중복·event citation·제안 상한을 결정적으로 검증한다.
+`build_cleanup_agent`는 prompt cache, model call limit, standardization, tool retry, 선택적 fallback을 사용한다. context editing과 같은 model retry middleware는 사용하지 않는다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 도메인 제약을 결정적으로 본다. 겹친 제안과 상한을 넘은 꼬리는 다시 물어도 같은 답이 오므로 사유 없이 지우고, 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다.
 
 ## Temporal 워크플로
 

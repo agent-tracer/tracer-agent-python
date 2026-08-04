@@ -42,14 +42,14 @@ sequenceDiagram
     end
 ```
 
-대화 발췌는 `windowed_turns`에서 최초 turn과 최근 창으로 축약된다. 현재 title 반복, placeholder, 중복, 제안 개수 오류가 있으면 결정적 검증이 실패하고 `repair`가 한 번 실행된다. repair 후에도 유효하지 않으면 빈 제안 목록으로 종료한다.
+대화 발췌는 `windowed_turns`에서 최초 turn과 최근 창으로 축약된다. `normalize_title_candidate`가 현재 title 반복과 placeholder와 중복처럼 기계적으로 지울 수 있는 후보를 먼저 떨어뜨리고, 남은 수가 모자랄 때만 사유를 남겨 `repair`가 한 번 실행된다. repair 후에도 유효하지 않으면 빈 제안 목록으로 종료한다.
 
 ## 노드와 이동
 
 | 노드 | 입력 | 처리 | 갱신 또는 결과 |
 | --- | --- | --- | --- |
 | `investigate` | `TitleSuggestionState` | 현재 title과 대화 문맥을 분석하고 필요할 때 event를 조회한다 | `candidate`, `messages`, 비용 |
-| `validate_candidate` | `TitleSuggestionState` | 제안 수·현재 title 반복·중복·placeholder를 검사한다 | `validation_errors` |
+| `validate_candidate` | `TitleSuggestionState` | 지울 수 있는 후보를 떨어뜨리고 모자란 수만 사유로 남긴다 | `candidate`, `validation_errors` |
 | `repair` | `TitleSuggestionState` | 검증 오류를 포함해 title 후보를 한 번 다시 생성한다 | `candidate`, `repair_attempted` |
 | `finalize` | `TitleSuggestionState` | `TitleSuggestionDraft`를 외부 결과로 직렬화한다 | 제안 목록 |
 | `empty` | `TitleSuggestionState` | 현재 title이 충분하거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
