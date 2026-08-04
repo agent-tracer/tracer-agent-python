@@ -55,7 +55,7 @@ def combine_leases(leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
 def lease_shares(
     requested_turns: Sequence[int], available_turns: int, available_usd: float
 ) -> list[AgentBudgetLease]:
-    """weight 나머지 배분 규칙대로 요청 턴을 가용 턴과 달러로 나눈다."""
+    """몫의 나머지 배분 규칙대로 요청 턴을 가용 턴과 달러로 나눈다."""
     if not requested_turns:
         return []
     granted_turns = _clamp_turns_without_leak(requested_turns, max(available_turns, 0))
@@ -70,7 +70,7 @@ def lease_shares(
 
 
 def _clamp_turns_without_leak(requested: Sequence[int], available: int) -> list[int]:
-    """가용 턴이 요청 합에 못 미칠 때 내림에서 남는 턴을 weight가 큰 순서로 하나씩 돌려준다."""
+    """가용 턴이 요청 합에 못 미칠 때 내림에서 남는 턴을 몫이 큰 순서로 하나씩 돌려준다."""
     total = sum(requested)
     if total <= available:
         return list(requested)
