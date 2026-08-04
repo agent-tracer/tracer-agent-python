@@ -72,16 +72,6 @@ class TaskCleanupRequest(AgentExecutionRequest):
     batch: CleanupBatch
 
 
-class CandidatePage(BaseModel):
-    model_config = _TOOL_RESPONSE
-
-    candidates: list[CleanupCandidate]
-    truncated: bool
-    nextCursor: str | None = None
-    total: int = Field(ge=0)
-    moreCandidatesOutsideBatch: bool
-
-
 class CleanupEvent(BaseModel):
     model_config = _TOOL_RESPONSE
 

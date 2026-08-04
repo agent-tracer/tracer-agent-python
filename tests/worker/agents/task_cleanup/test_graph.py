@@ -62,13 +62,8 @@ def _event_rows(*event_ids: str) -> list[dict[str, Any]]:
 
 
 def _triage(*assignments: dict[str, object]) -> dict[str, list[Any]]:
-    """조율자는 후보를 직접 열지 못하므로 선별자가 목록을 보고 검토자를 배정하게 대본을 구성한다."""
-    return {
-        "Call list_candidate_tasks": [
-            [{"name": "list_candidate_tasks", "args": {}}],
-            {"inspect": list(assignments)},
-        ]
-    }
+    """선별자는 요청이 실어 준 후보 목록만 보고 검토자를 배정한다."""
+    return {"Candidates in this batch": [{"inspect": list(assignments)}]}
 
 
 def _reviewer(task_id: str, report: dict[str, object], *, read: bool = True) -> dict[str, list[Any]]:

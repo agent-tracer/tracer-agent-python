@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from tests.support.prompts import TASK_CLEANUP_PROMPT
-from tracer_agent.shared.agents.task_cleanup.models import InspectReport
+from tracer_agent.shared.agents.task_cleanup.models import (
+    CandidateReason,
+    CleanupBatch,
+    CleanupCandidate,
+    InspectReport,
+)
 from tracer_agent.worker.agents.task_cleanup.prompts import (
     build_inspect_prompt,
     build_prompt_bundle,
@@ -30,11 +35,28 @@ def _show(role: str, system: str, user: str) -> None:
     print(user)
 
 
-def test_선별자는_후보_수만_받는다() -> None:
-    user = build_triage_prompt(7)
+def test_선별자는_후보_목록을_요청으로_받는다() -> None:
+    batch = CleanupBatch(
+        candidates=[
+            CleanupCandidate(
+                id="task-1",
+                visibleTitle="정리해줘",
+                status="running",
+                lastEventAt=None,
+                hasEvents=False,
+                activeChildCount=0,
+                candidateReasons=[CandidateReason.NO_EVENTS],
+            )
+        ]
+    )
+
+    user, listed = build_triage_prompt(TASK_CLEANUP_PROMPT, batch)
 
     _show("triage (선별자)", TRIAGE_SYSTEM_PROMPT, user)
-    assert user == ("Candidates in this batch: 7\nCall list_candidate_tasks to see them before deciding.")
+    assert [candidate.id for candidate in listed] == ["task-1"]
+    assert "Candidates in this batch: 1" in user
+    assert "The qualified candidates in this batch:" in user
+    assert "- task-1 | running | events: no | last: none | reasons: no-events | title: 정리해줘" in user
 
 
 def test_선별자가_후보_목록의_필드와_신호를_안다() -> None:
@@ -47,7 +69,7 @@ def test_선별자가_후보_목록의_필드와_신호를_안다() -> None:
 
 
 def test_조율자는_갖지_않은_도구를_부르라고_지시받지_않는다() -> None:
-    for tool in ("list_candidate_tasks", "get_task_events"):
+    for tool in ("get_task_events",):
         assert tool not in INVESTIGATOR_SYSTEM_PROMPT
     assert "You do NOT open tasks yourself." in INVESTIGATOR_SYSTEM_PROMPT
 

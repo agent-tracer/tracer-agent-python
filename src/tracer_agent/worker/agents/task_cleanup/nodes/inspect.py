@@ -43,15 +43,17 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
 
     async def run(self, _state: TaskCleanupState) -> TriageUpdate:
         deps = self._deps
-        exposed: dict[str, CleanupCandidate] = {}
         event_ids: dict[str, set[str]] = {}
+        # 요청이 실어 준 후보가 곧 조율자가 본 후보이므로 노출 목록을 여기서 결정적으로 세운다.
+        triage_prompt, listed = build_triage_prompt(deps.prompt, deps.req.batch)
+        exposed: dict[str, CleanupCandidate] = {candidate.id: candidate for candidate in listed}
         budget = deps.new_loop(self.name)
         call = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.triage_system,
             tool_names=TRIAGE_TOOL_NAMES,
             output=TriagePlan,
-            messages=[HumanMessage(content=build_triage_prompt(len(deps.req.batch.candidates)))],
+            messages=[HumanMessage(content=triage_prompt)],
             missing_response=f"{AGENT_NAME} triage produced no structured plan",
             exposed_candidates=exposed,
             event_ids_by_task=event_ids,

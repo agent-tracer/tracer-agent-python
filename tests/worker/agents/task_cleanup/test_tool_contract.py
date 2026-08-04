@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from typing import Any, get_args
 
-import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from tests.support.contract import (
     agent_tools,
-    tool_arg,
     tool_arg_descriptions,
     tool_arg_partition,
     tool_descriptions,
@@ -20,7 +18,6 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     MAX_INSPECT_TURNS,
     MAX_REDISPATCH_ROUNDS,
     MAX_SUGGESTIONS,
-    CandidatePage,
     CleanupBatch,
     CleanupCandidate,
     CleanupEvent,
@@ -33,17 +30,9 @@ from tracer_agent.worker.agents.task_cleanup.failures import WORKER_FAILED
 from tracer_agent.worker.agents.task_cleanup.tools import (
     CLEANUP_TOOLS,
     COORDINATOR_TOOL_NAMES,
-    DEFAULT_CANDIDATE_LIMIT,
-    DEFAULT_EVENT_LIMIT,
-    DEFAULT_EVENT_ORDER,
     GET_TASK_EVENTS,
     GET_TASK_EVENTS_DESCRIPTION,
-    LIST_CANDIDATE_TASKS,
-    LIST_CANDIDATE_TASKS_DESCRIPTION,
-    EventOrder,
     GetTaskEventsArgs,
-    ListCandidateTasksArgs,
-    candidate_page,
     validate_tool_args,
 )
 
@@ -96,58 +85,14 @@ def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출�
         assert "runtime" not in schema["properties"]
 
 
-def test_list_candidate_tasks의_필수와_선택_인자가_계약과_같다() -> None:
-    declared = tool_arg_partition("task-cleanup", LIST_CANDIDATE_TASKS)
-
-    assert _partition(ListCandidateTasksArgs) == declared
-
-
 def test_get_task_events의_필수와_선택_인자가_계약과_같다() -> None:
     declared = tool_arg_partition("task-cleanup", GET_TASK_EVENTS)
 
     assert _partition(GetTaskEventsArgs) == declared
 
 
-def test_list_candidate_tasks의_limit_기본값과_상하한이_계약과_같다() -> None:
-    limit = tool_arg("task-cleanup", LIST_CANDIDATE_TASKS, "limit")
-
-    assert limit["default"] == DEFAULT_CANDIDATE_LIMIT
-    assert ListCandidateTasksArgs().limit is None
-    assert ListCandidateTasksArgs(limit=limit["max"]).limit == limit["max"]
-    assert ListCandidateTasksArgs(limit=limit["min"]).limit == limit["min"]
-    with pytest.raises(ValidationError):
-        ListCandidateTasksArgs(limit=limit["max"] + 1)
-    with pytest.raises(ValidationError):
-        ListCandidateTasksArgs(limit=limit["min"] - 1)
-
-
-def test_get_task_events의_limit_기본값과_상하한이_계약과_같다() -> None:
-    limit = tool_arg("task-cleanup", GET_TASK_EVENTS, "limit")
-
-    assert limit["default"] == DEFAULT_EVENT_LIMIT
-    assert GetTaskEventsArgs(taskId="task-1").limit is None
-    assert GetTaskEventsArgs(taskId="task-1", limit=limit["max"]).limit == limit["max"]
-    assert GetTaskEventsArgs(taskId="task-1", limit=limit["min"]).limit == limit["min"]
-    with pytest.raises(ValidationError):
-        GetTaskEventsArgs(taskId="task-1", limit=limit["max"] + 1)
-    with pytest.raises(ValidationError):
-        GetTaskEventsArgs(taskId="task-1", limit=limit["min"] - 1)
-
-
-def test_get_task_events의_읽기_방향_기본값과_허용값이_계약과_같다() -> None:
-    order = tool_arg("task-cleanup", GET_TASK_EVENTS, "order")
-
-    assert order["default"] == DEFAULT_EVENT_ORDER
-    assert list(get_args(EventOrder)) == order["values"]
-    assert GetTaskEventsArgs(taskId="task-1").order is None
-    with pytest.raises(ValidationError):
-        GetTaskEventsArgs(taskId="task-1", order="sideways")  # type: ignore[arg-type]
-
-
 def test_생략한_인자는_검증을_통과하고_실행이_기본값을_채운다() -> None:
     assert validate_tool_args(GET_TASK_EVENTS, {"taskId": "task-1"}) == {"taskId": "task-1"}
-    assert validate_tool_args(LIST_CANDIDATE_TASKS, {}) == {}
-    assert candidate_page(CleanupBatch(), None, None).candidates == []
 
 
 def test_제안_종류가_계약과_같다() -> None:
@@ -161,11 +106,8 @@ def test_제안_상한과_근거_상한이_계약과_같다() -> None:
     assert limits["maxEvidenceEventIds"] == MAX_EVIDENCE_EVENT_IDS
 
 
-def test_list_candidate_tasks의_응답_본문이_계약과_같다() -> None:
-    responses = _contract()["responses"][LIST_CANDIDATE_TASKS]
-
-    assert set(CandidatePage.model_fields) == set(responses["page"])
-    assert set(CleanupCandidate.model_fields) == set(responses["item"])
+def test_접수가_실어_보내는_후보의_본문이_계약과_같다() -> None:
+    assert set(CleanupCandidate.model_fields) == set(_contract()["candidateBatch"]["item"])
 
 
 def test_get_task_events의_응답_본문이_계약과_같다() -> None:
@@ -175,8 +117,8 @@ def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     assert set(CleanupEvent.model_fields) == set(responses["item"])
 
 
-def test_워커가_응답에_필드를_늘려도_도구_루프가_깨지지_않는다() -> None:
-    page = CandidatePage.model_validate(
+def test_접수가_필드를_늘려도_후보_배치가_깨지지_않는다() -> None:
+    batch = CleanupBatch.model_validate(
         {
             "candidates": [
                 {
@@ -190,21 +132,16 @@ def test_워커가_응답에_필드를_늘려도_도구_루프가_깨지지_않�
                     "archivedAt": None,
                 }
             ],
-            "truncated": False,
-            "total": 1,
-            "moreCandidatesOutsideBatch": False,
+            "batchTruncated": False,
             "scannedAt": "2026-07-14T00:00:00Z",
         }
     )
 
-    assert [candidate.id for candidate in page.candidates] == ["task-1"]
+    assert [candidate.id for candidate in batch.candidates] == ["task-1"]
 
 
 def test_도구_설명이_계약과_같다() -> None:
-    assert tool_descriptions("task-cleanup") == {
-        LIST_CANDIDATE_TASKS: LIST_CANDIDATE_TASKS_DESCRIPTION,
-        GET_TASK_EVENTS: GET_TASK_EVENTS_DESCRIPTION,
-    }
+    assert tool_descriptions("task-cleanup") == {GET_TASK_EVENTS: GET_TASK_EVENTS_DESCRIPTION}
 
 
 def test_검토가_무너진_사유_문구가_계약과_같다() -> None:
@@ -217,9 +154,6 @@ def test_검토가_무너진_사유_문구가_계약과_같다() -> None:
 def test_인자_설명이_계약과_같다() -> None:
     contract = tool_arg_descriptions("task-cleanup")
     shown = {
-        LIST_CANDIDATE_TASKS: {
-            arg: field.description for arg, field in ListCandidateTasksArgs.model_fields.items()
-        },
         GET_TASK_EVENTS: {arg: field.description for arg, field in GetTaskEventsArgs.model_fields.items()},
     }
 

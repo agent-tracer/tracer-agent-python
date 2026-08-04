@@ -44,13 +44,7 @@
   },
   "script": {
     "workerTurns": {
-      "Call list_candidate_tasks": [
-        [
-          {
-            "name": "list_candidate_tasks",
-            "args": {}
-          }
-        ],
+      "Candidates in this batch": [
         {
           "inspect": [
             {
@@ -115,10 +109,10 @@
       "repair",
       "empty"
     ],
-    "maxToolCalls": 2,
+    "maxToolCalls": 1,
     "maxCostUsd": 0.007,
     "promptMentions": [
-      "Call list_candidate_tasks",
+      "The qualified candidates in this batch:",
       "Task to judge: task-1"
     ]
   }

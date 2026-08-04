@@ -5,9 +5,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from tracer_agent.shared.agents.task_cleanup.models import InspectReport
+from tracer_agent.shared.agents.task_cleanup.models import (
+    CleanupBatch,
+    CleanupCandidate,
+    InspectReport,
+)
 
 from ..shared.prompt_source_port import AgentPrompt
+from .limits import load_triage_candidate_list_limit
+
+TRIAGE_USER_TEMPLATE = "task-cleanup.triage.user"
 
 
 @dataclass(frozen=True)
@@ -108,13 +115,33 @@ def build_user_prompt(
     ) + render_reports(reports)
 
 
-def build_triage_prompt(candidate_count: int) -> str:
-    """조율자가 무엇을 조사할지 정하는 데 필요한 사실만 싣는다."""
-    return "\n".join(
-        [
-            f"Candidates in this batch: {candidate_count}",
-            "Call list_candidate_tasks to see them before deciding.",
-        ]
+def build_triage_prompt(
+    prompt: AgentPrompt, batch: CleanupBatch, limit: int | None = None
+) -> tuple[str, list[CleanupCandidate]]:
+    """서버가 선별한 후보를 요청이 직접 실어, 조율자가 되읽지 않고 고르게 한다."""
+    template = prompt.template(TRIAGE_USER_TEMPLATE)
+    ceiling = load_triage_candidate_list_limit() if limit is None else limit
+    listed = batch.candidates[:ceiling]
+    lines = [f"Candidates in this batch: {len(batch.candidates)}"]
+    if listed:
+        lines.append("")
+        lines.append(template.slot("candidateList"))
+        lines.extend(_candidate_line(candidate) for candidate in listed)
+    if len(batch.candidates) > len(listed) or batch.batchTruncated:
+        lines.append("")
+        lines.append(template.slot("candidateOverflow"))
+    return "\n".join(lines), listed
+
+
+def _candidate_line(candidate: CleanupCandidate) -> str:
+    """후보 하나가 조율자에게 보이는 한 줄이며 제목은 구분자를 담을 수 있어 뒤에 둔다."""
+    reasons = ", ".join(reason.value for reason in candidate.candidateReasons)
+    return (
+        f"- {candidate.id} | {candidate.status}"
+        f" | events: {'yes' if candidate.hasEvents else 'no'}"
+        f" | last: {candidate.lastEventAt or 'none'}"
+        f" | reasons: {reasons}"
+        f" | title: {candidate.visibleTitle}"
     )
 
 

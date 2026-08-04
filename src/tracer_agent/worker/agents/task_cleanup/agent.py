@@ -85,6 +85,7 @@ async def run_task_cleanup(
             turns_used=prior.turns,
         ),
         prompts=build_prompt_bundle(prompt),
+        prompt=prompt,
         language_directives=prompt.language_directives,
     )
     context = ValidationGraphContext(

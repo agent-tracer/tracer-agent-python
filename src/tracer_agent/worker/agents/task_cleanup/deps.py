@@ -20,6 +20,7 @@ from ..runtime.llm.structured_agent import (
     invoke_structured_agent,
     recursion_limit_for,
 )
+from ..shared.prompt_source_port import AgentPrompt
 from .langchain_agent import build_cleanup_agent
 from .prompts import CleanupPrompts
 from .reader import CleanupLedgerReader
@@ -38,6 +39,7 @@ class CleanupDeps:
     chats: ChatPair
     budget: ExecutionBudget
     prompts: CleanupPrompts
+    prompt: AgentPrompt
     language_directives: Mapping[str, str]
     agents: CompiledAgentCache = field(default_factory=CompiledAgentCache)
 

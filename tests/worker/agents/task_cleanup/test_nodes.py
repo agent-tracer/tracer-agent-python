@@ -77,6 +77,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
             chats=ChatPair(BoomChat([]), None),  # type: ignore[arg-type]
             budget=ExecutionBudget(1.0, mk_rates()),
             prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
+            prompt=TASK_CLEANUP_PROMPT,
             language_directives=TASK_CLEANUP_PROMPT.language_directives,
         )
     )
@@ -147,6 +148,7 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
         chats=ChatPair(_ReadingChat(asyncio.Barrier(2)), None),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),
         prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
+        prompt=TASK_CLEANUP_PROMPT,
         language_directives=TASK_CLEANUP_PROMPT.language_directives,
     )
     node = InspectNode(deps)

@@ -35,7 +35,6 @@ sequenceDiagram
     participant R as RepairNode
     participant API as tracer-api
     G->>T: candidate batch
-    T->>T: list_candidate_tasks
     T-->>G: selected task IDs + weights
     G->>I: Send(task assignment, cost budget)
     par selected candidates
@@ -48,7 +47,7 @@ sequenceDiagram
     V-->>G: finalize / repair / empty
 ```
 
-`TriageNode`는 `list_candidate_tasks`만 사용한다. `InspectNode`는 할당된 task 하나의 event만 읽고, 조율자는 `COORDINATOR_TOOL_NAMES=()`로 도구 없이 보고를 종합한다. event가 있는 후보는 조사된 event를 인용해야 하며, event가 없는 후보는 event 인용 없이 archive 제안이 가능하다.
+`TriageNode`는 도구를 갖지 않고 요청이 실어 준 후보 배치만 본다. `InspectNode`는 할당된 task 하나의 event만 읽고, 조율자는 `COORDINATOR_TOOL_NAMES=()`로 도구 없이 보고를 종합한다. event가 있는 후보는 조사된 event를 인용해야 하며, event가 없는 후보는 event 인용 없이 archive 제안이 가능하다.
 
 ## 노드와 이동
 
@@ -68,7 +67,6 @@ sequenceDiagram
 
 | 도구 | 노드 | 주요 인자 | 역할 |
 | --- | --- | --- | --- |
-| `list_candidate_tasks` | `triage` | `limit`, `cursor` | 서버가 자격을 계산한 후보 배치를 페이지로 노출한다 |
 | `get_task_events` | `inspect` | `taskId`, `limit`, `cursor`, `order` | 후보 task의 event 페이지를 조회하고 event ID를 장부에 기록한다 |
 
 후보 페이지에 노출된 task만 조율자가 제안할 수 있다. `ToolRegistry`는 Pydantic 모델로 인자를 검증하고 후보 노출·event citation 장부를 갱신한다. 전송 오류만 재시도 대상으로 분류하고 HTTP 도메인 오류는 재시도하지 않는다.
