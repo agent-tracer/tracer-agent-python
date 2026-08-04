@@ -57,7 +57,7 @@ TOOL_ACTION_BINDINGS: dict[str, dict[str, ToolBinding]] = {
 
 
 def takes_action(tool_name: str) -> bool:
-    """이 도구가 action 으로 자리를 가르는지 알린다."""
+    """이 도구가 action 으로 자리를 구분하는지 알린다."""
     return tool_name in TOOL_ACTION_BINDINGS
 
 

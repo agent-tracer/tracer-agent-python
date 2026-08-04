@@ -110,7 +110,7 @@ MAX_REDISPATCH_ROUNDS = 1
 
 
 class InspectAssignment(BaseModel):
-    """조율자가 열어보기로 고른 후보 하나와 고른 조사 깊이다."""
+    """조율자가 조회하기로 고른 후보 하나와 고른 조사 깊이다."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -279,7 +279,7 @@ class TaskCleanupState(BudgetSnapshotState):
     # 추가 조사에 넘길 수 있는 남은 비용 상한과, 상한을 지키기 위해 센 파견 횟수다.
     redispatch_ceiling: float
     redispatch_count: int
-    # 후보마다 병렬로 열어보므로 노출·인용·지출이 모두 누적으로 합쳐져야 한다.
+    # 후보마다 병렬로 조회하므로 노출·인용·지출이 모두 누적으로 합쳐져야 한다.
     reports: Annotated[list[InspectReport], operator.add]
     exposed_candidates: Annotated[dict[str, CleanupCandidate], merged_candidates]
     event_ids_by_task: Annotated[dict[str, set[str]], merged_event_ids]

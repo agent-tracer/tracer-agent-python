@@ -60,7 +60,7 @@ class ThreadDriver:
         self.started: list[str] = []
 
     async def wait_condition(self, _predicate: Any, **_options: Any) -> None:
-        """첫 회차만 깨우고 그다음 유휴에서 스레드를 닫는다."""
+        """첫 회차만 통과시키고 그다음 유휴에서 스레드를 닫는다."""
         if self._woke:
             raise TimeoutError
         self._woke = True

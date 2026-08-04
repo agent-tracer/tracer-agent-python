@@ -22,32 +22,63 @@ URL = re.compile(r"^\s*https?://")
 LICENSE = re.compile(r"^\s*(?:Copyright|SPDX-|License|@license)", re.IGNORECASE)
 SENTENCE_BREAK = re.compile(r"[.?!]\s")
 
-# 커밋과 같은 어휘를 주석에도 강제하며 은유와 의인화 대신 코드가 하는 일을 적는다.
-FIGURATIVE = {
-    "걷어내": "제거한다",
-    "가른": "구분한다",
-    "캔다": "수집한다",
-    "잠근": "고정한다",
-    "죽인": "중단한다",
-    "이긴": "우선한다",
-    "돈다": "실행한다",
-    "집는": "가져간다",
-    "흘린": "전송한다",
-    "붙는": "연결된다",
-    "바닥나": "소진된다",
-    "혼자": "단독으로",
-    "태우": "실행한다",
-    "쥐고": "가지고",
-    "무너지": "실패한다",
-    "착지": "종료한다",
-    "강등": "낮춘다",
-    "열어본": "조회한다",
-    "훑는": "조회한다",
-    "깨운": "알린다",
-    "못박": "고정한다",
-    "완주": "끝까지 실행한다",
-    "견준": "비교한다",
-}
+HANGUL_BASE = 0xAC00
+FINAL_COUNT = 28
+# 어간의 받침에 맞지 않는 어미와 조사는 문장을 성립시키지 못한다.
+VERB_ENDING = re.compile(r"(?P<stem>[가-힣])(?P<ending>는다|은다)(?![가-힣])")
+OBJECT_PARTICLE = re.compile(r"(?P<stem>[가-힣])를(?![가-힣])")
+
+# 어간에 어미가 붙어 형태가 바뀌므로 은유와 구어를 실제로 나타나는 표면형으로 적는다.
+FIGURATIVE = tuple(
+    (re.compile(surface), plain)
+    for surface, plain in (
+        (r"걷어", "제거한다"),
+        (r"가른|가르는|가르고", "구분한다"),
+        (r"캔다|캐는|캐고|캐지|캐라|캐낸|캘", "수집한다"),
+        (r"잠근|잠그는", "고정한다"),
+        (r"죽인|죽이|죽어 있", "중단한다"),
+        (r"이긴", "우선한다"),
+        (
+            r"(?<![가-힣])(?:돈다|도는|도므로)|(?<!되)돌[린리]|(?<!되)돌려(?![주준줄줘줍받보])|돌았",
+            "실행한다",
+        ),
+        (r"집는|(?<!뒤)집히|집어", "가져간다"),
+        (r"흘린|흘리|흘려", "전송한다"),
+        (r"붙는", "연결된다"),
+        (r"바닥나|바닥난", "소진된다"),
+        (r"혼자", "단독으로"),
+        (r"태우|태운|태울|태워", "실행한다"),
+        (r"쥐고", "가지고"),
+        (r"무너지|무너진|무너져|무너졌", "실패한다"),
+        (r"착지", "종료한다"),
+        (r"강등", "낮춘다"),
+        (r"열어보|열어본|열어볼|열어봤", "조회한다"),
+        (r"훑는|훑은|훑고|훑어", "조회한다"),
+        (r"깨우고|깨우는|깨운|깨웠|깨움", "알린다"),
+        (r"못박|못 박", "고정한다"),
+        (r"완주", "끝까지 실행한다"),
+        (r"견준|견주고|견주는|견주게|견줄|견줘", "비교한다"),
+        (r"굶기|굶주", "막는다"),
+        (r"새긴|새기|새겨|새겼", "기록한다"),
+        (r"(?<![가-힣])심[는은어었]", "기록한다"),
+        (r"먹도록|먹었|먹는다", "쓴다"),
+        (r"빚는|빚은|빚어", "만든다"),
+        (r"팔지|팔고|파낸", "조사한다"),
+        (r"편다|펴 보|펴지|펼친", "정리한다"),
+        (r"(?<!맞)물린다|물려(?![받준])", "넘긴다"),
+        (r"노릇", "역할을 한다"),
+        (r"멋대로", "근거 없이"),
+        (r"되레", "오히려"),
+        (r"영영", "끝내"),
+        (r"그러듯", "실제 동작과 같이"),
+        (r"감당", "처리한다"),
+        (r"새면", "나간다"),
+    )
+)
+
+
+def has_final(syllable: str) -> bool:
+    return (ord(syllable) - HANGUL_BASE) % FINAL_COUNT != 0
 
 
 def python_files(paths: Iterable[Path]) -> Iterator[Path]:
@@ -105,6 +136,16 @@ def comments(source: str) -> Iterator[tuple[int, bool, str]]:
         yield line_number, full_line, token.string.removeprefix("#").strip()
 
 
+def malformed_korean(text: str) -> str | None:
+    for found in VERB_ENDING.finditer(text):
+        if has_final(found["stem"]) == (found["ending"] == "은다"):
+            return f"어간의 받침에 맞지 않는 어미다: {found.group()}"
+    for found in OBJECT_PARTICLE.finditer(text):
+        if has_final(found["stem"]):
+            return f"받침 있는 말 뒤의 목적격 조사는 을이다: {found.group()}"
+    return None
+
+
 def violation(text: str) -> str | None:
     lines = [line.strip().lstrip("*").strip() for line in text.splitlines()]
     normalized = "\n".join(lines).strip()
@@ -114,9 +155,13 @@ def violation(text: str) -> str | None:
         return "고아 참조나 결정 번호 대신 코드가 강제하는 사실을 직접 적는다"
     if "—" in normalized:
         return "em-dash 부연을 제거하고 결과 중심 문장으로 적는다"
-    for word, plain in FIGURATIVE.items():
-        if word in normalized:
-            return f"은유와 구어 대신 코드가 하는 일을 적는다: {word} → {plain}"
+    for surface, plain in FIGURATIVE:
+        found = surface.search(normalized)
+        if found is not None:
+            return f"은유와 구어 대신 코드가 하는 일을 적는다: {found.group()} → {plain}"
+    broken = malformed_korean(normalized)
+    if broken is not None:
+        return broken
     for line in lines:
         if (
             not line

@@ -74,7 +74,7 @@ class FakeCredentials:
 
 
 class FakeRuleAnchors:
-    """미리 심어 둔 근거만 그 사용자에게 내주는 근거 창구 대역이다."""
+    """미리 기록해 둔 근거만 그 사용자에게 내주는 근거 창구 대역이다."""
 
     def __init__(self) -> None:
         self.anchors: dict[tuple[str, str], RuleAnchor] = {}

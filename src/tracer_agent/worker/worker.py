@@ -153,7 +153,7 @@ def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Set
 
 
 def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobActivities:
-    """잡 셋의 액티비티를 열린 연결에 물려 낸다."""
+    """잡 셋의 액티비티를 열린 연결에 이어 낸다."""
     source = ContractPromptSource()
     return AgentJobActivities(
         settings.tracer_api_url,

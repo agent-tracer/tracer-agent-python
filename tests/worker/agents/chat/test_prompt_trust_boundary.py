@@ -42,7 +42,7 @@ def test_기억을_신뢰하지_않는_구역으로_감싼다() -> None:
 
     assert '<memory source="untrusted">' in context
     assert "</memory>" in context
-    # 심은 문장은 구역 안에만 있고 구역 밖에서 지시문처럼 보이지 않는다.
+    # 넣은 문장은 구역 안에만 있고 구역 밖에서 지시문처럼 보이지 않는다.
     assert context.index('<memory source="untrusted">') < context.index(INJECTION)
     assert context.index(INJECTION) < context.index("</memory>")
 
