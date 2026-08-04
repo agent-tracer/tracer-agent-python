@@ -10,7 +10,7 @@ from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
 from tracer_agent.worker.agents.recipe_scan.tools import RecipeToolContext
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
-from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
+from tracer_agent.worker.agents.runtime.llm.budget import SharedToolLoopBudget, single_loop_budget
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
 from tracer_agent.worker.agents.task_cleanup.tools import CleanupToolContext
 from tracer_agent.worker.agents.title_suggestion.reader import TitleLedgerReader
@@ -19,8 +19,8 @@ from tracer_agent.worker.agents.title_suggestion.tools import TitleToolContext
 _MODEL = "claude-sonnet-4-6"
 
 
-def _budget(agent_name: str) -> ToolLoopBudget:
-    return ToolLoopBudget(agent_name, _MODEL, 2.0, mk_rates(), 0.0)
+def _budget(agent_name: str) -> SharedToolLoopBudget:
+    return single_loop_budget(agent_name, _MODEL, 2.0, mk_rates(), 0.0)
 
 
 def mk_recipe_context(

@@ -108,59 +108,17 @@ class ModelCallBudget(Protocol):
     def charge(self, message: AIMessage) -> None: ...
 
 
-class ToolLoopBudget:
-    """루프 한 번의 모델 비용을 누적하고 상한에서 끊는다."""
-
-    def __init__(
-        self,
-        agent_name: str,
-        model_name: str,
-        max_cost_usd: float,
-        rates: ModelRates,
-        spent: float = 0.0,
-    ) -> None:
-        self._agent = agent_name
-        self._model = model_name
-        self._max = max_cost_usd
-        self._rates = rates
-        self._peak = 0.0
-        self._landed = False
-        self._spent = spent
-        # 상태 채널이 증분을 누적하므로 이어받은 몫과 이 루프가 더한 몫을 구분한다.
-        self._seed = spent
-
-    @property
-    def spent(self) -> float:
-        """이 루프가 지금까지 쓴 모델 비용이다."""
-        return self._spent
-
-    @property
-    def delta(self) -> float:
-        """이어받은 몫을 뺀, 이 루프가 더한 모델 비용이다."""
-        return self._spent - self._seed
-
-    @property
-    def landing(self) -> bool:
-        """지금까지 가장 비쌌던 호출을 한 번 더 처리할 수 없는지 알린다."""
-        return self._spent + self._peak >= self._max
-
-    def land(self) -> None:
-        """결론만 받는 마지막 호출로 넘어갔음을 알린다."""
-        self._landed = True
-
-    def charge(self, message: AIMessage) -> None:
-        usage = extract_token_usage(message)
-        # 폴백이 걸리면 응답이 primary와 다른 모델에서 왔으므로 실제 응답 모델로 단가를 고른다.
-        actual_model, _request_id = message_identity(message)
-        priced_model = actual_model or self._model
-        cost = self._rates.estimate_cost_usd(priced_model, usage.to_dto()) if usage else None
-        if cost is None:
-            raise BudgetExceeded(f"{self._agent} cannot enforce its internal budget for model {priced_model}")
-        self._spent += cost
-        self._peak = max(self._peak, cost)
-        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 여기서 끊으면 산출물만 잃는다.
-        if not self._landed and self._spent > self._max:
-            raise BudgetExceeded(f"{self._agent} exceeded internal model budget ${self._max:.2f}")
+def single_loop_budget(
+    agent_name: str,
+    model_name: str,
+    max_cost_usd: float,
+    rates: ModelRates,
+    spent: float = 0.0,
+) -> SharedToolLoopBudget:
+    """루프가 하나뿐인 실행의 장부이며 집행은 실행 장부 한 곳만 지나간다."""
+    # 상태 채널이 증분을 누적하므로 이어받은 몫을 실행 장부의 시작 지출로 싣는다.
+    execution = ExecutionBudget(max_cost_usd, rates, spent_usd=spent)
+    return execution.new_loop(agent_name, model_name)
 
 
 class ExecutionBudget:

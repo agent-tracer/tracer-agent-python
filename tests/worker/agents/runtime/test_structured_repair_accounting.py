@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 from tests.support.fakes import mk_ai, mk_rates
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
-from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
+from tracer_agent.worker.agents.runtime.llm.budget import SharedToolLoopBudget, single_loop_budget
 from tracer_agent.worker.agents.runtime.llm.standard_agent import (
     StandardAgentContext,
     StandardAgentMiddleware,
@@ -49,7 +49,7 @@ def _model(payloads: list[str]) -> _ProviderModel:
     return model
 
 
-def _context(budget: ToolLoopBudget, trace: ExecutionTrace) -> StandardAgentContext:
+def _context(budget: SharedToolLoopBudget, trace: ExecutionTrace) -> StandardAgentContext:
     return StandardAgentContext(agent_name="test", trace=trace, budget=budget, max_model_turns=4)
 
 
@@ -75,7 +75,7 @@ def _short() -> str:
 async def _spend(payloads: list[str]) -> tuple[float, ExecutionTrace, Any]:
     """주어진 응답으로 agent를 실행하고 그 실행이 청구한 달러와 궤적을 낸다."""
     trace = ExecutionTrace()
-    budget = ToolLoopBudget("test", _MODEL, 1.0, mk_rates())
+    budget = single_loop_budget("test", _MODEL, 1.0, mk_rates())
     result = await _agent(_model(payloads)).ainvoke({"messages": []}, context=_context(budget, trace))
     return budget.spent, trace, result
 
@@ -94,7 +94,7 @@ async def test_거부된_산출과_다시_받은_산출이_모두_청구된다()
 
 async def test_거부된_산출만_남고_끝나도_그_호출이_청구된다() -> None:
     trace = ExecutionTrace()
-    budget = ToolLoopBudget("test", _MODEL, 1.0, mk_rates())
+    budget = single_loop_budget("test", _MODEL, 1.0, mk_rates())
     agent = _agent(_model([_too_long(), _too_long()]))
 
     with pytest.raises(Exception, match="Failed to parse structured output"):

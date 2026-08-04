@@ -1,4 +1,4 @@
-"""ToolLoopBudget이 실제 응답 모델로 과금하는지, 턴 원장이 계약의 셈을 내는지 검증한다(페이크 모델, 네트워크 없음)."""
+"""단일 루프 장부가 실제 응답 모델로 과금하는지, 턴 원장이 계약의 셈을 내는지 검증한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from tracer_agent.worker.agents.runtime.llm.budget import (
     AgentBudgetLease,
     AgentBudgetSpend,
     ExecutionBudget,
-    ToolLoopBudget,
+    single_loop_budget,
 )
 
 _USAGE = {
@@ -26,7 +26,7 @@ _USAGE = {
 
 def test_실제_응답_모델로_단가를_매긴다() -> None:
     # sonnet 생성자로 열어도 응답이 haiku에서 왔으면 haiku 단가($1/1M input)로 매긴다.
-    budget = ToolLoopBudget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
+    budget = single_loop_budget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
     message = mk_ai(usage=_USAGE, response_metadata={"model": "claude-haiku-4-5"})
 
     budget.charge(message)
@@ -35,7 +35,7 @@ def test_실제_응답_모델로_단가를_매긴다() -> None:
 
 
 def test_응답에_모델이_없으면_생성자_모델로_매긴다() -> None:
-    budget = ToolLoopBudget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
+    budget = single_loop_budget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
     message = mk_ai(usage=_USAGE, response_metadata={})
 
     budget.charge(message)
@@ -44,7 +44,7 @@ def test_응답에_모델이_없으면_생성자_모델로_매긴다() -> None:
 
 
 def test_모르는_실제_모델이면_예산을_거부한다() -> None:
-    budget = ToolLoopBudget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
+    budget = single_loop_budget("agent", "claude-sonnet-4-6", 10.0, mk_rates())
     message = mk_ai(usage=_USAGE, response_metadata={"model": "gpt-4o"})
 
     with pytest.raises(BudgetExceeded):

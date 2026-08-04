@@ -11,7 +11,7 @@ from langchain_anthropic import ChatAnthropic
 from tests.support.fakes import FakeToolLoopChat, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
-from tracer_agent.worker.agents.runtime.llm.budget import ToolLoopBudget
+from tracer_agent.worker.agents.runtime.llm.budget import single_loop_budget
 from tracer_agent.worker.agents.runtime.llm.standard_agent import StandardAgentContext
 from tracer_agent.worker.agents.runtime.llm.structured_agent import (
     invoke_structured_agent,
@@ -23,7 +23,7 @@ def _context() -> StandardAgentContext:
     return StandardAgentContext(
         agent_name="recipe-scan",
         trace=ExecutionTrace(),
-        budget=ToolLoopBudget("recipe-scan", "claude-sonnet-4-6", 1.0, mk_rates()),
+        budget=single_loop_budget("recipe-scan", "claude-sonnet-4-6", 1.0, mk_rates()),
         max_model_turns=4,
     )
 

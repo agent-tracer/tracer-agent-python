@@ -23,7 +23,7 @@ from tracer_agent.shared.agents.chat.models import (
 
 from ...runtime.checkpoint import GraphCheckpointProvider
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import ToolLoopBudget
+from ...runtime.llm.budget import SharedToolLoopBudget, single_loop_budget
 from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import recursion_limit_for
 from ...runtime.llm.trajectory import step_content_text
@@ -143,7 +143,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             store=self._memory_store(),
             max_turns=self._req.limits.maxTurns,
         )
-        budget = ToolLoopBudget(
+        budget = single_loop_budget(
             self._agent_name,
             self._req.model,
             self._req.limits.budgetUsd,
@@ -257,7 +257,7 @@ class _PreparedTurn:
     messages_in: list[BaseMessage]
     config: RunnableConfig
     context: StandardAgentContext
-    budget: ToolLoopBudget
+    budget: SharedToolLoopBudget
     proposals: list[ProposedWrite]
 
 
