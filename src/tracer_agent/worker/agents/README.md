@@ -4,7 +4,7 @@
 
 ## 먼저 확인할 결론
 
-Temporal activity가 에이전트 종류에 따라 `run_*` 함수를 호출하고, 각 실행 함수가 요청별 모델·HTTP client·추적 객체·프롬프트를 주입한다. 그래프 정의는 정적으로 컴파일되어 있으며, 요청별 구현 객체는 `ValidationGraphContext.nodes`에 연결된다.
+Temporal activity가 에이전트 종류에 따라 잡 하나의 `run`을 호출하고, 그 템플릿이 실행 하나를 열어 요청별 모델·조회 진입점·추적 객체·프롬프트를 주입한다. 잡 셋은 `runtime.job_agent.JobGraphAgent`를 상속해 조립할 노드와 초기 상태와 산출물만 정한다. 그래프 정의는 정적으로 컴파일되어 있으며, 요청별 구현 객체는 `ValidationGraphContext.nodes`에 연결된다.
 
 ## 전체 토폴로지
 
@@ -13,9 +13,9 @@ flowchart LR
     API[agent-api / worker entrypoint] --> T[Temporal activity]
     T --> DISPATCH{agent kind}
     DISPATCH --> CHAT[run_chat]
-    DISPATCH --> RECIPE[run_recipe_scan]
-    DISPATCH --> CLEANUP[run_task_cleanup]
-    DISPATCH --> TITLE[run_title_suggestion]
+    DISPATCH --> RECIPE[RecipeScanJob.run]
+    DISPATCH --> CLEANUP[TaskCleanupJob.run]
+    DISPATCH --> TITLE[TitleSuggestionJob.run]
     CHAT --> GRAPH[compiled LangGraph]
     RECIPE --> GRAPH
     CLEANUP --> GRAPH
@@ -67,7 +67,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | 상태 | `shared.agents.*.models.*State` | 그래프 전체가 공유하는 실행 입력·부분 갱신·결과를 보유한다 |
 | 노드 | `runtime.node.GraphNode[InputT, UpdateT]` | 이름과 비동기 `run` 메서드와 입력·갱신 타입을 결합한다 |
-| 노드 registry | `runtime.node.node_registry` | 정적 그래프 노드 이름과 요청별 실행 함수를 연결한다 |
+| 노드 registry | `runtime.node.NodeRegistry` | 정적 그래프 노드 이름과 요청별 실행 함수를 연결한다 |
 | 실행 context | `runtime.validation_graph.ValidationGraphContext` | 에이전트 이름, 추적 객체, registry, 검증 router를 보유한다 |
 | 관측 등록 | `runtime.validation_graph.observed` | 노드 시작·완료·실패와 retry·timeout 메타데이터를 기록한다 |
 | 검증 꼬리 | `add_validation_tail` | 검증 → repair 1회 → finalize 또는 empty 경로를 공통화한다 |
@@ -102,18 +102,18 @@ flowchart TD
 
 ## 미들웨어에 해당하는 실행 정책
 
-Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이다. 에이전트별 `langchain_agent.py`가 공통 미들웨어와 선택적 기능을 조합한다.
+Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이다. `runtime/llm/middleware_stack.py`의 `AgentMiddlewareStack`이 네 에이전트의 층과 그 순서를 소유하고, 산출 형태와 상한 처리 방식만 에이전트가 정한다.
 
 | 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
 | --- | --- | --- | --- |
 | 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | `maxTurns + 2` 를 호출 상한으로 적용한다 |
-| 컨텍스트 편집 | `context_editing_middleware()` | Chat·Recipe Scan | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
+| 컨텍스트 편집 | `context_editing_middleware()` | 전체 | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
 | 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
 | 프롬프트 캐시 | `PromptCacheMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다 |
 | 산출 복구 | `StructuredOutputRepairMiddleware` | 잡 셋 | 공급자가 강제하지 않는 제약에 걸린 산출을 사유와 함께 한 번 되먹인다 |
-| 도구 재시도 | `ToolRetryMiddleware` | Chat·Recipe Scan·Task Cleanup | 선언된 일시 오류를 최대 2회 재시도한다 |
+| 도구 재시도 | `ToolRetryMiddleware` | 전체 | 선언된 일시 오류를 최대 2회 재시도한다 |
 | 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | 과부하·속도 제한·연결 오류에서만 대체 모델을 1회 호출한다 |
-| 모델 재시도 | `model_retry_middleware()` | Chat·Recipe Scan | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
+| 모델 재시도 | `model_retry_middleware()` | 전체 | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
 
 ```mermaid
 flowchart LR
@@ -168,7 +168,7 @@ Chat 도구는 `read`, `agentRead`, `memory`, `confirm` surface로 나뉜다. Re
 
 ## 실행 단위 재사용
 
-`create_agent`는 StateGraph를 컴파일하므로 잡 에이전트는 `runtime/llm/agent_cache.py`의 `CompiledAgentCache`를 실행 의존성(`RecipeDeps`·`CleanupDeps`·`TitleDeps`)에 두고 시스템 프롬프트와 도구 이름 집합과 출력 타입과 모델 턴 상한이 같은 호출에 같은 agent를 다시 쓴다. 캐시는 한 실행에 속하며 그 실행의 채팅 클라이언트만 담는다. 도구 직렬화 락은 `StandardAgentContext.tool_lock`이 갖고 호출마다 새로 서므로 agent를 함께 쓰는 팬아웃이 서로를 기다리지 않는다.
+`create_agent`는 StateGraph를 컴파일하므로 잡 에이전트는 `runtime/llm/model_caller.py`의 `StructuredModelCaller`가 `CompiledAgentCache`를 가지고 시스템 프롬프트와 도구 이름 집합과 출력 타입과 모델 턴 상한이 같은 호출에 같은 agent를 다시 쓴다. 호출자는 한 실행에 속하며 그 실행의 채팅 클라이언트만 담는다. 도구 직렬화 락은 `StandardAgentContext.tool_lock`이 갖고 호출마다 새로 서므로 agent를 함께 쓰는 팬아웃이 서로를 기다리지 않는다.
 
 ## 프롬프트 실행 구조
 
@@ -237,16 +237,22 @@ Chat도 스레드 워크플로와 실행 워크플로를 따로 두고 준비·�
 | --- | --- |
 | 노드 계약과 registry | `runtime/node.py` |
 | 검증 그래프와 관측 | `runtime/validation_graph.py` |
+| 검증 노드와 종단 노드의 기계 | `runtime/validation_nodes.py` |
 | 검증 뒤 경로 이름과 그 판정이 읽는 상태 | `runtime/routes.py` |
+| 분기 사유 선언과 판정 | `runtime/routing.py`, 에이전트별 `policy.py` |
 | 경계를 넘는 JSON 값의 타입 | `shared/agents/shared/json_view.py` |
 | HTTP 봉투와 본문 해석 | `shared/agents/shared/wire.py` |
 | 시각 표현과 되읽기 | `shared/agents/shared/instant.py` |
 | 도구 재시도·모델 재시도 미들웨어 | `runtime/llm/retry.py` |
 | 재개 열쇠와 앞선 시도의 지출 | `runtime/durable_graph.py` |
+| 실행 하나의 그래프와 설정과 이어받은 지출 | `runtime/graph_session.py` |
 | 잡 하나의 조립·실행·배달 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |
 | 노드가 함께 받는 실행 의존성 | 에이전트별 `deps.py` |
+| 모델 호출자와 컴파일 캐시 | `runtime/llm/model_caller.py` |
+| 미들웨어 층과 그 순서 | `runtime/llm/middleware_stack.py` |
 | LangChain 표준 실행 체인 | `runtime/llm/standard_agent.py` |
-| 구조화 출력 실행 | `runtime/llm/structured_agent.py` |
+| 구조화 출력 실행과 agent 컴파일 | `runtime/llm/structured_agent.py` |
+| 그래프 상태의 초기값과 잔량 | `shared/agents/{agent}/models.py`, `shared/agents/shared/graph_state.py` |
 | 대체 모델·모델 재시도 | `runtime/llm/fallback.py`, `runtime/llm/retry.py` |
 | 실행 예산 | `runtime/llm/budget.py` |
 | 도구 계약과 registry | `runtime/tooling.py` |

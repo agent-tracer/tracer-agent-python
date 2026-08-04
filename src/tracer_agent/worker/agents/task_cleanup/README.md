@@ -100,7 +100,7 @@ flowchart TD
 
 ### Triage·inspect·repair prompt 원문과 번역
 
-실행별 user prompt는 `Scan time`, 최대 archive task 수, `Output language`, reviewer reports를 추가한다. 관련 구현은 [graph.py](graph.py), [nodes](nodes/), [langchain_agent.py](langchain_agent.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
+실행별 user prompt는 `Scan time`, 최대 archive task 수, `Output language`, reviewer reports를 추가한다. 관련 구현은 [graph.py](graph.py), [nodes](nodes/), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
 
 프롬프트 전문은 문서가 옮겨 적지 않는다. 슬롯의 본문은 계약이, 슬롯을 감싸는 scaffold 는
 `prompts.py` 가 소유한다. 두 축이 같은 template 을 읽으므로 그 본문을 문서 두 벌로 두면
@@ -116,7 +116,7 @@ task-cleanup.inspect.system
 
 ## 미들웨어와 출력 타입
 
-`build_cleanup_agent`는 prompt cache, model call limit, standardization, tool retry, 선택적 fallback을 사용한다. context editing과 같은 model retry middleware는 사용하지 않는다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 도메인 제약을 결정적으로 본다. 겹친 제안과 상한을 넘은 꼬리는 다시 물어도 같은 답이 오므로 사유 없이 지우고, 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다.
+`AgentMiddlewareStack`이 네 에이전트와 같은 층을 같은 순서로 세우며, 공유 장부를 쓰는 도구는 이 호출의 락으로 직렬화한다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 도메인 제약을 결정적으로 본다. 겹친 제안과 상한을 넘은 꼬리는 다시 물어도 같은 답이 오므로 사유 없이 지우고, 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다.
 
 ## Temporal 워크플로
 
@@ -160,7 +160,8 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 그래프 정의 | `graph.py` |
 | 요청별 실행 조립 | `agent.py` |
 | 선별·검사·결정 노드 | `nodes/inspect.py`, `nodes/decision.py`, `nodes/result.py` |
-| LangChain agent와 미들웨어 | `langchain_agent.py` |
+| LangChain agent와 미들웨어 | `runtime/llm/middleware_stack.py`, `runtime/llm/structured_agent.py` |
+| 모델 호출자 조립 | `deps.py` |
 | 도구 registry | `tools/registry.py` |
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py` |

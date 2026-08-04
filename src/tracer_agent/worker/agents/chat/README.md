@@ -158,7 +158,7 @@ stateDiagram-v2
 | 그래프 정의 | `graph.py` |
 | 요청별 실행 조립 | `agent.py` |
 | 대화 노드 | `nodes/converse.py` |
-| LangChain agent와 미들웨어 | `langchain_agent.py` |
+| LangChain agent와 미들웨어 | `langchain_agent.py`, `runtime/llm/middleware_stack.py` |
 | 도구 registry | `tools/registry.py`, `tools/specs.py` |
 | 프롬프트 조립 | `prompts.py` |
 | 예산·상한 정책 | `policy.py` |

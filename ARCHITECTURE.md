@@ -36,7 +36,7 @@ flowchart LR
     LEDGER[("agent-db 실행 원장")]:::ext
     TW["Temporal 워크플로·액티비티<br/>worker/workflows"]:::code
     OG["정적 StateGraph<br/>에이전트별 graph.py"]:::code
-    IA["create_agent 도구 루프<br/>에이전트별 langchain_agent.py"]:::llm
+    IA["create_agent 도구 루프<br/>runtime/llm/model_caller.py"]:::llm
     MW["미들웨어 스택<br/>runtime/llm"]:::code
     TOOLS["ToolRegistry<br/>runtime/tooling.py"]:::code
     MODEL[("Anthropic 모델")]:::ext
@@ -147,8 +147,8 @@ flowchart LR
 
 ## 검증 꼬리
 
-네 에이전트가 `runtime/validation_graph.py` 의 `add_validation_tail` 로 같은 꼬리를 쓴다.
-정규화와 검증은 한 노드 안에서 순서대로 실행되고, 수리는 실행 하나에 한 번만 돈다.
+잡 에이전트 셋이 `runtime/validation_graph.py` 의 `add_validation_tail` 로 같은 꼬리를 쓴다. 대화는 검증 분기가
+없어 이 꼬리를 붙이지 않는다. 정규화와 검증은 한 노드 안에서 순서대로 실행되고, 수리는 실행 하나에 한 번만 돈다.
 
 ```mermaid
 flowchart LR
@@ -166,6 +166,11 @@ flowchart LR
 
 지우기만 하면 되는 결함은 사유를 남기지 않으므로 수리 회차를 쓰지 않는다. 정규화와 검증이 두 구현체에서
 같은 판정을 내는지는 계약의 에이전트별 `cases.json` 이 케이스로 고정한다.
+
+꼬리가 쓰는 노드의 기계는 `runtime/validation_nodes.py` 가 갖는다. `ValidationNode` 가 검증 실패를 궤적에
+남기는 규칙을 소유하고 에이전트는 판정만 넘기며, `ResultNode` 는 확정과 빈 결과 두 자리에 같은 기계를 세우고
+결과를 만드는 규칙만 에이전트에서 받는다. 분기가 궤적에 적는 사유는 `runtime/routing.py` 의
+`ValidationReasons` 로 선언하고 그 값은 에이전트별 `policy.py` 가 갖는다.
 
 ## 도구 표면
 
@@ -246,7 +251,9 @@ flowchart LR
 
 구조화 복구가 실행 표준화보다 바깥에 서므로 스키마에 걸려 버려진 산출도 장부를 지나 예산과 궤적에 남는다.
 캐시 경계는 실행 표준화보다 안쪽에 서야 턴마다 바뀌는 꼬리가 붙은 뒤에 그 앞으로 경계를 놓을 수 있다.
-스택을 세우는 자리는 에이전트별 `langchain_agent.py` 이며 순서 의존은
+스택을 세우는 자리는 `runtime/llm/middleware_stack.py` 의 `AgentMiddlewareStack` 하나이며, 에이전트는 산출 형태와
+상한 처리 방식만 정하고 층의 순서를 다시 적지 않는다. 구조화 복구는 구조화 출력을 요구하는 세 잡만 세우고
+대화는 자유 텍스트를 내므로 그 층이 없다. 순서 의존과 네 에이전트가 같은 층을 세운다는 사실은
 `tests/worker/agents/runtime/test_middleware_order.py` 가 고정한다.
 
 ## 예산과 재개
@@ -269,9 +276,13 @@ flowchart TB
     CK -- "앞선 시도의 달러와 턴" --> B
 ```
 
-네 에이전트 상태가 `BudgetSnapshotState` 를 함께 상속하므로 두 칸이 언제나 누적으로 합쳐진다.
+네 에이전트 상태가 `BudgetSnapshotState` 를 함께 상속하므로 두 칸이 언제나 누적으로 합쳐진다. 팬아웃이 몫을
+나눌 때 보는 잔량은 `remaining_cost_usd` 와 `remaining_turns` 한 쌍이 계산하며, 넘겨 쓴 실행의 잔량을 0에서
+멈추는 규칙도 그 자리에 있다. 상한을 함께 싣는 상태는 `CostCeilingState` 와 `TurnCeilingState` 로 구분한다.
+초기 상태는 상태를 선언한 모듈의 `initial_*_state` 가 세우므로 채널이 늘면 그 자리가 함께 갱신된다.
 재시도는 앞선 시도의 지출을 안고 시작하므로 상한이 실행 하나에 한 번만 열린다.
 예산이 다음 호출을 감당할 수 없으면 실행 표준화가 조사 도구를 거두고 마무리 지시만 남겨 결론을 받는다.
+집행은 `ExecutionBudget` 한 곳만 지나며, 루프가 하나뿐인 대화도 `single_loop_budget` 으로 같은 장부를 쓴다.
 
 ## 대화 워크플로
 

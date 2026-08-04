@@ -110,7 +110,7 @@ flowchart TD
 
 ### Survey·probe·repair prompt 원문
 
-실행별 user prompt는 `Anchor taskId`, `User direction`, `Output language`, 후보 상한, specialist plan, report를 순서대로 추가한다. 관련 구현은 [graph.py](graph.py), [nodes](nodes/), [langchain_agent.py](langchain_agent.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
+실행별 user prompt는 `Anchor taskId`, `User direction`, `Output language`, 후보 상한, specialist plan, report를 순서대로 추가한다. 관련 구현은 [graph.py](graph.py), [nodes](nodes/), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
 
 프롬프트 전문은 문서가 옮겨 적지 않는다. 슬롯의 본문은 계약이, 슬롯을 감싸는 scaffold 는
 `prompts.py` 가 소유한다. 두 축이 같은 template 을 읽으므로 그 본문을 문서 두 벌로 두면
@@ -126,7 +126,7 @@ recipe-scan.probe.system
 
 ## 미들웨어와 출력 타입
 
-`build_recipe_agent`는 prompt cache, model call limit, context editing, standardization, tool retry, 선택적 fallback, model retry를 사용한다. 구조화 출력은 `ToolStrategy(output, handle_errors=True)`로 처리하며 `DispatchPlan`, `ProbeReport`, `RecipeDraft`를 사용한다. 최종 검증은 후보의 provenance와 인용 식별자를 결정적으로 대조한다.
+`AgentMiddlewareStack`이 model call limit, context editing, 구조화 복구, standardization, prompt cache, tool retry, 선택적 fallback, model retry를 이 순서로 세운다. 구조화 출력은 `ToolStrategy(output, handle_errors=True)`로 처리하며 `DispatchPlan`, `ProbeReport`, `RecipeDraft`를 사용한다. 최종 검증은 후보의 provenance와 인용 식별자를 결정적으로 대조한다.
 
 ## Temporal 워크플로
 
@@ -170,7 +170,8 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 그래프 정의 | `graph.py` |
 | 요청별 실행 조립 | `agent.py` |
 | 조사·조율 노드 | `nodes/survey.py`, `nodes/probe.py`, `nodes/candidate.py` |
-| LangChain agent와 미들웨어 | `langchain_agent.py` |
+| LangChain agent와 미들웨어 | `runtime/llm/middleware_stack.py`, `runtime/llm/structured_agent.py` |
+| 모델 호출자 조립 | `deps.py` |
 | 도구 registry | `tools/registry.py` |
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py`, `reservation.py` |

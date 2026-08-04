@@ -86,7 +86,7 @@ flowchart TD
     REPAIR_USER --> REPAIR_AGENT
 ```
 
-실행별 user prompt에는 `Task ID`, `Current title`, `Status`, 선택적 `Workspace`, `Output language`, event·turn count, 절단 여부, 대화 turn이 포함된다. 관련 구현은 [graph.py](graph.py), [nodes/candidate.py](nodes/candidate.py), [langchain_agent.py](langchain_agent.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
+실행별 user prompt에는 `Task ID`, `Current title`, `Status`, 선택적 `Workspace`, `Output language`, event·turn count, 절단 여부, 대화 turn이 포함된다. 관련 구현은 [graph.py](graph.py), [nodes/candidate.py](nodes/candidate.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py), [policy.py](policy.py)에 있다.
 
 프롬프트 전문은 문서가 옮겨 적지 않는다. 슬롯의 본문은 계약이, 슬롯을 감싸는 scaffold 는
 `prompts.py` 가 소유한다. 두 축이 같은 template 을 읽으므로 그 본문을 문서 두 벌로 두면
@@ -100,7 +100,7 @@ title-suggestion.investigator.repair
 
 ## 미들웨어와 출력 타입
 
-`build_title_agent`는 prompt cache, model call limit, standardization, 선택적 fallback을 사용한다. tool retry, context editing, same-model retry는 사용하지 않는다. 모델 출력은 `ToolStrategy(TitleSuggestionDraft, handle_errors=True)`로 구조화하고 `validate_candidate`가 title 규칙을 결정적으로 검사한다.
+`AgentMiddlewareStack`이 네 에이전트와 같은 층을 같은 순서로 세운다. `get_task_events`가 선언한 일시 오류는 tool retry가 다시 부른다. 모델 출력은 `ToolStrategy(TitleSuggestionDraft, handle_errors=True)`로 구조화하고 `validate_candidate`가 title 규칙을 결정적으로 검사한다.
 
 ## Temporal 워크플로
 
@@ -144,7 +144,8 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 그래프 정의 | `graph.py` |
 | 요청별 실행 조립 | `agent.py` |
 | 조사·검증 노드 | `nodes/candidate.py` |
-| LangChain agent와 미들웨어 | `langchain_agent.py` |
+| LangChain agent와 미들웨어 | `runtime/llm/middleware_stack.py`, `runtime/llm/structured_agent.py` |
+| 모델 호출자 조립 | `deps.py` |
 | 도구 registry | `tools/registry.py` |
 | 프롬프트 조립 | `prompts.py` |
 | 예산·상한 정책 | `policy.py` |
