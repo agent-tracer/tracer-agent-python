@@ -107,6 +107,7 @@ async def run_task_cleanup(
     )
     initial: dict[str, Any] = {
         "scanned_at": req.scannedAt,
+        "tasks_scanned": req.batch.tasksScanned,
         "language": req.language,
         "max_suggestions": req.maxSuggestions,
         "messages": [],

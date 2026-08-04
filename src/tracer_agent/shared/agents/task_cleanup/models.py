@@ -60,6 +60,8 @@ class CleanupBatch(BaseModel):
     candidates: list[CleanupCandidate] = Field(default_factory=list)
     # 서버 조회 상한에 걸려 이 배치가 후보 전체를 담지 못했는지 여부다.
     batchTruncated: bool = False
+    # 후보를 가리기 전에 훑은 태스크 수이며 제안에서 되짚을 수 없어 산출이 따로 싣는다.
+    tasksScanned: int = 0
 
 
 class TaskCleanupRequest(AgentExecutionRequest):
@@ -254,6 +256,7 @@ class CleanupResult(BaseModel):
     """정리 스캔이 창구에 내는 산출물이다."""
 
     suggestions: list[CleanupDraftSuggestion] = Field(default_factory=list)
+    tasksScanned: int = 0
 
 
 class ResultUpdate(TypedDict):
@@ -264,6 +267,8 @@ class ResultUpdate(TypedDict):
 
 class TaskCleanupState(BudgetSnapshotState):
     scanned_at: str
+    # 후보를 가리기 전에 훑은 태스크 수이며 제안이 없어도 산출이 이 수를 싣는다.
+    tasks_scanned: int
     language: Language
     max_suggestions: int
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.

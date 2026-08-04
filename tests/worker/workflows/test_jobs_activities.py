@@ -164,7 +164,7 @@ async def test_task_cleanup_요청을_돌려_완료_창구로_배달한다(
 
     await run_job(activities, AgentJobKind.TASK_CLEANUP, payload)
 
-    assert http.deliveries[0]["response"]["data"] == {"suggestions": []}
+    assert http.deliveries[0]["response"]["data"] == {"suggestions": [], "tasksScanned": 0}
 
 
 async def test_recipe_scan_요청을_돌려_완료_창구로_배달한다(

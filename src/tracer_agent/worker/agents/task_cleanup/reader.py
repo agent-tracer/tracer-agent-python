@@ -35,7 +35,9 @@ async def load_cleanup_batch(tracer: TracerApiPort, now: datetime) -> CleanupBat
     shortlisted = qualify_candidates(tasks, now)
     counts = await _active_child_counts(tracer, [candidate.id for candidate in shortlisted])
     return CleanupBatch(
-        candidates=without_active_children(shortlisted, counts), batchTruncated=batch_truncated
+        candidates=without_active_children(shortlisted, counts),
+        batchTruncated=batch_truncated,
+        tasksScanned=len(tasks),
     )
 
 

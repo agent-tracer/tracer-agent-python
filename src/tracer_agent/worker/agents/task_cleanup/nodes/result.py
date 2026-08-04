@@ -19,7 +19,9 @@ class FinalizeNode(GraphNode[TaskCleanupState, ResultUpdate]):
 
     async def run(self, state: TaskCleanupState) -> ResultUpdate:
         # 상한은 검증이 이미 끊었으므로 종단은 통과한 제안을 그대로 싣는다.
-        return {"result": CleanupResult(suggestions=state["suggestions"])}
+        return {
+            "result": CleanupResult(suggestions=state["suggestions"], tasksScanned=state["tasks_scanned"])
+        }
 
 
 class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
@@ -27,5 +29,5 @@ class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
 
     name = EMPTY
 
-    async def run(self, _state: TaskCleanupState) -> ResultUpdate:
-        return {"result": CleanupResult()}
+    async def run(self, state: TaskCleanupState) -> ResultUpdate:
+        return {"result": CleanupResult(tasksScanned=state["tasks_scanned"])}

@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from tests.support.contract import conformance_case
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
-from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
+from tracer_agent.shared.agents.task_cleanup.models import CleanupResult, TaskCleanupRequest
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
@@ -174,7 +175,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다() -> None:
 
     res = await _run(chat, ledger, *candidates)
 
-    assert res.error is None and res.data == {"suggestions": []}
+    assert res.error is None and res.data == {"suggestions": [], "tasksScanned": 0}
     failures = [step for step in res.steps if step.eventKind == "validation.failed"]
     assert failures and "ghost" in failures[0].content
     narrate("task-cleanup :: 선별자가 노출한 적 없는 후보 제안은 검증에서 버려진다", res)
@@ -211,7 +212,7 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
 
     res = await _run(chat, ledger, *candidates)
 
-    assert res.error is None and res.data == {"suggestions": []}
+    assert res.error is None and res.data == {"suggestions": [], "tasksScanned": 0}
     failures = [step for step in res.steps if step.eventKind == "validation.failed"]
     assert failures and "was never inspected" in failures[0].content
     narrate("task-cleanup :: 검토자가 읽지 않은 이벤트 후보는 조율자가 제안해도 버려진다", res)
@@ -257,7 +258,7 @@ async def test_아무_도구도_부르지_않으면_빈_결과로_끝낸다() ->
 
     res = await _run(chat, ledger, *candidates)
 
-    assert res.error is None and res.data == {"suggestions": []}
+    assert res.error is None and res.data == {"suggestions": [], "tasksScanned": 0}
     narrate("task-cleanup :: 도구를 한 번도 부르지 않으면 빈 결과로 끝난다", res)
 
 
@@ -331,7 +332,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
     )
 
     # 한 후보 조사가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
-    assert res.error is None and res.data == {"suggestions": []}
+    assert res.error is None and res.data == {"suggestions": [], "tasksScanned": 0}
     inspected = [step for step in res.steps if step.nodeName == "inspect"]
     assert sum(1 for step in inspected if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in inspected)
@@ -353,3 +354,12 @@ async def test_고른_후보만_각자_예산으로_병렬_조사된다() -> Non
     inspected = [step for step in res.steps if step.nodeName == "inspect"]
     assert sum(1 for step in inspected if step.eventKind == "node.completed") == 2
     narrate("task-cleanup :: 조율자가 고른 후보만 각자 예산으로 병렬 조사된다", res)
+
+
+def test_산출이_계약이_적은_칸을_빠짐없이_싣는다() -> None:
+    # 화면이 축을 보지 않고 같은 칸을 읽어야 하므로 실을 칸을 계약에서 읽어 대조한다.
+    declared = conformance_case("job.intake")["results"]["byKind"]["task.cleanup"]
+
+    result = CleanupResult(suggestions=[], tasksScanned=3)
+
+    assert sorted(result.model_dump(mode="json")) == sorted(declared["required"])
