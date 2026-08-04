@@ -6,6 +6,8 @@ from typing import Any
 
 import pytest
 from temporalio import workflow
+from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
+from temporalio.workflow import _Definition
 
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
@@ -82,3 +84,8 @@ async def test_단계마다_자기_재시도_상한을_갖는다() -> None:
     assert attempts[GENERATE_AGENT_JOB_ACTIVITY] == JOB_GENERATE_MAX_ATTEMPTS
     # 유료 모델 호출을 되풀이하지 않도록 생성의 상한이 준비보다 낮다.
     assert JOB_GENERATE_MAX_ATTEMPTS < JOB_PREPARE_MAX_ATTEMPTS
+
+
+async def test_워크플로가_샌드박스에서_다시_읽혀도_선다() -> None:
+    # 샌드박스가 워크플로의 import 그래프를 다시 실행하므로 모듈을 읽을 때 파일 경로를 푸는 자리가 있으면 워커가 서지 못한다.
+    SandboxedWorkflowRunner().prepare_workflow(_Definition.must_from_class(AgentJobWorkflow))

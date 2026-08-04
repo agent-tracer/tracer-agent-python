@@ -7,14 +7,16 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-_JOB_KINDS_PATH = Path(__file__).resolve().parents[4] / "contract" / "wire" / "job.kinds.json"
+
+def _job_kinds_path() -> Path:
+    """워크플로 샌드박스가 모듈을 다시 읽을 때 경로를 풀지 않도록 계약의 자리를 부를 때 정한다."""
+    return Path(__file__).resolve().parents[4] / "contract" / "wire" / "job.kinds.json"
 
 
 @lru_cache(maxsize=1)
 def lease_ttl_ms() -> int:
     """리스가 이만큼 살아 있고 하트비트가 이보다 잦아야 다른 실행기가 같은 잡을 가져가지 않는다."""
-    document = json.loads(_JOB_KINDS_PATH.read_text(encoding="utf-8"))
+    document = json.loads(_job_kinds_path().read_text(encoding="utf-8"))
     return int(document["lease"]["ttlMs"])
 
 
