@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.recipe_scan.models import ProbeName
 
 from ...runtime.tooling import AgentTool, ToolRegistry
-from .check_citations import CHECK_CITATIONS, CheckCitationsTool
 from .context import RecipeToolContext
 from .find_similar_tasks import FIND_SIMILAR_TASKS, FindSimilarTasksTool
 from .get_task_events import GET_TASK_EVENTS, GetTaskEventsTool
@@ -25,18 +24,17 @@ RECIPE_TOOL_CLASSES: tuple[type[AgentTool[Any, RecipeToolContext]], ...] = (
     SearchEventsTool,
     FindSimilarTasksTool,
     SearchRecipesTool,
-    CheckCitationsTool,
 )
 
-# 전문가는 자기 근거 원천에 닿는 도구 이름만 가지고 인용 확인만은 모든 전문가가 공유한다.
+# 전문가는 자기 근거 원천에 닿는 도구 이름만 가진다.
 PROBE_TOOLS: dict[ProbeName, tuple[str, ...]] = {
-    "timeline": (GET_TASK_SUMMARY, GET_TASK_EVENTS, SEARCH_EVENTS, CHECK_CITATIONS),
-    "rules": (LIST_RULES, SEARCH_RECIPES, CHECK_CITATIONS),
-    "repetition": (SEARCH_EVENTS, FIND_SIMILAR_TASKS, CHECK_CITATIONS),
+    "timeline": (GET_TASK_SUMMARY, GET_TASK_EVENTS, SEARCH_EVENTS),
+    "rules": (LIST_RULES, SEARCH_RECIPES),
+    "repetition": (SEARCH_EVENTS, FIND_SIMILAR_TASKS),
 }
 
-# 조율자는 근거를 직접 캐지 않고 전문가가 합친 장부의 인용만 확인한다.
-COORDINATOR_TOOLS: tuple[str, ...] = (CHECK_CITATIONS,)
+# 조율자는 근거를 직접 캐지 않고 요청이 실어 준 인용 가능한 식별자만 본다.
+COORDINATOR_TOOLS: tuple[str, ...] = ()
 
 # 계획이 규모를 모른 채 서지 않도록 조율자가 요약 하나를 가진다.
 SURVEY_TOOLS: tuple[str, ...] = (GET_TASK_SUMMARY,)
@@ -61,6 +59,5 @@ RECIPE_TOOLS: ToolRegistry[RecipeToolContext] = ToolRegistry(
         SearchEventsTool(),
         FindSimilarTasksTool(),
         SearchRecipesTool(),
-        CheckCitationsTool(),
     )
 )

@@ -82,7 +82,9 @@ def test_조율자는_계획과_전문가_보고를_절로_받는다() -> None:
         ProbeReport(probe="rules", verdict="예산 안에서 다 못 봤다", exhausted=True),
     ]
 
-    user = build_user_prompt("t1", None, RECIPE_SCAN_PROMPT.directive("ko"), plan, reports)
+    user = build_user_prompt(
+        RECIPE_SCAN_PROMPT, "t1", None, RECIPE_SCAN_PROMPT.directive("ko"), plan, reports
+    )
 
     _show("investigate (조율자)", INVESTIGATOR_SYSTEM_PROMPT, user)
     assert "Your own plan for this investigation:" in user

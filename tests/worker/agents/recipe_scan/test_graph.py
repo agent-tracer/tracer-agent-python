@@ -389,8 +389,8 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
     assert res.error is None
     # 전문가는 자기 근거 원천의 도구만 가진다.
     assert sorted(sorted(names) for names in chat.probe_calls) == [
-        ["check_citations", "get_task_events", "get_task_summary", "search_events"],
-        ["check_citations", "list_rules", "search_recipes"],
+        ["get_task_events", "get_task_summary", "search_events"],
+        ["list_rules", "search_recipes"],
     ]
     # 두 전문가가 모두 돌았음이 궤적에 남는다.
     probe_nodes = [step for step in res.steps if step.nodeName == "probe"]

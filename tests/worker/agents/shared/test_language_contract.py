@@ -68,7 +68,7 @@ def _carrier(agent_id: str, prompt: AgentPrompt, language: str) -> str:
     if agent_id == "chat":
         return build_context_prompt(directive, None, [])
     if agent_id == "recipe-scan":
-        return build_recipe_user_prompt("task-1", None, directive)
+        return build_recipe_user_prompt(prompt, "task-1", None, directive)
     if agent_id == "task-cleanup":
         return build_cleanup_user_prompt("2026-07-14T00:00:00Z", 5, directive)
     return build_title_user_prompt("task-1", _TITLE_CONTEXT, directive)

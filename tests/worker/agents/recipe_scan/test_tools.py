@@ -53,7 +53,6 @@ def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> Non
         "search_events",
         "find_similar_tasks",
         "search_recipes",
-        "check_citations",
     ]
     assert all(tool["description"] and tool["input_schema"] for tool in catalog)
     search_schema = next(tool["input_schema"] for tool in catalog if tool["name"] == "search_events")
@@ -215,42 +214,6 @@ async def test_유사_태스크가_돌려준_태스크는_근거_원장에_오�
     assert catalog.eventIdsByTask == {}
 
 
-async def test_인용_확인은_장부에_없는_식별자를_짚어준다() -> None:
-    catalog = ProvenanceCatalog(
-        eventIdsByTask={"task-1": {"event-1"}},
-        turnIdsByTask={"task-1": {"turn-1"}},
-        ruleIds={"rule-1"},
-    )
-
-    content = await RECIPE_TOOLS.invoke(
-        "check_citations",
-        {
-            "taskId": "task-1",
-            "eventIds": ["event-1", "event-9"],
-            "turnIds": ["turn-9"],
-            "ruleIds": ["rule-1"],
-        },
-        mk_recipe_context(catalog),
-    )
-
-    assert json.loads(content) == {
-        "taskSupported": True,
-        "unsupportedEventIds": ["event-9"],
-        "unsupportedTurnIds": ["turn-9"],
-        "unsupportedRuleIds": [],
-    }
-
-
-async def test_인용_확인은_읽지_않은_태스크를_알려준다() -> None:
-    content = await RECIPE_TOOLS.invoke(
-        "check_citations",
-        {"taskId": "task-9", "eventIds": ["event-1"]},
-        mk_recipe_context(),
-    )
-
-    assert json.loads(content)["taskSupported"] is False
-
-
 def test_전문가의_장부가_조율자의_장부로_합쳐진다() -> None:
     coordinator = ProvenanceCatalog(
         eventIdsByTask={"task-1": {"event-1"}},
@@ -296,9 +259,9 @@ def test_전문가는_자기_근거_원천의_도구만_쥔다() -> None:
     rosters = {probe: set(names) for probe, names in PROBE_TOOLS.items()}
 
     assert rosters == {
-        "timeline": {"get_task_summary", "get_task_events", "search_events", "check_citations"},
-        "rules": {"list_rules", "search_recipes", "check_citations"},
-        "repetition": {"search_events", "find_similar_tasks", "check_citations"},
+        "timeline": {"get_task_summary", "get_task_events", "search_events"},
+        "rules": {"list_rules", "search_recipes"},
+        "repetition": {"search_events", "find_similar_tasks"},
     }
     # 세 전문가를 합치면 조율자가 단독으로 쓸 때와 같은 도구 집합이라 계약이 안 바뀐다.
     assert set().union(*rosters.values()) == {cls.name for cls in RECIPE_TOOL_CLASSES}

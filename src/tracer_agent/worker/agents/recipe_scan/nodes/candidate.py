@@ -104,11 +104,13 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
             [
                 HumanMessage(
                     content=build_user_prompt(
+                        deps.prompt,
                         state["task_id"],
                         state["user_prompt"],
                         deps.language_directives[state["language"]],
                         state["plan"],
                         state["reports"],
+                        state["provenance"],
                     )
                 )
             ],

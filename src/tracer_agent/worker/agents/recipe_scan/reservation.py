@@ -10,7 +10,15 @@ from typing import Any
 
 _CONTRACT_ROOT = Path(__file__).resolve().parents[5] / "contract"
 _EXECUTION_BUDGET_PATH = _CONTRACT_ROOT / "agent" / "shared" / "execution.budget.json"
+_TOOL_PATH = _CONTRACT_ROOT / "agent" / "recipe-scan" / "tool.json"
 _RESERVATION_ORDER = ("repair", "survey", "synthesisFloor")
+
+
+@lru_cache(maxsize=1)
+def load_citable_id_list_limit() -> int:
+    """조율자 요청이 한 줄에 적는 식별자 수의 상한을 계약에서 읽는다."""
+    declared: Any = json.loads(_TOOL_PATH.read_text(encoding="utf-8"))
+    return int(declared["limits"]["citableIdListLimit"])
 
 
 @dataclass(frozen=True)

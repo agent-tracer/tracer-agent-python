@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -43,17 +42,16 @@ _EVENT_ROWS = [
 ]
 
 
-class _CitingProbeChat:
-    """자기 태스크를 읽고 남의 태스크를 인용해 보려는 전문가를 재생하는 도구 루프 대역이다."""
+class _ReadingProbeChat:
+    """자기 태스크의 이벤트만 읽고 보고를 올리는 전문가를 재생하는 도구 루프 대역이다."""
 
-    def __init__(self, others: dict[str, str], gate: asyncio.Barrier | None = None) -> None:
-        self.others = others
+    def __init__(self, gate: asyncio.Barrier | None = None) -> None:
         self.gate = gate
 
-    def bind_tools(self, _tools: list[Any], **_kwargs: Any) -> _CitingProbeChat:
+    def bind_tools(self, _tools: list[Any], **_kwargs: Any) -> _ReadingProbeChat:
         return self
 
-    def bind(self, **_kwargs: Any) -> _CitingProbeChat:
+    def bind(self, **_kwargs: Any) -> _ReadingProbeChat:
         return self
 
     async def ainvoke(self, messages: list[Any]) -> AIMessage:
@@ -65,11 +63,6 @@ class _CitingProbeChat:
             if self.gate is not None:
                 await self.gate.wait()
             return _call("get_task_events", {"taskId": task_id})
-        if len(read_results) == 1:
-            return _call(
-                "check_citations",
-                {"taskId": self.others[task_id], "eventIds": ["event-1"]},
-            )
         return _call(
             "ProbeReport",
             {"probe": "timeline", "verdict": str(read_results[-1].content)},
@@ -133,12 +126,8 @@ async def _probe(deps: RecipeDeps, task_id: str, catalog: ProvenanceCatalog) -> 
     return result.response
 
 
-def _others(*task_ids: str) -> dict[str, str]:
-    return {task_id: task_ids[(index + 1) % len(task_ids)] for index, task_id in enumerate(task_ids)}
-
-
 async def test_같은_역할의_전문가는_컴파일된_agent를_다시_쓴다() -> None:
-    deps = _deps(_CitingProbeChat(_others("task-a", "task-b")))
+    deps = _deps(_ReadingProbeChat())
 
     await _probe(deps, "task-a", ProvenanceCatalog())
     await _probe(deps, "task-b", ProvenanceCatalog())
@@ -147,7 +136,7 @@ async def test_같은_역할의_전문가는_컴파일된_agent를_다시_쓴다
 
 
 async def test_도구_집합이_다른_역할은_자기_agent를_갖는다() -> None:
-    deps = _deps(_CitingProbeChat(_others("task-a", "task-b")))
+    deps = _deps(_ReadingProbeChat())
 
     await _probe(deps, "task-a", ProvenanceCatalog())
     await deps.invoke(
@@ -166,7 +155,7 @@ async def test_도구_집합이_다른_역할은_자기_agent를_갖는다() -> 
 
 
 async def test_전문가는_컴파일된_agent를_함께_써도_자기_장부만_쌓는다() -> None:
-    deps = _deps(_CitingProbeChat(_others("task-a", "task-b")))
+    deps = _deps(_ReadingProbeChat())
     first, second = ProvenanceCatalog(), ProvenanceCatalog()
 
     await _probe(deps, "task-a", first)
@@ -179,7 +168,7 @@ async def test_전문가는_컴파일된_agent를_함께_써도_자기_장부만
 
 async def test_병렬로_도는_전문가는_남이_읽은_이벤트를_인용하지_못한다() -> None:
     gate = asyncio.Barrier(2)
-    deps = _deps(_CitingProbeChat(_others("task-a", "task-b"), gate))
+    deps = _deps(_ReadingProbeChat(gate))
     first, second = ProvenanceCatalog(), ProvenanceCatalog()
 
     reports = await asyncio.gather(
@@ -188,10 +177,7 @@ async def test_병렬로_도는_전문가는_남이_읽은_이벤트를_인용�
     )
 
     assert deps.agents.size() == 1
+    # 장부가 자기 태스크만 담으므로 검증은 남이 읽은 이벤트를 인용으로 받지 않는다.
     assert set(first.eventIdsByTask) == {"task-a"}
     assert set(second.eventIdsByTask) == {"task-b"}
-    # 남의 장부에만 있는 태스크는 인용 확인에서 근거 없음으로 되돌아온다.
-    for report in reports:
-        verdict = json.loads(report.verdict)
-        assert verdict["taskSupported"] is False
-        assert verdict["unsupportedEventIds"] == ["event-1"]
+    assert [report.probe for report in reports] == ["timeline", "timeline"]

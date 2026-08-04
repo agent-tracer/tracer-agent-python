@@ -79,9 +79,8 @@ sequenceDiagram
 | `search_events` | `q`, `taskId`, `kind`, `toolName`, `limit`, `offset` | task를 가로지르는 event를 검색한다 | event ID, 선택적 task ID |
 | `find_similar_tasks` | `anchorTaskId`, `limit` | 기준 task와 유사한 task를 조회한다 | 없음 |
 | `search_recipes` | `q`, `limit` | 등록된 recipe와 revision을 조회한다 | recipe revision |
-| `check_citations` | `taskId`, `eventIds`, `turnIds`, `ruleIds` | 조율자가 사용할 citation이 ledger에 존재하는지 확인한다 | ledger 조회 |
 
-전문가별 도구 권한은 `timeline = summary/events/search/check`, `rules = list_rules/search_recipes/check`, `repetition = search_events/find_similar/check`, 조율자 = `check_citations`이다. `ToolRegistry`는 Pydantic 인자를 검증하고 도구 span과 provenance를 기록한다.
+전문가별 도구 권한은 `timeline = summary/events/search`, `rules = list_rules/search_recipes`, `repetition = search_events/find_similar`이다. 조율자는 도구를 갖지 않고 인용 가능한 식별자를 요청으로 받는다. `ToolRegistry`는 Pydantic 인자를 검증하고 도구 span과 provenance를 기록한다.
 
 ## 프롬프트 구성
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from tracer_agent.shared.agents.recipe_scan.models import (
@@ -10,9 +10,13 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     DispatchPlan,
     ProbeAssignment,
     ProbeReport,
+    ProvenanceCatalog,
 )
 
 from ..shared.prompt_source_port import AgentPrompt
+from .reservation import load_citable_id_list_limit
+
+INVESTIGATOR_USER_TEMPLATE = "recipe-scan.investigator.user"
 
 
 @dataclass(frozen=True)
@@ -113,11 +117,13 @@ def _probe(prompt: AgentPrompt) -> str:
 
 
 def build_user_prompt(
+    prompt: AgentPrompt,
     task_id: str,
     user_prompt: str | None,
     directive: str,
     plan: DispatchPlan | None = None,
     reports: Sequence[ProbeReport] | None = None,
+    catalog: ProvenanceCatalog | None = None,
 ) -> str:
     """앵커 태스크와 사용자 지시와 출력 언어와 스스로 세운 계획을 담은 최초 지시문이다."""
     lines = [f"Anchor taskId: {task_id}"]
@@ -125,7 +131,41 @@ def build_user_prompt(
         lines.append(f"User direction: {user_prompt}")
     lines.append(f"Output language: {directive}")
     lines.append(f"Mine this task for up to {MAX_RECIPE_CANDIDATES} recipe candidates.")
-    return "\n".join(lines) + render_plan(plan) + render_reports(reports)
+    return (
+        "\n".join(lines) + render_plan(plan) + render_reports(reports) + render_citable_ids(prompt, catalog)
+    )
+
+
+def render_citable_ids(prompt: AgentPrompt, catalog: ProvenanceCatalog | None) -> str:
+    """조율자는 도구를 갖지 않으므로 전문가 장부가 뒷받침하는 식별자를 요청이 직접 싣는다."""
+    if catalog is None:
+        return ""
+    lines: list[str] = []
+    for task_id in sorted(set(catalog.eventIdsByTask) | set(catalog.turnIdsByTask)):
+        events = catalog.eventIdsByTask.get(task_id) or set()
+        turns = catalog.turnIdsByTask.get(task_id) or set()
+        if events:
+            lines.append(f"- {task_id} events: {_listed(events)}")
+        if turns:
+            lines.append(f"- {task_id} turns: {_listed(turns)}")
+    if catalog.ruleIds:
+        lines.append(f"- rules: {_listed(catalog.ruleIds)}")
+    if catalog.recipeRevs:
+        revisions = [f"{recipe}@{rev}" for recipe, rev in sorted(catalog.recipeRevs.items())]
+        lines.append(f"- recipes: {_listed(revisions, presorted=True)}")
+    if not lines:
+        return ""
+    header = prompt.template(INVESTIGATOR_USER_TEMPLATE).slot("citableIdentifiers")
+    return "\n\n" + header + "\n" + "\n".join(lines)
+
+
+def _listed(ids: Iterable[str], *, presorted: bool = False) -> str:
+    """식별자를 정렬해 상한까지 적고 넘친 수를 뒤에 알린다."""
+    ordered = list(ids) if presorted else sorted(ids)
+    shown = ordered[: load_citable_id_list_limit()]
+    listed = ", ".join(shown)
+    remaining = len(ordered) - len(shown)
+    return listed if remaining == 0 else f"{listed} (+{remaining} more)"
 
 
 def render_reports(reports: Sequence[ProbeReport] | None) -> str:
