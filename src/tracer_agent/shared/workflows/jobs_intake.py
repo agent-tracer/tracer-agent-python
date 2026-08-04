@@ -22,6 +22,7 @@ from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
 from ..agents.runtime.ledger import SqlSource
 from ..agents.shared.instant import opt_iso
 from ..agents.shared.json_view import JsonObject
+from ..agents.shared.models import AgentStepDTO
 from ..agents.shared.wire import (
     SuccessEnvelope,
     error_envelope,
@@ -230,6 +231,21 @@ def _idempotency_key(value: str | None) -> str | None:
     return trimmed or None
 
 
+class JobExecutionUsage(BaseModel):
+    """실행기가 잰 관측이며 칸의 이름은 워크플로 축이 원장에 적는 것과 같다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str | None
+    durationMs: int | None
+    costUsd: float | None
+    numTurns: int | None
+    inputTokens: int | None = None
+    outputTokens: int | None = None
+    cacheReadTokens: int | None = None
+    cacheCreationTokens: int | None = None
+
+
 class JobReportBody(BaseModel):
     """실행기가 만든 규칙과 그 근거이며 잡의 산출물 자리에 그대로 실린다."""
 
@@ -237,6 +253,8 @@ class JobReportBody(BaseModel):
 
     rules: list[JsonObject]
     skipped: list[str] | None = None
+    usage: JobExecutionUsage
+    steps: list[AgentStepDTO]
 
 
 class JobFailureBody(BaseModel):
@@ -246,6 +264,8 @@ class JobFailureBody(BaseModel):
 
     message: str = Field(min_length=1)
     retryable: bool = False
+    usage: JobExecutionUsage
+    steps: list[AgentStepDTO]
 
 
 @router.post(JOB_START_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
@@ -299,9 +319,8 @@ async def report_job_result(
     parsed = await _parse_body(request, JobReportBody)
     if isinstance(parsed, JSONResponse):
         return parsed
-    return await _settle(
-        execution_id, source, user_id, owner, "completed", parsed.model_dump(exclude_none=True), None
-    )
+    rules = parsed.model_dump(exclude_none=True, exclude={"usage", "steps"})
+    return await _settle(execution_id, source, user_id, owner, "completed", rules, None, parsed)
 
 
 @router.post(JOB_FAIL_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
@@ -316,7 +335,7 @@ async def fail_job(
     parsed = await _parse_body(request, JobFailureBody)
     if isinstance(parsed, JSONResponse):
         return parsed
-    return await _settle(execution_id, source, user_id, owner, "failed", {}, parsed.message)
+    return await _settle(execution_id, source, user_id, owner, "failed", {}, parsed.message, parsed)
 
 
 @router.post(JOB_RELEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
@@ -355,17 +374,22 @@ async def _settle(
     status: str,
     result: JsonObject,
     error: str | None,
+    reported: JobReportBody | JobFailureBody,
 ) -> JSONResponse:
     if not owner:
         return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)
+    usage = reported.usage.model_dump(exclude_none=True)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
         row = await ledger.find(execution_id)
         if row is None or row["user_id"] != user_id:
             return error_envelope(*NOT_FOUND)
-        if not await ledger.settle_with_lease(execution_id, owner, status, result, error, now):
+        if not await ledger.settle_with_lease(execution_id, owner, status, result, error, usage, now):
             return error_envelope(*LEASE_HELD)
+        # 회차는 원장이 세고 계약이 1부터 세므로 리스만 쥔 잡의 첫 시도를 1로 적는다.
+        attempt = max(int(row["attempts"]), 1)
+        await ledger.record_steps(execution_id, user_id, attempt, reported.steps, now)
         row = await ledger.find(execution_id) or row
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
 

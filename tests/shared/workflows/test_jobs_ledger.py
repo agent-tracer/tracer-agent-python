@@ -265,12 +265,18 @@ async def test_리스를_쥔_실행기만_잡을_종결한다(store: SqliteLedge
     await claim(ledger)
     await ledger.claim_lease("j1", "runner-1", LATER, NOW)
 
-    assert await ledger.settle_with_lease("j1", "runner-2", "completed", {}, None, LATER) is False
-    assert await ledger.settle_with_lease("j1", "runner-1", "completed", {"rules": []}, None, LATER) is True
+    usage = {"model": "claude", "durationMs": 10, "costUsd": 0.1, "numTurns": 1}
+    assert await ledger.settle_with_lease("j1", "runner-2", "completed", {}, None, usage, LATER) is False
+    assert (
+        await ledger.settle_with_lease("j1", "runner-1", "completed", {"rules": []}, None, usage, LATER)
+        is True
+    )
 
     row = store.rows("ai_jobs")[0]
     assert row["status"] == "completed"
     assert row["lease_owner"] is None
+    # 실행기가 잰 관측이 종결과 함께 원장에 실려야 화면이 그 잡의 비용을 읽는다.
+    assert row["usage"] == usage
 
 
 async def test_리스를_놓으면_잡이_곧바로_대기로_돌아간다(store: SqliteLedgerSql) -> None:

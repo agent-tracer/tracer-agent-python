@@ -513,7 +513,11 @@ def test_세션에서_부른_스캔은_아직_도는_태스크도_접수한다(
 
 
 # 본문을 요구하는 창구는 리스 이름이 아니라 본문 때문에 거절당하지 않도록 성립하는 본문을 싣는다.
-LEASE_BODIES = {"results": {"rules": []}, "fail": {"message": "boom"}}
+REPORTED_USAGE = {"model": "claude", "durationMs": 10, "costUsd": 0.1, "numTurns": 1}
+LEASE_BODIES = {
+    "results": {"rules": [], "usage": REPORTED_USAGE, "steps": []},
+    "fail": {"message": "boom", "usage": REPORTED_USAGE, "steps": []},
+}
 
 
 @pytest.mark.parametrize("declared", LEASE_OWNER["paths"])
@@ -536,9 +540,41 @@ def test_본문을_요구하는_창구도_계약이_정한_400으로_거절한�
     # FastAPI 의 자동 검증에 맡기면 계약에 없는 422 가 나가 실행기가 거절을 가리지 못한다.
     res = client.post(
         f"{PATH}/no-such-run/{declared}",
-        json={"쓸모없는칸": 1},
+        json={"쓸모없는칸": 1, "usage": REPORTED_USAGE, "steps": []},
         headers={"x-monitor-lease-owner": "runner-1"},
     )
 
     assert res.status_code == 400
     assert res.json()["error"]["code"] == "validation_error"
+
+
+LOCAL_EXECUTOR = _INTAKE["localExecutor"]
+
+
+@pytest.mark.parametrize("declared", ["results", "fail"])
+def test_관측_없는_보고를_거절한다(client: TestClient, declared: str) -> None:
+    # 관측을 받지 않으면 로컬 실행기가 태운 비용이 원장에 닿을 길이 없다.
+    body = {key: value for key, value in LEASE_BODIES[declared].items() if key != "usage"}
+
+    res = client.post(f"{PATH}/no-such-run/{declared}", json=body, headers={"x-monitor-lease-owner": "r1"})
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "validation_error"
+
+
+def test_실행기의_관측과_궤적이_원장에_실린다(client: TestClient) -> None:
+    accepted = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}).json()
+    run_id = accepted["data"]["job"]["id"]
+    lease = {"x-monitor-lease-owner": "runner-1"}
+    client.post(f"{PATH}/{run_id}/start", headers=lease)
+    usage = {**REPORTED_USAGE, "inputTokens": 5}
+    step = {"seq": 0, "role": "assistant", "content": "규칙을 쓴다", "truncated": False, "toolCalls": []}
+
+    settled = client.post(
+        f"{PATH}/{run_id}/results", json={"rules": [], "usage": usage, "steps": [step]}, headers=lease
+    )
+
+    assert settled.status_code == 200
+    assert settled.json()["data"]["job"]["usage"] == usage
+    steps = client.get(f"{PATH}/{run_id}/steps").json()["data"]
+    assert [(item["seq"], item["role"], item["attempt"]) for item in steps] == [(0, "assistant", 1)]

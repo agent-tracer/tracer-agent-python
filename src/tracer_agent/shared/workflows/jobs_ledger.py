@@ -78,10 +78,11 @@ UPDATE ai_jobs
    SET status = $3,
        result = $4,
        error = $5,
+       usage = $6,
        lease_owner = NULL,
        lease_expires_at = NULL,
-       completed_at = $6,
-       updated_at = $6
+       completed_at = $7,
+       updated_at = $7
  WHERE id = $1 AND status = 'running' AND lease_owner = $2
 RETURNING id
 """
@@ -214,10 +215,11 @@ class JobLedger:
         status: str,
         result: dict[str, Any],
         error: str | None,
+        usage: dict[str, Any],
         now: datetime,
     ) -> bool:
-        """리스를 쥔 실행기가 산출물이나 실패를 싣고 잡을 종결한다."""
-        rows = await self._sql.fetch(_SETTLE_WITH_LEASE, job_id, owner, status, result, error, now)
+        """리스를 쥔 실행기가 산출물이나 실패와 그 실행의 관측을 싣고 잡을 종결한다."""
+        rows = await self._sql.fetch(_SETTLE_WITH_LEASE, job_id, owner, status, result, error, usage, now)
         return len(rows) == 1
 
     async def release_lease(self, job_id: str, owner: str, now: datetime) -> bool:
