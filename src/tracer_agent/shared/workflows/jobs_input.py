@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..agents.recipe_scan.models import scan_anchor_conditions, scan_anchor_requirements
 from ..agents.shared.models import TrimmedStr
+from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
 
 DEFAULT_MAX_SUGGESTIONS = 20
 MAX_SUGGESTIONS_CAP = 50
@@ -16,21 +19,61 @@ MAX_RULES_CAP = 20
 INTENT_MAX_LENGTH = 500
 
 
-class RecipeScanJobInput(BaseModel):
-    """recipe-scan 접수가 받는 도메인 입력이며 태스크 소유권은 워커의 도구가 다시 검증한다."""
+@dataclass(frozen=True)
+class AdmissionRejection:
+    """접수가 잡을 받아들이지 않을 때 계약이 정한 상태와 코드와 문구다."""
+
+    status: int
+    code: str
+    message: str
+
+
+INVALID_RULE_ANCHOR = AdmissionRejection(
+    400, "job.invalid-rule-anchor", "Rule generation requires an owned user-message anchor"
+)
+INELIGIBLE_SCAN_ANCHOR = AdmissionRejection(
+    400, "job.invalid-scan-anchor", "Recipe scan requires a completed root user task"
+)
+
+
+@dataclass(frozen=True)
+class AdmissionContext:
+    """접수가 잡 하나를 받아들일지 판정할 때 보는 사용자와 앵커 창구다."""
+
+    user_id: str
+    rule_anchors: RuleAnchorSource
+    scan_anchors: ScanAnchorSource
+
+
+class JobInput(BaseModel):
+    """잡 종류마다의 접수 입력이며 자기 자격 심사를 스스로 갖는다."""
 
     model_config = ConfigDict(extra="forbid")
+
+    async def admit(self, _context: AdmissionContext) -> AdmissionRejection | None:
+        """받아들일 수 없는 사유를 내며 앵커를 요구하지 않는 잡은 아무 사유도 내지 않는다."""
+        return None
+
+
+class RecipeScanJobInput(JobInput):
+    """recipe-scan 접수가 받는 도메인 입력이며 태스크 소유권은 워커의 도구가 다시 검증한다."""
 
     taskId: TrimmedStr = Field(min_length=1, max_length=64)
     userPrompt: TrimmedStr | None = Field(default=None, min_length=1, max_length=4000)
     language: TrimmedStr | None = Field(default=None, min_length=1, max_length=16)
     trigger: Literal["dashboard", "session"] | None = None
 
+    async def admit(self, context: AdmissionContext) -> AdmissionRejection | None:
+        """스캔의 앵커는 이 사용자의 뿌리 사용자 태스크이면서 끝난 것이어야 한다."""
+        anchor = await context.scan_anchors.find(context.user_id, self.taskId)
+        if anchor is None:
+            return INELIGIBLE_SCAN_ANCHOR
+        eligible = anchor.eligible(scan_anchor_requirements(), scan_anchor_conditions(self.trigger))
+        return None if eligible else INELIGIBLE_SCAN_ANCHOR
 
-class TitleSuggestionJobInput(BaseModel):
+
+class TitleSuggestionJobInput(JobInput):
     """title-suggestion 접수가 받는 도메인 입력이며 대화 컨텍스트는 워커가 직접 조립한다."""
-
-    model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1, max_length=64)
 
@@ -43,18 +86,14 @@ class TaskCleanupFilters(BaseModel):
     maxSuggestions: int | None = Field(default=None, ge=1, le=MAX_SUGGESTIONS_CAP)
 
 
-class TaskCleanupJobInput(BaseModel):
+class TaskCleanupJobInput(JobInput):
     """task-cleanup 접수가 받는 도메인 입력이며 후보 배치는 워커가 직접 조립한다."""
-
-    model_config = ConfigDict(extra="forbid")
 
     filters: TaskCleanupFilters = Field(default_factory=TaskCleanupFilters)
 
 
-class RuleGenerationJobInput(BaseModel):
+class RuleGenerationJobInput(JobInput):
     """rule-generation 접수가 받는 도메인 입력이며 로컬 실행기가 이 잡을 가져간다."""
-
-    model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1, max_length=64)
     # 규칙이 매달릴 근거 입력이며 판정은 이 입력 이후의 이벤트만 본다.
@@ -63,9 +102,15 @@ class RuleGenerationJobInput(BaseModel):
     maxRules: int | None = Field(default=None, ge=1, le=MAX_RULES_CAP)
     intent: TrimmedStr | None = Field(default=None, min_length=1, max_length=INTENT_MAX_LENGTH)
 
+    async def admit(self, context: AdmissionContext) -> AdmissionRejection | None:
+        """규칙 생성의 근거는 이 사용자의 그 태스크에 속한 사용자 발화여야 한다."""
+        anchor = await context.rule_anchors.find(context.user_id, self.anchorEventId)
+        owned = anchor is not None and anchor.task_id == self.taskId and anchor.user_message
+        return None if owned else INVALID_RULE_ANCHOR
+
 
 # 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
-INPUT_MODEL_BY_KIND: dict[str, type[BaseModel]] = {
+INPUT_MODEL_BY_KIND: dict[str, type[JobInput]] = {
     "recipe.scan": RecipeScanJobInput,
     "title.suggestion": TitleSuggestionJobInput,
     "task.cleanup": TaskCleanupJobInput,

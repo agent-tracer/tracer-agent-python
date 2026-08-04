@@ -11,11 +11,6 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from tracer_agent.shared.agents.recipe_scan.models import (
-    scan_anchor_conditions,
-    scan_anchor_requirements,
-)
-
 from ..agents.envelope.models import ModelCredentialSource
 from ..agents.envelope.router import JOB_KEY_MISSING
 from ..agents.runtime.dependencies import ExecutionSql, LeaseOwner, UserId
@@ -34,8 +29,7 @@ from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
 from .jobs_dispatch import TemporalJobDispatch
 from .jobs_input import (
     INPUT_MODEL_BY_KIND,
-    RecipeScanJobInput,
-    RuleGenerationJobInput,
+    AdmissionContext,
     build_payload,
     input_hash,
     task_id_of,
@@ -54,16 +48,6 @@ JOB_RELEASE_PATH = f"{JOBS_PATH}/{{execution_id}}/release"
 ACCEPTED_STATUS = 202
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
 LEASE_OWNER_MISSING = (400, "job.lease-owner-missing", "Lease owner header is required")
-INVALID_RULE_ANCHOR = (
-    400,
-    "job.invalid-rule-anchor",
-    "Rule generation requires an owned user-message anchor",
-)
-INELIGIBLE_SCAN_ANCHOR = (
-    400,
-    "job.invalid-scan-anchor",
-    "Recipe scan requires a completed root user task",
-)
 NOT_FOUND = (404, "not_found", "Job execution not found")
 IDEMPOTENCY_CONFLICT = (
     409,
@@ -145,12 +129,9 @@ async def enqueue_job(
     except ValidationError as invalid:
         return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
 
-    if isinstance(job_input, RuleGenerationJobInput) and not await _owns_anchor(anchors, user_id, job_input):
-        return error_envelope(*INVALID_RULE_ANCHOR)
-    if isinstance(job_input, RecipeScanJobInput) and not await _scannable_anchor(
-        scan_anchors, user_id, job_input
-    ):
-        return error_envelope(*INELIGIBLE_SCAN_ANCHOR)
+    rejection = await job_input.admit(AdmissionContext(user_id, anchors, scan_anchors))
+    if rejection is not None:
+        return error_envelope(rejection.status, rejection.code, rejection.message)
     # 자격을 접수가 보지 않으면 대기 행이 선 뒤 워커에서 실패해 사용자가 사유를 늦게 받는다.
     if not runs_locally(enqueue.kind) and not await credentials.api_key(user_id):
         return error_envelope(*JOB_KEY_MISSING)
@@ -209,20 +190,6 @@ async def cancel_job(
     if not runs_locally(kind):
         await dispatch.cancel(AgentJobKind.of_wire(kind), execution_id)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"job": job_dto(row)}})
-
-
-async def _scannable_anchor(anchors: ScanAnchorSource, user_id: str, job_input: RecipeScanJobInput) -> bool:
-    """스캔의 앵커는 이 사용자의 뿌리 사용자 태스크이면서 끝난 것이어야 한다."""
-    anchor = await anchors.find(user_id, job_input.taskId)
-    if anchor is None:
-        return False
-    return anchor.eligible(scan_anchor_requirements(), scan_anchor_conditions(job_input.trigger))
-
-
-async def _owns_anchor(anchors: RuleAnchorSource, user_id: str, job_input: RuleGenerationJobInput) -> bool:
-    """규칙 생성의 근거는 이 사용자의 그 태스크에 속한 사용자 발화여야 한다."""
-    anchor = await anchors.find(user_id, job_input.anchorEventId)
-    return anchor is not None and anchor.task_id == job_input.taskId and anchor.user_message
 
 
 def _idempotency_key(value: str | None) -> str | None:
