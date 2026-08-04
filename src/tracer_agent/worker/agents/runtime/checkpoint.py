@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AbstractAsyncContextManager
+import logging
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
+from psycopg.rows import DictRow, dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from ....shared.config import CHECKPOINT_SCHEMA
 from .serde import graph_serde
+
+_log = logging.getLogger(__name__)
+
+# 한 워커가 동시에 소비하는 실행 수만큼 체크포인트 왕복이 겹치므로 연결 하나로 직렬화하지 않는다.
+CHECKPOINT_POOL_MAX_SIZE = 8
+# 세이버는 자동 커밋과 dict 행과 준비 없는 문장을 전제로 질의를 쓴다.
+_CONNECTION_KWARGS = {"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row}
 
 
 class GraphCheckpointProvider:
@@ -17,7 +26,7 @@ class GraphCheckpointProvider:
 
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
-        self._context: AbstractAsyncContextManager[AsyncPostgresSaver] | None = None
+        self._pool: AsyncConnectionPool[AsyncConnection[DictRow]] | None = None
         self._saver: AsyncPostgresSaver | None = None
         self._lock = asyncio.Lock()
 
@@ -25,10 +34,16 @@ class GraphCheckpointProvider:
         async with self._lock:
             if self._saver is None:
                 await self._create_schema()
-                context = AsyncPostgresSaver.from_conn_string(self._dsn, serde=graph_serde())
-                saver = await context.__aenter__()
+                pool: AsyncConnectionPool[AsyncConnection[DictRow]] = AsyncConnectionPool(
+                    conninfo=self._dsn,
+                    max_size=CHECKPOINT_POOL_MAX_SIZE,
+                    kwargs=_CONNECTION_KWARGS,
+                    open=False,
+                )
+                await pool.open(wait=True)
+                saver = AsyncPostgresSaver(pool, serde=graph_serde())
                 await saver.setup()
-                self._context = context
+                self._pool = pool
                 self._saver = saver
             return self._saver
 
@@ -37,9 +52,19 @@ class GraphCheckpointProvider:
         async with await AsyncConnection.connect(self._dsn, autocommit=True) as connection:
             await connection.execute(f'CREATE SCHEMA IF NOT EXISTS "{CHECKPOINT_SCHEMA}"')
 
+    async def forget(self, thread_id: str) -> None:
+        """끝난 실행의 체크포인트를 지워 재개용 스냅숏이 원장처럼 쌓이지 않게 한다."""
+        if self._saver is None:
+            return
+        try:
+            await self._saver.adelete_thread(thread_id)
+        except Exception as unreachable:
+            # 지우지 못해도 그 실행의 답은 이미 나갔으므로 종결을 실패로 만들지 않는다.
+            _log.warning("checkpoint thread %s was not deleted: %s", thread_id, unreachable)
+
     async def close(self) -> None:
         async with self._lock:
-            if self._context is not None:
-                await self._context.__aexit__(None, None, None)
-                self._context = None
+            if self._pool is not None:
+                await self._pool.close()
+                self._pool = None
                 self._saver = None

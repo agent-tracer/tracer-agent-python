@@ -121,5 +121,8 @@ async def run_chat(
             ),
         ),
     )
+    # 이 턴의 체크포인트는 액티비티 재시도만 막는 자리이며 대화의 정본은 원장이 갖는다.
+    if checkpoints is not None:
+        await checkpoints.forget(req.executionId)
     result: ChatResult = final["result"] or ChatResult()
     return result.model_dump(mode="json")

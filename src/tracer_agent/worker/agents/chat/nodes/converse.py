@@ -187,7 +187,10 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         if checkpointer is None:
             return self._with_context(replayed, context_prompt)
         seeded = await seed_checkpoint(agent, checkpointer, config, replayed)
-        return self._with_context(seeded, context_prompt)
+        # 이어받는 시도의 체크포인트에는 앞선 시도가 붙인 꼬리가 이미 있어 다시 붙이면 두 벌이 된다.
+        if seeded.resumed:
+            return seeded.messages
+        return self._with_context(seeded.messages, context_prompt)
 
     @staticmethod
     def _with_context(messages: list[BaseMessage], context_prompt: str) -> list[BaseMessage]:
