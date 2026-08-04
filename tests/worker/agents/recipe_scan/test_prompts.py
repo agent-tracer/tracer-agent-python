@@ -54,7 +54,7 @@ def test_전문가는_맡은_질문과_쓸_수_있는_턴을_받는다() -> None
 
 
 def test_전문가는_다른_전문가가_맡은_축을_함께_받는다() -> None:
-    siblings = [ProbeAssignment(probe="rules", weight=3, question="어떤 규칙이 걸렸나")]
+    siblings = [ProbeAssignment(probe="rules", depth="deep", question="어떤 규칙이 걸렸나")]
 
     user = build_probe_prompt(RECIPE_SCAN_PROMPT, "t1", "무엇을 했나", 4, siblings)
 
@@ -71,7 +71,7 @@ def test_혼자_도는_전문가에게는_남의_담당을_싣지_않는다() ->
 
 def test_조율자는_계획과_전문가_보고를_절로_받는다() -> None:
     plan = DispatchPlan.model_validate(
-        {"probes": [{"probe": "timeline", "weight": 5, "question": "무엇을 했나"}]}
+        {"probes": [{"probe": "timeline", "depth": "deep", "question": "무엇을 했나"}]}
     )
     reports = [
         ProbeReport(
@@ -88,7 +88,7 @@ def test_조율자는_계획과_전문가_보고를_절로_받는다() -> None:
 
     _show("investigate (조율자)", INVESTIGATOR_SYSTEM_PROMPT, user)
     assert "Your own plan for this investigation:" in user
-    assert "- timeline (weight 5): 무엇을 했나" in user
+    assert "- timeline (deep): 무엇을 했나" in user
     assert "What your specialists reported:" in user
     assert "### timeline" in user
     assert "- [t1/event-1] 마이그레이션" in user

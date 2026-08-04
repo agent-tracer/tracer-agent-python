@@ -59,7 +59,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             event_ids_by_task=event_ids,
         )
         plan = call.response
-        chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments) or "없음"
+        chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments) or "없음"
         deps.usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",

@@ -63,7 +63,7 @@ class Test체크포인트직렬화기:
     def test_팬아웃이_실어_보내는_짐을_되살린다(self) -> None:
         serde = graph_serde()
         dispatch = ProbeDispatch(
-            assignment=ProbeAssignment(probe="timeline", question="배포가 언제 무너졌는가", weight=1),
+            assignment=ProbeAssignment(probe="timeline", question="배포가 언제 무너졌는가", depth="shallow"),
             siblings=[],
             max_turns=2,
             max_cost_usd=0.5,

@@ -36,12 +36,12 @@
       "probes": [
         {
           "probe": "timeline",
-          "weight": 5,
+          "depth": "deep",
           "question": "무엇을 했나"
         },
         {
           "probe": "rules",
-          "weight": 3,
+          "depth": "deep",
           "question": "어떤 규칙이 걸렸나"
         }
       ]
@@ -136,8 +136,8 @@
     "maxToolCalls": 2,
     "maxCostUsd": 0.008,
     "promptMentions": [
-      "timeline (weight 5): 무엇을 했나",
-      "rules (weight 3): 어떤 규칙이 걸렸나"
+      "timeline (deep): 무엇을 했나",
+      "rules (deep): 어떤 규칙이 걸렸나"
     ]
   }
 }

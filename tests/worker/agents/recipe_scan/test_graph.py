@@ -93,8 +93,8 @@ def _recipe(**overrides: Any) -> dict[str, object]:
 # 조율자는 근거를 직접 캐지 않으므로 timeline·rules 전문가가 병렬로 장부를 채워 준다.
 _EVIDENCE_PLAN = DispatchPlan(
     probes=[
-        {"probe": "timeline", "weight": 5, "question": "무엇을 했나"},  # type: ignore[list-item]
-        {"probe": "rules", "weight": 3, "question": "어떤 규칙이 걸렸나"},  # type: ignore[list-item]
+        {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
+        {"probe": "rules", "depth": "deep", "question": "어떤 규칙이 걸렸나"},  # type: ignore[list-item]
     ]
 )
 
@@ -254,7 +254,7 @@ def _redispatch_probe(question: str) -> dict[str, list[Any]]:
 
 
 _REDISPATCH_QUESTION = "다른 태스크에도 있나"
-_REDISPATCH = [{"probe": "repetition", "weight": 2, "question": _REDISPATCH_QUESTION}]
+_REDISPATCH = [{"probe": "repetition", "depth": "normal", "question": _REDISPATCH_QUESTION}]
 
 
 async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_부르고_완주한다() -> None:
@@ -273,7 +273,7 @@ async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_�
         step for step in res.steps if step.nodeName == "investigate" and step.eventKind == "node.completed"
     ]
     assert len(completed) == 2
-    assert any("redispatch repetition:2" in step.content for step in res.steps)
+    assert any("redispatch repetition:normal" in step.content for step in res.steps)
     # 초기 두 전문가에 재파견 하나를 더해 전문가는 세 번 실행한다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
@@ -360,7 +360,7 @@ async def test_출력_절단은_조율자를_재시도하지_않고_바로_강�
 
 
 async def test_조율자가_세운_계획이_조사_지시문에_반영된다() -> None:
-    plan = DispatchPlan(probes=[{"probe": "rules", "weight": 3, "question": "어떤 규칙이 걸렸나"}])  # type: ignore[list-item]
+    plan = DispatchPlan(probes=[{"probe": "rules", "depth": "deep", "question": "어떤 규칙이 걸렸나"}])  # type: ignore[list-item]
     chat = FakeToolLoopChat([{"recipes": []}], plan=plan)
 
     res = await _run(chat)
@@ -370,16 +370,16 @@ async def test_조율자가_세운_계획이_조사_지시문에_반영된다() 
         str(getattr(message, "content", message)) for request in chat.requests for message in request
     )
     # 계획이 조사 지시문으로 펴지고 배분한 weight가 그대로 예산 비율이 된다.
-    assert "rules (weight 3): 어떤 규칙이 걸렸나" in sent
-    assert any("survey -> rules:3" in step.content for step in res.steps)
+    assert "rules (deep): 어떤 규칙이 걸렸나" in sent
+    assert any("survey -> rules:deep" in step.content for step in res.steps)
     narrate("recipe-scan :: 조율자가 세운 계획이 조사 지시문에 반영된다", res)
 
 
 async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈다() -> None:
     plan = DispatchPlan(
         probes=[
-            {"probe": "timeline", "weight": 4, "question": "무엇을 했나"},  # type: ignore[list-item]
-            {"probe": "rules", "weight": 3, "question": "어떤 규칙이"},  # type: ignore[list-item]
+            {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
+            {"probe": "rules", "depth": "deep", "question": "어떤 규칙이"},  # type: ignore[list-item]
         ]
     )
     chat = FakeToolLoopChat([{"recipes": []}], plan=plan)
@@ -409,8 +409,8 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
 
     plan = DispatchPlan(
         probes=[
-            {"probe": "timeline", "weight": 4, "question": "무엇을 했나"},  # type: ignore[list-item]
-            {"probe": "rules", "weight": 3, "question": "어떤 규칙이"},  # type: ignore[list-item]
+            {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
+            {"probe": "rules", "depth": "deep", "question": "어떤 규칙이"},  # type: ignore[list-item]
         ]
     )
     chat = OneProbeFails([{"recipes": []}], plan=plan)

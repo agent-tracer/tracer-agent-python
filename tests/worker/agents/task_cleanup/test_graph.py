@@ -94,7 +94,7 @@ async def test_검토자가_읽은_후보와_빈_껍데기를_조율자가_함�
     ledger = FakeTracerApi(_event_rows("event-1"))
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     worker_turns = {
-        **_triage({"taskId": "task-1", "weight": 2}),
+        **_triage({"taskId": "task-1", "depth": "normal"}),
         **_reviewer(
             "task-1",
             {
@@ -148,7 +148,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다() -> None:
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=False)]
     worker_turns = {
-        **_triage({"taskId": "task-1", "weight": 1}),
+        **_triage({"taskId": "task-1", "depth": "shallow"}),
         **_reviewer(
             "task-1",
             {"taskId": "task-1", "archivable": True, "reason": "빈 껍데기다", "citedEventIds": []},
@@ -185,7 +185,7 @@ async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받�
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
     # 선별자는 빈 껍데기 task-2만 배정하고, 조율자가 아무도 읽지 않은 task-1을 멋대로 제안한다.
     worker_turns = {
-        **_triage({"taskId": "task-2", "weight": 1}),
+        **_triage({"taskId": "task-2", "depth": "shallow"}),
         **_reviewer(
             "task-2",
             {"taskId": "task-2", "archivable": True, "reason": "빈 껍데기다", "citedEventIds": []},
@@ -221,7 +221,7 @@ async def test_검토자가_읽었더니_이벤트가_없는_후보는_인용_�
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True)]
     worker_turns = {
-        **_triage({"taskId": "task-1", "weight": 1}),
+        **_triage({"taskId": "task-1", "depth": "shallow"}),
         **_reviewer(
             "task-1",
             {"taskId": "task-1", "archivable": True, "reason": "알맹이가 없다", "citedEventIds": []},
@@ -266,13 +266,13 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=True)]
     archivable = {"archivable": True, "reason": "의미 있는 활동이 없다", "citedEventIds": ["event-1"]}
     worker_turns = {
-        **_triage({"taskId": "task-1", "weight": 2}),
+        **_triage({"taskId": "task-1", "depth": "normal"}),
         **_reviewer("task-1", {"taskId": "task-1", **archivable}),
         **_reviewer("task-2", {"taskId": "task-2", **archivable}),
     }
     chat = FakeToolLoopChat(
         [
-            {"suggestions": [], "redispatch": [{"taskId": "task-2", "weight": 1}]},
+            {"suggestions": [], "redispatch": [{"taskId": "task-2", "depth": "shallow"}]},
             {
                 "suggestions": [
                     {
@@ -302,7 +302,7 @@ async def test_조율자가_재파견을_요청하면_후보를_한_번_더_열�
         step for step in res.steps if step.nodeName == "investigate" and step.eventKind == "node.completed"
     ]
     assert len(completed) == 2
-    assert any("redispatch task-2:1" in step.content for step in res.steps)
+    assert any("redispatch task-2:shallow" in step.content for step in res.steps)
     inspected = [
         step for step in res.steps if step.nodeName == "inspect" and step.eventKind == "node.completed"
     ]
@@ -320,7 +320,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
                 raise RuntimeError("inspect blew up")
             return await super().ainvoke(messages)
 
-    plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
+    plan = {"inspect": [{"taskId": "task-1", "depth": "normal"}, {"taskId": "task-2", "depth": "normal"}]}
     chat = OneInspectFails([{"suggestions": []}], report={"TriagePlan": plan})
 
     res = await _run(
@@ -339,7 +339,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
 
 
 async def test_고른_후보만_각자_예산으로_병렬_조사된다() -> None:
-    plan = {"inspect": [{"taskId": "task-1", "weight": 2}, {"taskId": "task-2", "weight": 2}]}
+    plan = {"inspect": [{"taskId": "task-1", "depth": "normal"}, {"taskId": "task-2", "depth": "normal"}]}
     chat = FakeToolLoopChat([{"suggestions": []}], report={"TriagePlan": plan})
 
     res = await _run(

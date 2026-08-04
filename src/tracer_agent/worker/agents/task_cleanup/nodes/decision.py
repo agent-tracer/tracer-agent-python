@@ -108,7 +108,7 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
             update["redispatch"] = plan
             update["redispatch_ceiling"] = ceiling
             update["redispatch_count"] = state["redispatch_count"] + 1
-            chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments)
+            chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments)
             deps.usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
             )

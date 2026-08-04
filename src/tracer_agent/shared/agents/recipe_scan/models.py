@@ -12,6 +12,7 @@ from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import AgentExecutionRequest, Language, ModelFacing, TrimmedStr
 
@@ -31,9 +32,10 @@ class RecipeScanRequest(AgentExecutionRequest):
 
 ProbeName = Literal["timeline", "rules", "repetition"]
 
-# 전문가 인스턴스의 턴 백스톱과, 조율자가 전문가 하나에 줄 수 있는 최대 weight다.
+# 전문가 인스턴스의 턴 백스톱이다.
 MAX_PROBE_TURNS = 10
-MAX_PROBE_WEIGHT = 10
+# 조율자가 고른 깊이를 예산 배분의 몫으로 옮기는 계약의 자리다.
+PROBE_DEPTH_KEY = "dispatchDepth"
 # 한 조사 계획이 부를 수 있는 전문가 수의 상한이다.
 MAX_DISPATCH_PROBES = 3
 # 조율자가 종합 대신 전문가를 다시 부를 수 있는 라운드 수이며 무한 루프를 이 값으로 막는다.
@@ -43,13 +45,18 @@ MAX_REDISPATCH_PROBES = 3
 
 
 class ProbeAssignment(ModelFacing):
-    """조율자가 한 전문가에게 맡긴 질문과 배분한 weight다."""
+    """조율자가 한 전문가에게 맡긴 질문과 고른 조사 깊이다."""
 
     model_config = ConfigDict(extra="forbid")
 
     probe: ProbeName
-    weight: int = Field(ge=1, le=MAX_PROBE_WEIGHT)
+    depth: DispatchDepth
     question: TrimmedStr = Field(min_length=1, max_length=300)
+
+    @property
+    def share(self) -> int:
+        """이 전문가가 예산 배분에서 받는 몫이며 값은 계약이 갖는다."""
+        return depth_share("recipe-scan", PROBE_DEPTH_KEY, self.depth)
 
 
 class DispatchPlan(ModelFacing):
@@ -60,9 +67,9 @@ class DispatchPlan(ModelFacing):
     # 빈 목록은 조사할 것이 없다는 뜻이며 그 실행은 후보 없이 끝난다.
     probes: list[ProbeAssignment] = Field(default_factory=list, max_length=MAX_DISPATCH_PROBES)
 
-    def total_weight(self) -> int:
-        """계획이 요구하는 weight 합이다."""
-        return sum(probe.weight for probe in self.probes)
+    def total_share(self) -> int:
+        """계획이 요구하는 몫의 합이다."""
+        return sum(probe.share for probe in self.probes)
 
 
 class ProbeDispatch(BaseModel):

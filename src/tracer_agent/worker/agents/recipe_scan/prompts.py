@@ -185,7 +185,7 @@ def render_plan(plan: DispatchPlan | None) -> str:
     """조율자가 세운 계획을 조사자가 읽을 지시문으로 편다."""
     if plan is None or not plan.probes:
         return ""
-    lines = [f"- {probe.probe} (weight {probe.weight}): {probe.question}" for probe in plan.probes]
+    lines = [f"- {probe.probe} ({probe.depth}): {probe.question}" for probe in plan.probes]
     return "\n\nYour own plan for this investigation:\n" + "\n".join(lines)
 
 

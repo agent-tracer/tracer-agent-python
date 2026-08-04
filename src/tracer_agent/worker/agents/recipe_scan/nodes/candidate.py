@@ -138,7 +138,7 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
             update["redispatch"] = plan
             update["redispatch_count"] = state["redispatch_count"] + 1
             record_redispatch_rounds(AGENT_NAME, update["redispatch_count"])
-            chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes)
+            chosen = ", ".join(f"{probe.probe}:{probe.depth}" for probe in plan.probes)
             deps.usage.record_orchestration_event(
                 "route.selected", f"{self.name} -> redispatch {chosen}", node_name=self.name
             )

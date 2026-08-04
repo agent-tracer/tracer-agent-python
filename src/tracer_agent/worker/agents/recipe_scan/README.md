@@ -36,7 +36,7 @@ sequenceDiagram
     participant R as RepairNode
     participant API as tracer-api
     G->>S: taskId + userPrompt
-    S-->>G: DispatchPlan(probes, weights)
+    S-->>G: DispatchPlan(probes, depths)
     G->>P: Send(assignment, turn/cost lease)
     par timeline / rules / repetition
         P->>API: scoped evidence queries
@@ -53,13 +53,13 @@ sequenceDiagram
     end
 ```
 
-예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `lease_shares`로 전문가 weight에 따라 배분한다. `survey` 실패는 빈 계획으로 강등되어 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
+예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `lease_shares`로 전문가가 고른 depth의 몫에 따라 배분한다. `survey` 실패는 빈 계획으로 강등되어 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
 
 ## 노드와 이동
 
 | 노드 | 입력 | 처리 | 갱신 또는 결과 |
 | --- | --- | --- | --- |
-| `survey` | `RecipeScanState` | 조사 전문가와 weight를 구조화 출력으로 결정한다 | `plan`, 비용 |
+| `survey` | `RecipeScanState` | 조사 전문가와 depth를 구조화 출력으로 결정한다 | `plan`, 비용 |
 | `probe` | `ProbeDispatch` | 할당된 질문을 전용 도구·예산·근거 장부로 조사한다 | `reports`, `provenance`, 비용, 사용 turn |
 | `investigate` | `RecipeScanState` | 전문가 보고를 종합해 `RecipeDraft`를 만들고 필요하면 redispatch를 요청한다 | `candidates`, `messages`, `redispatch` |
 | `validate_candidate` | `RecipeScanState` | task·event·turn·rule·recipe revision 인용을 provenance와 대조한다 | `validation_errors` |

@@ -91,13 +91,13 @@ def test_언어_지시문도_조각과_같은_상한으로_치환된다(tmp_path
     assert resolved.directive("ko") == f"Write at most {limit} rationales in Korean."
 
 
-def test_상한이_계약의_limits_에서_온다() -> None:
+def test_상한과_조사_깊이_어휘가_계약에서_온다() -> None:
     resolved = ContractPromptSource().resolve("recipe-scan")
 
     survey = resolved.template("recipe-scan.survey.system")
     investigator = resolved.template("recipe-scan.investigator.system")
 
-    assert "weight from 1 to 10" in survey.slot("dispatchWeighting")
+    assert "shallow, normal, or deep" in survey.slot("dispatchWeighting")
     # 조율자는 도구를 갖지 않으므로 인용 가능한 식별자를 요청이 싣는다고 적는다.
     assert "Your request lists every identifier" in investigator.slot("evidenceSourcing")
 

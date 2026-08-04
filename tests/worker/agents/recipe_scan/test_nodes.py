@@ -80,7 +80,7 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
 
     result = await node.run(
         ProbeDispatch(
-            assignment=ProbeAssignment(probe="timeline", weight=2, question="무엇"),
+            assignment=ProbeAssignment(probe="timeline", depth="normal", question="무엇"),
             max_turns=4,
             max_cost_usd=1.0,
         )
@@ -111,14 +111,14 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강�
     slow_result, fast_result = await asyncio.gather(
         slow_node.run(
             ProbeDispatch(
-                assignment=ProbeAssignment(probe="timeline", weight=1, question="무엇"),
+                assignment=ProbeAssignment(probe="timeline", depth="shallow", question="무엇"),
                 max_turns=4,
                 max_cost_usd=1.0,
             )
         ),
         fast_node.run(
             ProbeDispatch(
-                assignment=ProbeAssignment(probe="rules", weight=1, question="어떤 규칙"),
+                assignment=ProbeAssignment(probe="rules", depth="shallow", question="어떤 규칙"),
                 max_turns=4,
                 max_cost_usd=1.0,
             )
@@ -143,7 +143,7 @@ async def test_취소는_강등되지_않고_전파된다() -> None:
     run = asyncio.ensure_future(
         node.run(
             ProbeDispatch(
-                assignment=ProbeAssignment(probe="timeline", weight=1, question="무엇"),
+                assignment=ProbeAssignment(probe="timeline", depth="shallow", question="무엇"),
                 max_turns=4,
                 max_cost_usd=1.0,
             )
@@ -189,7 +189,7 @@ async def test_0턴_리스를_받은_전문가는_모델을_부르지_않는다(
 
     result = await node.run(
         ProbeDispatch(
-            assignment=ProbeAssignment(probe="timeline", weight=1, question="무엇"),
+            assignment=ProbeAssignment(probe="timeline", depth="shallow", question="무엇"),
             max_turns=0,
             max_cost_usd=0.0,
         )

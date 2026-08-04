@@ -49,7 +49,7 @@
           "inspect": [
             {
               "taskId": "task-1",
-              "weight": 2
+              "depth": "normal"
             }
           ]
         }

@@ -59,7 +59,7 @@ def _remaining(state: RecipeScanState) -> tuple[int, float]:
 def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
     if not probes or remaining_turns <= 0 or remaining_usd <= 0.0:
         return []
-    leases = lease_shares([assignment.weight for assignment in probes], remaining_turns, remaining_usd)
+    leases = lease_shares([assignment.share for assignment in probes], remaining_turns, remaining_usd)
     return [
         Send(
             ProbeNode.name,

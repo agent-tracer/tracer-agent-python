@@ -35,7 +35,7 @@ sequenceDiagram
     participant R as RepairNode
     participant API as tracer-api
     G->>T: candidate batch
-    T-->>G: selected task IDs + weights
+    T-->>G: selected task IDs + depths
     G->>I: Send(task assignment, cost budget)
     par selected candidates
         I->>API: get task timeline
@@ -53,7 +53,7 @@ sequenceDiagram
 
 | 노드 | 입력 | 처리 | 갱신 또는 결과 |
 | --- | --- | --- | --- |
-| `triage` | `TaskCleanupState` | 서버 후보 배치를 조회하고 review 대상을 weight로 선택한다 | `plan`, 노출 후보, 후보 근거 |
+| `triage` | `TaskCleanupState` | 요청이 실어 준 후보 배치에서 review 대상을 depth로 선택한다 | `plan`, 노출 후보, 후보 근거 |
 | `inspect` | `InspectDispatch` | 후보 하나의 timeline을 읽고 archive 여부·사유·event ID를 보고한다 | `reports`, `event_ids_by_task` |
 | `investigate` | `TaskCleanupState` | review 보고를 종합해 `CleanupDraft`를 만들고 필요하면 redispatch한다 | `suggestions`, `redispatch` |
 | `validate_decisions` | `TaskCleanupState` | 노출 후보와 조사 event만 제안이 인용하는지 검사한다 | 유효 제안, `validation_errors` |
@@ -76,7 +76,7 @@ sequenceDiagram
 | 프롬프트 | 계약 template | 실행 단계 |
 | --- | --- | --- |
 | investigator system | `task-cleanup.investigator.system` | review report 종합·archive suggestion |
-| triage system | `task-cleanup.triage.system` | 후보 선택·weight 배분 |
+| triage system | `task-cleanup.triage.system` | 후보 선택·depth 배분 |
 | inspect system | `task-cleanup.inspect.system` | 단일 후보 event 검토 |
 | repair directive | `task-cleanup.investigator.repair` | 검증 오류 수리 |
 

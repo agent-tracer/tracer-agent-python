@@ -78,7 +78,7 @@ class GreedyChat:
                 tool_calls=[
                     {
                         "name": "TriagePlan",
-                        "args": {"inspect": [{"taskId": "task-1", "weight": 1}]},
+                        "args": {"inspect": [{"taskId": "task-1", "depth": "shallow"}]},
                         "id": "call-triage",
                         "type": "tool_call",
                     }

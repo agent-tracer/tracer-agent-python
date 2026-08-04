@@ -21,7 +21,7 @@ from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.runtime.serde import graph_serde
 
 _PLAN = DispatchPlan(
-    probes=[{"probe": "timeline", "weight": 5, "question": "무엇을 했나"}]  # type: ignore[list-item]
+    probes=[{"probe": "timeline", "depth": "deep", "question": "무엇을 했나"}]  # type: ignore[list-item]
 )
 
 

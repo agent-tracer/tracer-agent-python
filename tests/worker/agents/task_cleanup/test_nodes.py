@@ -83,7 +83,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     )
 
     result = await node.run(
-        InspectDispatch(assignment=InspectAssignment(taskId="task-1", weight=2), cost_budget=0.25)
+        InspectDispatch(assignment=InspectAssignment(taskId="task-1", depth="normal"), cost_budget=0.25)
     )
 
     # 조사가 실패한 후보는 안전하게 보관 불가로, 사유는 실패로 올린다.
@@ -154,8 +154,12 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
     node = InspectNode(deps)
 
     results = await asyncio.gather(
-        node.run(InspectDispatch(assignment=InspectAssignment(taskId="task-1", weight=1), cost_budget=0.25)),
-        node.run(InspectDispatch(assignment=InspectAssignment(taskId="task-2", weight=1), cost_budget=0.25)),
+        node.run(
+            InspectDispatch(assignment=InspectAssignment(taskId="task-1", depth="shallow"), cost_budget=0.25)
+        ),
+        node.run(
+            InspectDispatch(assignment=InspectAssignment(taskId="task-2", depth="shallow"), cost_budget=0.25)
+        ),
     )
 
     # 두 검토가 컴파일된 agent 하나를 함께 써도 장부는 각자의 것으로 남는다.

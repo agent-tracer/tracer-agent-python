@@ -9,6 +9,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import AgentExecutionRequest, Language, TrimmedStr
 
@@ -96,8 +97,8 @@ class EventPage(BaseModel):
 
 # 검토 전문가 인스턴스의 턴 백스톱이며 SDK 대응 상수와 계약으로 값을 맞춘다.
 MAX_INSPECT_TURNS = 4
-# 조율자가 후보 하나에 줄 수 있는 최대 weight이며 배분 비율의 상한일 뿐 턴 수가 아니다.
-MAX_INSPECT_WEIGHT = 4
+# 조율자가 고른 깊이를 예산 배분의 몫으로 옮기는 계약의 자리다.
+INSPECT_DEPTH_KEY = "inspectDepth"
 MAX_INSPECT_EXCERPTS = 6
 MAX_INSPECT_REASON_CHARS = 400
 CLEANUP_REVIEWER_ROLE = "cleanup-candidate-reviewer"
@@ -107,12 +108,17 @@ MAX_REDISPATCH_ROUNDS = 1
 
 
 class InspectAssignment(BaseModel):
-    """조율자가 열어보기로 고른 후보 하나와 배분한 weight다."""
+    """조율자가 열어보기로 고른 후보 하나와 고른 조사 깊이다."""
 
     model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1)
-    weight: int = Field(ge=1, le=MAX_INSPECT_WEIGHT)
+    depth: DispatchDepth
+
+    @property
+    def share(self) -> int:
+        """이 검토자가 예산 배분에서 받는 몫이며 값은 계약이 갖는다."""
+        return depth_share("task-cleanup", INSPECT_DEPTH_KEY, self.depth)
 
 
 class TriagePlan(BaseModel):
@@ -124,9 +130,9 @@ class TriagePlan(BaseModel):
         default_factory=list, alias="inspect", max_length=MAX_SUGGESTIONS
     )
 
-    def total_weight(self) -> int:
-        """계획이 요구하는 weight 합이다."""
-        return sum(item.weight for item in self.assignments)
+    def total_share(self) -> int:
+        """계획이 요구하는 몫의 합이다."""
+        return sum(item.share for item in self.assignments)
 
 
 class InspectDispatch(BaseModel):

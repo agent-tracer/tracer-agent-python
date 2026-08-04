@@ -54,7 +54,7 @@ class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
             tool_owner=budget.agent_name,
         )
         plan = result.response
-        chosen = ", ".join(f"{probe.probe}:{probe.weight}" for probe in plan.probes) or "no specialists"
+        chosen = ", ".join(f"{probe.probe}:{probe.depth}" for probe in plan.probes) or "no specialists"
         deps.usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",
