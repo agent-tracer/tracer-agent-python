@@ -52,6 +52,7 @@ JOB_FAIL_PATH = f"{JOBS_PATH}/{{execution_id}}/fail"
 JOB_RELEASE_PATH = f"{JOBS_PATH}/{{execution_id}}/release"
 ACCEPTED_STATUS = 202
 INVALID_REQUEST = (400, "validation_error", "Invalid request")
+LEASE_OWNER_MISSING = (400, "job.lease-owner-missing", "Lease owner header is required")
 INVALID_RULE_ANCHOR = (
     400,
     "job.invalid-rule-anchor",
@@ -253,7 +254,7 @@ async def claim_job(
 ) -> JSONResponse:
     """대기 중인 잡 하나를 부른 실행기의 리스로 가져간다."""
     if not owner:
-        return error_envelope(*INVALID_REQUEST)
+        return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -272,7 +273,7 @@ async def renew_job_lease(
 ) -> JSONResponse:
     """실행이 길어지는 동안 쥔 리스의 수명을 늘린다."""
     if not owner:
-        return error_envelope(*INVALID_REQUEST)
+        return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -289,27 +290,33 @@ async def renew_job_lease(
 @router.post(JOB_RESULTS_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
 async def report_job_result(
     execution_id: str,
-    body: JobReportBody,
+    request: Request,
     source: ExecutionSql,
     user_id: UserId,
     owner: LeaseOwner,
 ) -> JSONResponse:
     """실행기가 만든 산출물을 잡에 싣고 종결한다."""
+    parsed = await _parse_body(request, JobReportBody)
+    if isinstance(parsed, JSONResponse):
+        return parsed
     return await _settle(
-        execution_id, source, user_id, owner, "completed", body.model_dump(exclude_none=True), None
+        execution_id, source, user_id, owner, "completed", parsed.model_dump(exclude_none=True), None
     )
 
 
 @router.post(JOB_FAIL_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404, 409))
 async def fail_job(
     execution_id: str,
-    body: JobFailureBody,
+    request: Request,
     source: ExecutionSql,
     user_id: UserId,
     owner: LeaseOwner,
 ) -> JSONResponse:
     """실행기가 실패를 보고하고 잡을 종결한다."""
-    return await _settle(execution_id, source, user_id, owner, "failed", {}, body.message)
+    parsed = await _parse_body(request, JobFailureBody)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    return await _settle(execution_id, source, user_id, owner, "failed", {}, parsed.message)
 
 
 @router.post(JOB_RELEASE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
@@ -318,7 +325,7 @@ async def release_job(
 ) -> JSONResponse:
     """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 실행한다."""
     if not owner:
-        return error_envelope(*INVALID_REQUEST)
+        return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)
@@ -327,6 +334,17 @@ async def release_job(
             return error_envelope(*NOT_FOUND)
         released = await ledger.release_lease(execution_id, owner, now)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"released": released}})
+
+
+async def _parse_body[BodyT: BaseModel](request: Request, model: type[BodyT]) -> BodyT | JSONResponse:
+    """본문을 계약이 정한 봉투로 거절하며 FastAPI 의 자동 검증에 맡기지 않는다."""
+    body = await read_body(request)
+    if body is None:
+        return error_envelope(*INVALID_REQUEST)
+    try:
+        return model.model_validate(body)
+    except ValidationError as invalid:
+        return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
 
 
 async def _settle(
@@ -339,7 +357,7 @@ async def _settle(
     error: str | None,
 ) -> JSONResponse:
     if not owner:
-        return error_envelope(*INVALID_REQUEST)
+        return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)
     async with source.connect() as sql:
         ledger = JobLedger(sql)

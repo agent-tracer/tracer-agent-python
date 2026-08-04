@@ -25,6 +25,10 @@ CREDENTIAL_REJECTION = next(
     for rejection in _INTAKE["rejections"]
     if rejection["code"] == _INTAKE["credentialCheck"]["rejection"]
 )
+LEASE_OWNER = _INTAKE["leaseOwner"]
+LEASE_REJECTION = next(
+    rejection for rejection in _INTAKE["rejections"] if rejection["code"] == LEASE_OWNER["rejection"]
+)
 
 
 class SingleSql:
@@ -506,3 +510,35 @@ def test_세션에서_부른_스캔은_아직_도는_태스크도_접수한다(
         )
 
     assert res.status_code == 202
+
+
+# 본문을 요구하는 창구는 리스 이름이 아니라 본문 때문에 거절당하지 않도록 성립하는 본문을 싣는다.
+LEASE_BODIES = {"results": {"rules": []}, "fail": {"message": "boom"}}
+
+
+@pytest.mark.parametrize("declared", LEASE_OWNER["paths"])
+def test_리스를_요구하는_창구는_이름_없는_요청을_계약의_낱말로_거절한다(
+    client: TestClient, declared: str
+) -> None:
+    path = declared.replace("{id}", "no-such-run")
+
+    res = client.post(path, json=LEASE_BODIES.get(declared.rsplit("/", 1)[-1]))
+
+    assert res.status_code == LEASE_REJECTION["status"]
+    assert res.json()["error"] == {
+        "code": LEASE_REJECTION["code"],
+        "message": LEASE_REJECTION["message"],
+    }
+
+
+@pytest.mark.parametrize("declared", ["results", "fail"])
+def test_본문을_요구하는_창구도_계약이_정한_400으로_거절한다(client: TestClient, declared: str) -> None:
+    # FastAPI 의 자동 검증에 맡기면 계약에 없는 422 가 나가 실행기가 거절을 가리지 못한다.
+    res = client.post(
+        f"{PATH}/no-such-run/{declared}",
+        json={"쓸모없는칸": 1},
+        headers={"x-monitor-lease-owner": "runner-1"},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "validation_error"
