@@ -35,13 +35,13 @@ def get_model_credentials(request: Request) -> ModelCredentialSource:
 
 
 def get_read_api_base_url(request: Request) -> str:
-    """실행기가 추적 자료를 읽을 때 칠 주소를 낸다."""
+    """실행기가 추적 자료를 읽을 때 부를 주소를 낸다."""
     base_url: str = request.app.state.read_api_base_url
     return base_url
 
 
 def get_agent_api_base_url(request: Request) -> str:
-    """실행기가 이 서비스로 되돌아올 때 칠 주소를 낸다."""
+    """실행기가 이 서비스로 되돌아올 때 부를 주소를 낸다."""
     base_url: str = request.app.state.agent_api_base_url
     return base_url
 

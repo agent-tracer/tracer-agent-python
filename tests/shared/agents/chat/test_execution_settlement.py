@@ -15,7 +15,7 @@ _소비 = ChatExecutionSpend(model_used="model", cost_usd=0.0, num_turns=1, stop
 
 
 class 질의를_모으는_연결:
-    """실행한 질의만 모으고 언제나 한 행을 바꾼 것으로 답한다."""
+    """실행된 질의만 모으고 언제나 한 행을 바꾼 것으로 답한다."""
 
     def __init__(self) -> None:
         self.실행한: list[str] = []

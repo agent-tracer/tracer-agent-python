@@ -16,7 +16,7 @@ class SharedAssignment(Protocol):
 def allocate_cost_shares[Assignment: SharedAssignment](
     assignments: Sequence[Assignment], *, ceiling: float = 1.0
 ) -> list[tuple[Assignment, float]]:
-    """각 워커의 몫에 예산 상한을 곱해 그 워커가 실행할 수 있는 비용과 함께 돌려준다."""
+    """각 워커의 몫에 예산 상한을 곱해 그 워커가 쓸 수 있는 비용을 함께 낸다."""
     total_share = sum(assignment.share for assignment in assignments)
     if total_share <= 0:
         raise ValueError("worker assignments must allocate at least one share")

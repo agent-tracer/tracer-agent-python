@@ -33,7 +33,7 @@ PROBE_TOOLS: dict[ProbeName, tuple[str, ...]] = {
     "repetition": (SEARCH_EVENTS, FIND_SIMILAR_TASKS),
 }
 
-# 조율자는 근거를 직접 캐지 않고 요청이 실어 준 인용 가능한 식별자만 본다.
+# 조율자는 근거를 직접 수집하지 않고 요청이 실어 준 인용 가능한 식별자만 본다.
 COORDINATOR_TOOLS: tuple[str, ...] = ()
 
 # 계획이 규모를 모른 채 서지 않도록 조율자가 요약 하나를 가진다.

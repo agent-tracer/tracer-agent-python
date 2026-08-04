@@ -103,5 +103,5 @@ class Test구조화출력전략:
         assert _supports_provider_strategy(model, tools=["get_task_events"]) is True
 
     def test_대역_모델은_도구_전략으로_내려간다(self) -> None:
-        # 검사가 도는 경로는 운영과 다르므로 대역이 무엇을 밟는지 여기서 드러낸다.
+        # 검사가 지나는 경로는 운영과 다르므로 대역이 무엇을 밟는지 여기서 드러낸다.
         assert _supports_provider_strategy(FakeToolLoopChat([]), tools=["get_task_events"]) is False

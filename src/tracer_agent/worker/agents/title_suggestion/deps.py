@@ -53,7 +53,7 @@ class TitleDeps:
     agents: CompiledAgentCache = field(default_factory=CompiledAgentCache)
 
     async def investigate(self, messages: list[BaseMessage]) -> TitleCall:
-        """조사 도구를 연 채 모델을 돌려 제목 후보와 그 호출이 쓴 턴과 달러를 낸다."""
+        """조사 도구를 연 채 모델을 호출해 제목 후보와 그 호출이 쓴 턴과 달러를 낸다."""
         max_turns = self.req.limits.maxTurns
         budget = self.budget.new_loop(AGENT_NAME, self.req.model)
         agent = self.agents.compiled(

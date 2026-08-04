@@ -163,7 +163,7 @@ def test_예약분은_정산에서_두_번_빠지지_않는다() -> None:
 
 
 def test_전문가가_예산을_소진해도_종합과_수리의_몫은_예약대로_남는다() -> None:
-    """repair·synthesisFloor 예약은 팬아웃이 잔량을 전부 실행해도 침범당하지 않는다."""
+    """repair·synthesisFloor 예약은 팬아웃이 잔량을 전부 소진해도 침범당하지 않는다."""
     reservation = shared_contract("execution.budget.json")["reservation"]
     execution = ExecutionBudget(2.0, mk_rates(), max_turns=15)
     repair_lease = execution.reserve(reservation["repair"]["turns"], reservation["repair"]["budgetShare"])

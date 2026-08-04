@@ -169,7 +169,7 @@ def _listed(ids: Iterable[str], *, presorted: bool = False) -> str:
 
 
 def render_reports(reports: Sequence[ProbeReport] | None) -> str:
-    """전문가들이 올린 보고를 조율자가 읽을 근거로 편다."""
+    """전문가들이 올린 보고를 조율자가 읽을 근거로 정리한다."""
     if not reports:
         return ""
     blocks = []
@@ -182,7 +182,7 @@ def render_reports(reports: Sequence[ProbeReport] | None) -> str:
 
 
 def render_plan(plan: DispatchPlan | None) -> str:
-    """조율자가 세운 계획을 조사자가 읽을 지시문으로 편다."""
+    """조율자가 세운 계획을 조사자가 읽을 지시문으로 정리한다."""
     if plan is None or not plan.probes:
         return ""
     lines = [f"- {probe.probe} ({probe.depth}): {probe.question}" for probe in plan.probes]

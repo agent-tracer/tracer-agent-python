@@ -1,4 +1,4 @@
-"""도구와 조사가 무너졌을 때 모델이 읽는 문구를 계약에서 읽는다."""
+"""도구와 조사가 실패했을 때 모델이 읽는 문구를 계약에서 읽는다."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import Any
 
 from .contract_prompt_source import CONTRACT_ROOT, ContractPromptUnavailable
 
-# 도구 하나가 무너졌을 때 모델이 읽는 문구의 계약 자리다.
+# 도구 하나가 실패했을 때 모델이 읽는 문구의 계약 자리다.
 TOOL_FAILED_KEY = "toolFailed"
-# 조사 하나가 통째로 무너졌을 때 조율자가 읽는 문구의 계약 자리다.
+# 조사 하나가 통째로 실패했을 때 조율자가 읽는 문구의 계약 자리다.
 WORKER_FAILED_KEY = "workerFailed"
 
 

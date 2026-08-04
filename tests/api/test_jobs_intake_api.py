@@ -1,4 +1,4 @@
-"""브라우저가 직접 치는 잡 접수 창구가 tracer-api와 같은 경로와 봉투를 내는지 검증한다."""
+"""브라우저가 직접 부르는 잡 접수 창구가 tracer-api와 같은 경로와 봉투를 내는지 검증한다."""
 
 from __future__ import annotations
 
@@ -553,7 +553,7 @@ LOCAL_EXECUTOR = _INTAKE["localExecutor"]
 
 @pytest.mark.parametrize("declared", ["results", "fail"])
 def test_관측_없는_보고를_거절한다(client: TestClient, declared: str) -> None:
-    # 관측을 받지 않으면 로컬 실행기가 태운 비용이 원장에 닿을 길이 없다.
+    # 관측을 받지 않으면 로컬 실행기가 쓴 비용이 원장에 닿을 길이 없다.
     body = {key: value for key, value in LEASE_BODIES[declared].items() if key != "usage"}
 
     res = client.post(f"{PATH}/no-such-run/{declared}", json=body, headers={"x-monitor-lease-owner": "r1"})

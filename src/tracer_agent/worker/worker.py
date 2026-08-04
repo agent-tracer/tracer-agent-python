@@ -247,7 +247,7 @@ def _ready(client: Client) -> Callable[[], Awaitable[Client]]:
 
 
 def _parse_queue(argv: list[str]) -> WorkerQueue:
-    """기동 인자 하나로 이 프로세스가 폴링할 큐를 정하며 없으면 chat으로 물러선다."""
+    """기동 인자 하나로 이 프로세스가 폴링할 큐를 정하며 인자가 없으면 chat 큐를 쓴다."""
     if not argv:
         return CHAT_QUEUE_KEY
     queue = argv[0]

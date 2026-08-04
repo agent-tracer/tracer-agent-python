@@ -342,7 +342,7 @@ async def fail_job(
 async def release_job(
     execution_id: str, source: ExecutionSql, user_id: UserId, owner: LeaseOwner
 ) -> JSONResponse:
-    """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 실행한다."""
+    """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 되돌린다."""
     if not owner:
         return error_envelope(*LEASE_OWNER_MISSING)
     now = datetime.now(UTC)

@@ -62,10 +62,10 @@ class UniqueViolation(Exception):
 
 
 class LedgerSql(Protocol):
-    """조건부 갱신 한 문장을 돌리고 갱신된 행을 돌려주는 연결 표면이다."""
+    """조건부 갱신 한 문장을 실행하고 갱신된 행을 내는 연결 표면이다."""
 
     async def fetch(self, sql: str, *args: Any) -> list[SqlRow]:
-        """문장 하나를 돌리고 돌아온 행을 사전으로 낸다."""
+        """문장 하나를 실행하고 돌아온 행을 사전으로 낸다."""
         ...
 
     def transaction(self) -> AbstractAsyncContextManager[None]:
@@ -80,7 +80,7 @@ class AsyncpgSql:
         self._connection = connection
 
     async def fetch(self, sql: str, *args: Any) -> list[SqlRow]:
-        """문장 하나를 돌리고 돌아온 행을 사전으로 낸다."""
+        """문장 하나를 실행하고 돌아온 행을 사전으로 낸다."""
         try:
             rows = await self._connection.fetch(sql, *args)
         except asyncpg.UniqueViolationError as error:

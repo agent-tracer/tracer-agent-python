@@ -36,7 +36,7 @@ from .policy import build_routes
 from .prompts import build_prompt_bundle
 from .reader import TitleLedgerReader, load_title_context
 
-# 조사 한 번과 수리 한 번이 도구를 진행 중인 동안 그래프가 밟는 노드 수의 상한이다.
+# 조사 한 번과 수리 한 번이 도구 루프를 실행하는 동안 그래프가 밟는 노드 수의 상한이다.
 _RECURSION_LIMIT = 20
 
 

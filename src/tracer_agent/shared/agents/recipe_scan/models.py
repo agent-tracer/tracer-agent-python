@@ -16,7 +16,7 @@ from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import AgentExecutionRequest, Language, ModelFacing, TrimmedStr
 
-# 한 태스크가 서로 다른 작업 turn을 담을 수 있어 스캔 한 번이 낼 수 있는 후보 수다.
+# 한 태스크가 서로 다른 작업 turn을 담을 수 있으므로 스캔 한 번이 낼 수 있는 후보 수의 상한이다.
 MAX_RECIPE_CANDIDATES = 4
 
 
@@ -60,7 +60,7 @@ class ProbeAssignment(ModelFacing):
 
 
 class DispatchPlan(ModelFacing):
-    """조율자가 세운 조사 계획이며 어디를 얼마나 팔지 스스로 정한 결과다."""
+    """조율자가 세운 조사 계획이며 어디를 얼마나 조사할지 스스로 정한 결과다."""
 
     model_config = ConfigDict(extra="forbid")
 

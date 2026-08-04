@@ -95,7 +95,7 @@ class ChatExecutionActivities:
 
     @activity.defn(name=GENERATE_ACTIVITY)
     async def generate(self, prepared: PreparedChatExecution) -> GeneratedChatExecution:
-        """모델을 돌려 한 턴의 산출물을 만들고 취소로 끊겨도 그때까지의 것을 낸다."""
+        """모델을 호출해 한 턴의 산출물을 만들고 취소로 끊겨도 그때까지의 것을 낸다."""
         attempt = activity.info().attempt
         # 단가도 한도도 자격도 이 서비스가 지어내지 않으므로 시도마다 서버에서 받아 봉투를 세운다.
         envelope = await self._envelopes.issue(prepared.execution_id, attempt)
@@ -168,7 +168,7 @@ class ChatExecutionActivities:
     async def _take_running_seat(self, ledger: ChatExecutionLedger, request: ChatExecutionRequest) -> None:
         if await ledger.claim_queued(request.execution_id, _now()) != THREAD_BUSY:
             return
-        # 스레드를 막은 running이 갱신을 멈춘 것이면 되돌리고 다시 집으며, 살아 있으면 물러난다.
+        # 스레드를 막은 running이 갱신을 멈춘 것이면 되돌리고 다시 가져가며, 살아 있으면 이번 시도를 넘긴다.
         now = _now()
         recovered = await ledger.recover_stale_running(
             now - timedelta(seconds=RUNNING_LEASE_S), now, request.thread_id

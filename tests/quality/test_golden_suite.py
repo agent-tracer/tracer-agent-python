@@ -127,7 +127,7 @@ def _forged_recipe(case: GoldenCase, **slice_overrides: Any) -> dict[str, Any]:
 
 
 def _synthetic_run(case: GoldenCase, data: dict[str, Any], prompt_text: str = "") -> CaseRun:
-    """그래프를 거치지 않은 결과를 판정기에 그대로 물린다."""
+    """그래프를 거치지 않은 결과를 판정기에 그대로 넘긴다."""
     response = AgentResponse(data=data, modelUsed=case.input["model"], durationMs=0)
     return CaseRun(
         case=case,

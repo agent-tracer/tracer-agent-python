@@ -11,7 +11,7 @@ from aiokafka import AIOKafkaProducer
 
 _log = logging.getLogger(__name__)
 
-# 브로커가 죽어 있을 때 실행이 그만큼 서 있지 않도록 드라이버 기본 대기보다 짧게 끊는다.
+# 브로커가 응답하지 않을 때 실행이 그만큼 멈춰 있지 않도록 드라이버 기본 대기보다 짧게 끊는다.
 PUBLISH_TIMEOUT_S = 5.0
 
 
@@ -48,7 +48,7 @@ class UpdatePublisher:
         self._lock = asyncio.Lock()
 
     async def publish(self, key: str, payload: dict[str, Any]) -> bool:
-        """갱신 사실 하나를 토픽에 흘리고 보냈는지 낸다."""
+        """갱신 사실 하나를 토픽에 전송하고 보냈는지 낸다."""
         try:
             producer = await self._started()
             await asyncio.wait_for(
@@ -58,7 +58,7 @@ class UpdatePublisher:
                 PUBLISH_TIMEOUT_S,
             )
         except Exception as error:
-            # 깨우지 못한 구독자는 다음 조회에서 따라잡으므로 실행을 여기서 끊지 않는다.
+            # 알리지 못한 구독자는 다음 조회에서 따라잡으므로 실행을 여기서 끊지 않는다.
             _log.warning("update wakeup publish failed: %s", error)
             return False
         return True

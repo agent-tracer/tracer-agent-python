@@ -154,7 +154,7 @@ async def _resolve(
     execution = (
         None
         if status == REJECTED
-        # 하지 말라고 이미 답한 자리라 이어 말할 턴을 세우지 않는다.
+        # 거절로 이미 답한 자리라 이어 말할 턴을 세우지 않는다.
         else await _follow_up(ledger, intake, dispatch, user_id, thread_id, confirmation_id, anchor, now)
     )
     await _announce(updates, ledger, thread_id)
@@ -180,7 +180,7 @@ async def _follow_up(
     now: datetime,
 ) -> SqlRow | None:
     """실행한 결과를 모델이 읽고 이어 말하도록 그 결과를 앵커로 삼는 턴을 세운다."""
-    # 이미 도는 턴이 있으면 그 턴이 결과를 이력으로 읽으므로 줄을 하나 더 세우지 않는다.
+    # 이미 실행 중인 턴이 있으면 그 턴이 결과를 이력으로 읽으므로 줄을 하나 더 세우지 않는다.
     if await ledger.latest_active_execution(thread_id) is not None:
         return None
     previous = await ledger.list_executions(thread_id)

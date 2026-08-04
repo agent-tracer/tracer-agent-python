@@ -48,7 +48,7 @@ def make_chat(
     """모델 봉투로 출력 한도와 추론 설정을 정한 재시도 없는 채팅 클라이언트를 만든다."""
     envelope = model_envelope(model)
     max_output_tokens = envelope.max_output_tokens or feature_max_output_tokens
-    # streaming을 켜면 ainvoke가 내부적으로 토큰을 흘려 LangGraph messages 스트림이 토큰을 낸다.
+    # streaming을 켜면 ainvoke가 내부적으로 토큰을 스트리밍해 LangGraph messages 스트림이 토큰을 낸다.
     kwargs: dict[str, object] = {
         "model": model,
         "api_key": api_key,

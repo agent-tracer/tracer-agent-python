@@ -1,4 +1,4 @@
-"""idempotencyKey 중복 실행 방지와 runId 취소 검증."""
+"""같은 idempotencyKey의 중복 실행을 막고 runId로 실행을 취소하는지 검증한다."""
 
 from __future__ import annotations
 
@@ -394,7 +394,7 @@ class TestCancelRun:
 
         async def body(_usage: object) -> dict[str, object]:
             started.set()
-            await asyncio.Event().wait()  # 영원히 대기(취소로만 끝난다)
+            await asyncio.Event().wait()  # 취소로만 끝나도록 영원히 대기한다.
 
         task = asyncio.ensure_future(
             execute(

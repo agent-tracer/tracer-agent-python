@@ -125,7 +125,7 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강�
         ),
     )
 
-    # 진전 없이 상한을 넘긴 전문가만 하향되고, 함께 돈 다른 전문가의 보고는 온전히 남는다.
+    # 진전 없이 상한을 넘긴 전문가만 하향되고, 함께 실행된 다른 전문가의 보고는 온전히 남는다.
     assert slow_result["reports"][0].exhausted is True
     assert fast_result["reports"][0].exhausted is False
 

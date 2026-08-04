@@ -60,7 +60,7 @@ class CleanupBatch(BaseModel):
     candidates: list[CleanupCandidate] = Field(default_factory=list)
     # 서버 조회 상한에 걸려 이 배치가 후보 전체를 담지 못했는지 여부다.
     batchTruncated: bool = False
-    # 후보를 가리기 전에 훑은 태스크 수이며 제안에서 되짚을 수 없어 산출이 따로 싣는다.
+    # 후보를 가리기 전에 조회한 태스크 수이며 제안에서 되짚을 수 없어 산출이 따로 싣는다.
     tasksScanned: int = 0
 
 
@@ -267,7 +267,7 @@ class ResultUpdate(TypedDict):
 
 class TaskCleanupState(BudgetSnapshotState):
     scanned_at: str
-    # 후보를 가리기 전에 훑은 태스크 수이며 제안이 없어도 산출이 이 수를 싣는다.
+    # 후보를 가리기 전에 조회한 태스크 수이며 제안이 없어도 산출이 이 수를 싣는다.
     tasks_scanned: int
     language: Language
     max_suggestions: int

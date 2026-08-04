@@ -74,7 +74,7 @@ class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[RecipeScanState, Upd
             budget=budget,
             system_prompt=deps.prompts.investigator_system,
             catalog=catalog,
-            # 조율자는 전문가가 합친 장부의 인용만 확인하고 근거를 직접 캐지 않는다.
+            # 조율자는 전문가가 합친 장부의 인용만 확인하고 근거를 직접 수집하지 않는다.
             tools=COORDINATOR_TOOLS,
             output=RecipeDraft,
             messages=messages,

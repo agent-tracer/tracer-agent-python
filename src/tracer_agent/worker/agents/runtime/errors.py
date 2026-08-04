@@ -21,7 +21,7 @@ def _redact_error_message(msg: str) -> str:
 
 
 def _redact_exception(err: BaseException) -> BaseException:
-    # APIStatusError 등 provider exception의 body/headers를 지운다.
+    # APIStatusError 같은 공급자 예외가 든 본문과 헤더를 지운다.
     if hasattr(err, "body") and err.body:
         err.body = "<redacted>"
     if hasattr(err, "request") and hasattr(getattr(err, "request", None), "headers"):

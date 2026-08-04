@@ -107,7 +107,7 @@ def completed_turn(
     request: ChatRequest,
     response: AgentResponse,
 ) -> GeneratedChatExecution:
-    """끝까지 돈 턴의 답변과 확인 대기 행 인용과 지출을 산출물로 낸다."""
+    """끝까지 실행된 턴의 답변과 확인 대기 행 인용과 지출을 산출물로 낸다."""
     data = response.data or {}
     text = str(data.get("assistantText", ""))
     if not text.strip():
@@ -130,7 +130,7 @@ def completed_turn(
 
 
 def ledger_outcome(generated: GeneratedChatExecution) -> ChatTurnOutcome:
-    """워크플로가 나른 산출물을 원장 쓰기가 받는 턴 산출물로 되돌린다."""
+    """워크플로가 전달한 산출물을 원장 쓰기가 받는 턴 산출물로 되돌린다."""
     return ChatTurnOutcome(
         execution_id=generated.execution_id,
         user_id=generated.user_id,

@@ -44,7 +44,7 @@ _DRAFT = {
 
 
 class GreedyChat:
-    """예산을 안 보고 계속 도구만 부르다가 결론 요구를 받으면 그때 출력하는 검토자 모델이다."""
+    """예산을 보지 않고 계속 도구만 부르다가 결론 요구를 받으면 그때 출력하는 검토자 모델이다."""
 
     def __init__(self, usage: dict[str, Any] | None = None) -> None:
         self.bound_tools: list[Any] = []
@@ -65,7 +65,7 @@ class GreedyChat:
 
     async def ainvoke(self, messages: list[Any]) -> Any:
         names = [getattr(tool, "name", "") for tool in self.bound_tools]
-        # 선별자는 후보를 한 번 훑고 검토자에게 후보 하나를 배정한다.
+        # 선별자는 후보를 한 번 조회하고 검토자에게 후보 하나를 배정한다.
         if "TriagePlan" in names:
             if not self._triage_listed:
                 self._triage_listed = True
@@ -89,7 +89,7 @@ class GreedyChat:
             return mk_ai(
                 tool_calls=[{"name": "CleanupDraft", "args": _DRAFT, "id": "call-out", "type": "tool_call"}]
             )
-        # 검토자는 예산을 안 보고 계속 이벤트만 읽다가 결론 요구를 받으면 그때 판정을 올린다.
+        # 검토자는 예산을 보지 않고 계속 이벤트만 읽다가 결론 요구를 받으면 그때 판정을 올린다.
         self.tools_per_call.append(names)
         directives = [
             message.content
@@ -223,13 +223,13 @@ def test_마무리_지시는_최종_산출_형태로_갈린다() -> None:
     free_text = finalize_directive(structured_output=False)
 
     assert "structured output" in structured
-    # chat은 구조화 출력을 내지 않으므로 이 문구가 새면 모델이 없는 형식을 만들어 낸다.
+    # chat은 구조화 출력을 내지 않으므로 이 문구가 나가면 모델이 없는 형식을 만들어 낸다.
     assert "structured" not in free_text
     assert "final answer" in free_text
 
 
 class _GreedyConversation:
-    """예산을 안 보고 도구만 부르다가 마무리 요구를 받으면 그때 답을 쓰는 대화 대역이다."""
+    """예산을 보지 않고 도구만 부르다가 마무리 요구를 받으면 그때 답을 쓰는 대화 대역이다."""
 
     def __init__(self) -> None:
         self.notices: list[str] = []

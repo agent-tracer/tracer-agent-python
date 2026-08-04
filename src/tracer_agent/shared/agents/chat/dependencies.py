@@ -19,7 +19,7 @@ def get_execution_dispatch(request: Request) -> ExecutionDispatch:
 
 
 def get_execution_updates(request: Request) -> UpdateSignal | None:
-    """갱신 사실을 다른 replica 로 흘리는 창구를 내며 배선이 없으면 비운다."""
+    """갱신 사실을 다른 replica 로 전송하는 창구를 내며 배선이 없으면 비운다."""
     updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
     return updates
 

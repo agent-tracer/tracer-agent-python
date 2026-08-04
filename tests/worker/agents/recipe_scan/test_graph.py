@@ -96,7 +96,7 @@ def _recipe(**overrides: Any) -> dict[str, object]:
     return base
 
 
-# 조율자는 근거를 직접 캐지 않으므로 timeline·rules 전문가가 병렬로 장부를 채워 준다.
+# 조율자는 근거를 직접 수집하지 않으므로 timeline·rules 전문가가 병렬로 장부를 채워 준다.
 _EVIDENCE_PLAN = DispatchPlan(
     probes=[
         {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
@@ -251,7 +251,7 @@ async def test_같은_turn을_두_후보가_주장하면_수정을_요구한다(
 
 
 def _redispatch_probe(question: str) -> dict[str, list[Any]]:
-    """조율자가 추가로 부른 전문가 하나가 다시 근거를 훑고 보고하는 대본이다."""
+    """조율자가 추가로 부른 전문가 하나가 다시 근거를 조회하고 보고하는 대본이다."""
     return {
         question: [
             {"probe": "repetition", "verdict": "다른 태스크에도 반복된다", "excerpts": [], "exhausted": False}
@@ -280,7 +280,7 @@ async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_�
     ]
     assert len(completed) == 2
     assert any("redispatch repetition:normal" in step.content for step in res.steps)
-    # 초기 두 전문가에 재파견 하나를 더해 전문가는 세 번 실행한다.
+    # 초기 두 전문가에 재파견 하나를 더해 전문가 노드는 세 번 실행된다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
     narrate("recipe-scan :: 조율자가 재파견을 요청하면 전문가를 한 번 더 부르고 완주한다", res)
@@ -299,7 +299,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
     assert res.error is None and res.data["recipes"] == []
     redispatched = [step for step in res.steps if "redispatch repetition" in step.content]
     assert len(redispatched) == 1
-    # 재파견은 한 번만 실렸으므로 전문가는 초기 둘에 하나만 더해 세 번 실행한다.
+    # 재파견은 한 번만 실렸으므로 전문가 노드는 초기 둘에 하나만 더해 세 번 실행된다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
     narrate("recipe-scan :: 재파견 상한을 넘긴 두 번째 요청은 무시하고 끝낸다", res)
@@ -340,7 +340,7 @@ async def test_예산_초과는_조율자를_재시도하지_않고_바로_강�
 
     res = await _run(chat)
 
-    # 재시도했다면 한 번보다 많이 불렸을 것이다.
+    # 재시도가 걸렸다면 호출 횟수가 한 번을 넘는다.
     assert chat.calls == 1
     assert res.error is None and res.data is not None and res.data["recipes"] == []
     narrate("recipe-scan :: 예산 초과는 조율자를 재시도하지 않고 바로 강등한다", res)
@@ -375,7 +375,7 @@ async def test_조율자가_세운_계획이_조사_지시문에_반영된다() 
     sent = " ".join(
         str(getattr(message, "content", message)) for request in chat.requests for message in request
     )
-    # 계획이 조사 지시문으로 펴지고 배분한 weight가 그대로 예산 비율이 된다.
+    # 계획이 조사 지시문으로 정리되고 배분한 weight가 그대로 예산 비율이 된다.
     assert "rules (deep): 어떤 규칙이 걸렸나" in sent
     assert any("survey -> rules:deep" in step.content for step in res.steps)
     narrate("recipe-scan :: 조율자가 세운 계획이 조사 지시문에 반영된다", res)
@@ -398,7 +398,7 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
         ["get_task_events", "get_task_summary", "search_events"],
         ["list_rules", "search_recipes"],
     ]
-    # 두 전문가가 모두 돌았음이 궤적에 남는다.
+    # 두 전문가가 모두 실행되었음이 궤적에 남는다.
     probe_nodes = [step for step in res.steps if step.nodeName == "probe"]
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     narrate("recipe-scan :: 계획한 전문가들이 각자 도구만 쥐고 병렬로 돈다", res)
@@ -408,7 +408,7 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     class OneProbeFails(FakeToolLoopChat):
         async def ainvoke(self, messages: list[object]) -> object:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
-            # RecipeDraft를 쥔 조율자는 걸리지 않아 rules 전문가만 골라 실패한다.
+            # RecipeDraft를 내는 조율자는 걸리지 않아 rules 전문가만 골라 실패한다.
             if "ProbeReport" in names and "list_rules" in names:
                 raise RuntimeError("rules probe blew up")
             return await super().ainvoke(messages)
@@ -423,10 +423,10 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
 
     res = await _run(chat)
 
-    # 한 전문가가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
+    # 한 전문가가 예외를 던져도 잡은 실패하지 않고 끝까지 실행된다.
     assert res.error is None and res.data["recipes"] == []
     probe_nodes = [step for step in res.steps if step.nodeName == "probe"]
-    # 두 분기 모두 노드로는 끝까지 실행하고, 실패로 실패한 분기는 없다.
+    # 두 분기 모두 노드로는 끝까지 실행되고 실패로 기록된 분기는 없다.
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in probe_nodes)
     narrate("recipe-scan :: 전문가 하나가 무너져도 그래프가 완주하고 나머지가 합쳐진다", res)

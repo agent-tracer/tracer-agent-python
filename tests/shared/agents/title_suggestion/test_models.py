@@ -83,5 +83,5 @@ def test_멱등_입력_해시는_콜백과_자격증명에_영향받지_않는�
 def test_모델이_받는_스키마는_사람용_docstring을_싣지_않는다() -> None:
     wire = json.dumps(convert_to_openai_tool(TitleSuggestionDraft), ensure_ascii=False)
 
-    # docstring이 설명으로 새면 python만 영어 프롬프트 안에서 한글 스키마 설명을 받는다.
+    # docstring이 설명으로 나가면 python만 영어 프롬프트 안에서 한글 스키마 설명을 받는다.
     assert not re.search(r"[가-힣]", wire)

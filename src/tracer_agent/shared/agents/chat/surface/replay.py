@@ -57,7 +57,7 @@ def _until_anchor(messages: list[SqlRow], replay_anchor_message_id: str) -> list
 
 
 def _paired_call_ids(window: list[SqlRow]) -> set[str]:
-    """확인 게이트 때문에 답 없는 호출이 정상적으로 쌓이고 거절당한 호출은 영영 짝이 없다."""
+    """확인 게이트 때문에 답 없는 호출이 정상적으로 쌓이고 거절당한 호출은 끝내 짝이 없다."""
     paired: set[str] = set()
     for index, row in enumerate(window):
         declared = _declared_call_ids(row)

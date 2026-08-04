@@ -18,7 +18,7 @@ _CHAT_DEADLINE_MS = CATALOG[CHAT_KIND].deadline_ms
 
 # 재생 문맥은 다시 물어 얻을 수 있으므로 연결 계열 오류만 다시 시도한다.
 _CONTEXT_RETRY = RetryPolicy(max_attempts=3, retry_on=CONTEXT_TRANSIENT_ERRORS)
-# 도구 루프는 실행 데드라인의 대부분을 쓰되 종결이 돌 자리를 남긴다.
+# 도구 루프는 실행 데드라인의 대부분을 쓰되 종결이 실행될 자리를 남긴다.
 _CONVERSE_TIMEOUT = TimeoutPolicy(run_timeout=deadline_fraction_s(_CHAT_DEADLINE_MS, 0.9))
 
 _graph = new_graph(ChatState)

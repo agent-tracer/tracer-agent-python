@@ -59,6 +59,6 @@ class TemporalExecutionDispatch:
         )
 
     async def cancel(self, execution_id: str) -> None:
-        """실행 하나만 취소하며 같은 스레드의 남은 턴은 계속 흐른다."""
+        """실행 하나만 취소하며 같은 스레드의 남은 턴은 계속 실행된다."""
         client = await self._provider.client()
         await client.get_workflow_handle(execution_workflow_id(execution_id)).cancel()

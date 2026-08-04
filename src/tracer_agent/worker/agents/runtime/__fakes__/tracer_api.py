@@ -24,7 +24,7 @@ _DEFAULT_TASK: dict[str, Any] = {
 
 
 class FakeTracerApi(TracerApiPort):
-    """부른 창구를 기록하고 경로마다 캔 응답을 돌려주는 추적 API 대역이다."""
+    """부른 창구를 기록하고 경로마다 정해 둔 응답을 돌려주는 추적 API 대역이다."""
 
     def __init__(
         self,
@@ -54,7 +54,7 @@ class FakeTracerApi(TracerApiPort):
         self.posts: list[dict[str, Any]] = []
 
     async def get(self, path: str, params: Mapping[str, Any] | None = None) -> JsonValue:
-        """부른 경로와 인자를 기억하고 그 경로의 캔 응답을 낸다."""
+        """부른 경로와 인자를 기억하고 그 경로에 정해 둔 응답을 낸다."""
         self.calls.append({"path": path, "params": dict(params or {})})
         if path.startswith("/api/v1/tasks/") and not self.owned:
             return None
@@ -79,7 +79,7 @@ class FakeTracerApi(TracerApiPort):
         return {"task": dict(self.task)}
 
     def _timeline_page(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        """창구가 그러듯 커서 뒤부터 limit만큼 잘라 주고 남은 것이 있으면 다음 커서를 낸다."""
+        """실제 창구와 같이 커서 뒤부터 limit만큼 잘라 주고 남은 것이 있으면 다음 커서를 낸다."""
         limit = int(params.get("limit") or len(self.rows) or 1)
         rows = list(self.rows)
         if params.get("order") == "desc":

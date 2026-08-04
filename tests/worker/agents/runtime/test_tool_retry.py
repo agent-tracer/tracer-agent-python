@@ -39,7 +39,7 @@ def _context() -> RecipeToolContext:
 
 
 def test_재시도_대상은_연결_계열_일시_오류만이다() -> None:
-    # 목록을 통째로 못 박아 원장과 색인의 오류가 다시 끼어들면 검사가 깨지게 한다.
+    # 목록을 통째로 고정해 원장과 색인의 오류가 다시 끼어들면 검사가 깨지게 한다.
     assert set(RECIPE_TRANSIENT) == {TracerApiUnavailable, ConnectionError, TimeoutError}
     # 두 에이전트가 같은 창구를 부르므로 재시도 대상이 같다.
     assert set(CLEANUP_TRANSIENT) == set(RECIPE_TRANSIENT)

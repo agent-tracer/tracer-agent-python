@@ -113,6 +113,6 @@ def test_모델이_받는_스키마는_사람용_docstring을_싣지_않는다()
     for model in (DispatchPlan, ProbeReport, RecipeDraft):
         wire = json.dumps(convert_to_openai_tool(model), ensure_ascii=False)
 
-        # docstring이 설명으로 새면 python만 영어 프롬프트 안에서 한글 스키마 설명을 받는다.
+        # docstring이 설명으로 나가면 python만 영어 프롬프트 안에서 한글 스키마 설명을 받는다.
         assert not re.search(r"[가-힣]", wire), model.__name__
     assert DispatchPlan.__doc__ and ProbeReport.__doc__

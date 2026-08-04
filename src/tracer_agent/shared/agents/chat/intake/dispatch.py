@@ -13,7 +13,7 @@ class ExecutionDispatch(Protocol):
         ...
 
     async def cancel(self, execution_id: str) -> None:
-        """실행 하나만 끊으며 같은 스레드의 남은 턴은 계속 흐른다."""
+        """실행 하나만 끊으며 같은 스레드의 남은 턴은 계속 실행된다."""
         ...
 
 

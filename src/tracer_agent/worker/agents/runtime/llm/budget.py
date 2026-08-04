@@ -1,4 +1,4 @@
-"""에이전트 실행 한 번이 실행하는 모델 비용과 턴을 누적하고 상한에서 끊는다."""
+"""에이전트 실행 한 번이 쓰는 모델 비용과 턴을 누적하고 상한에서 끊는다."""
 
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ class ToolLoopBudget:
 
     @property
     def spent(self) -> float:
-        """이 루프가 지금까지 실행한 모델 비용이다."""
+        """이 루프가 지금까지 쓴 모델 비용이다."""
         return self._spent
 
     @property
@@ -158,7 +158,7 @@ class ToolLoopBudget:
             raise BudgetExceeded(f"{self._agent} cannot enforce its internal budget for model {priced_model}")
         self._spent += cost
         self._peak = max(self._peak, cost)
-        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
+        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 여기서 끊으면 산출물만 잃는다.
         if not self._landed and self._spent > self._max:
             raise BudgetExceeded(f"{self._agent} exceeded internal model budget ${self._max:.2f}")
 
@@ -177,7 +177,7 @@ class ExecutionBudget:
     ) -> None:
         self._max = max_cost_usd
         self._rates = rates
-        # 이어받은 실행은 앞선 시도의 지출을 안고 시작해야 상한이 실행 하나에 한 번만 열린다.
+        # 이어받은 실행은 앞선 시도의 지출을 이어받아 시작해야 상한이 실행 하나에 한 번만 열린다.
         self._spent = spent_usd
         self._peak = 0.0
         self._remaining_turns = None if max_turns is None else max(max_turns - turns_used, 0)
@@ -295,7 +295,7 @@ class ExecutionBudget:
         cost = self._rates.estimate_cost_usd(priced_model, usage.to_dto()) if usage else None
         if cost is None:
             raise BudgetExceeded(f"{agent_name} cannot enforce its internal budget for model {priced_model}")
-        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 끊어봐야 산출물만 잃는다.
+        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 여기서 끊으면 산출물만 잃는다.
         if not loop_landed:
             if self._spent + cost > self._max:
                 raise BudgetExceeded(f"{agent_name} exceeded execution model budget ${self._max:.2f}")
@@ -313,7 +313,7 @@ class ExecutionBudget:
 
 
 class SharedToolLoopBudget:
-    """실행 장부에 실제 호출 비용을 반영하고, 이 노드가 쓴 증분도 따로 준다."""
+    """실행 장부에 실제 호출 비용을 반영하고 이 노드가 쓴 증분도 따로 낸다."""
 
     def __init__(
         self, agent_name: str, model_name: str, execution: ExecutionBudget, max_cost_usd: float

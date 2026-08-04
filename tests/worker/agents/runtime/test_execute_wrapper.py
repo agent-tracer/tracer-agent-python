@@ -1,4 +1,4 @@
-"""공용 execute() 래퍼의 데드라인·API 오류 분류를 검증한다."""
+"""공용 execute() 래퍼가 데드라인과 API 오류를 어떤 서브타입으로 분류하는지 검증한다."""
 
 from __future__ import annotations
 

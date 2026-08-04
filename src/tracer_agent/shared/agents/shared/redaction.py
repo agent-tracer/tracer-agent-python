@@ -18,7 +18,7 @@ _BODY_CHARACTERS = frozenset(ascii_letters + digits + "-_.")
 
 
 class SuspectAction(StrEnum):
-    """걸린 payload 를 자리마다 어떻게 하는지다."""
+    """걸린 payload 를 자리마다 어떻게 처리하는지다."""
 
     DISCARD = "discard"
     REDACT = "redact"
@@ -36,7 +36,7 @@ type RedactableValue = RedactableScalar | Mapping[str, RedactableValue] | Sequen
 
 
 class RedactionStage(StrEnum):
-    """가리는 절차가 걸리는 자리이며 자리마다 걸린 것을 어떻게 하는지가 다르다."""
+    """가리는 절차가 걸리는 자리이며 자리마다 걸린 것을 처리하는 방식이 다르다."""
 
     TRACE = "trace"
     QUERY = "query"

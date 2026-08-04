@@ -1,4 +1,4 @@
-"""스레드의 턴을 하나씩 흘리고 실행 하나의 준비와 생성과 종결을 소유하는 워크플로 둘이다."""
+"""스레드의 턴을 하나씩 실행하고 실행 하나의 준비와 생성과 종결을 소유하는 워크플로 둘이다."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class ChatExecutionWorkflow:
 
     @workflow.run
     async def run(self, request: ChatExecutionRequest) -> None:
-        """준비와 생성과 종결을 차례로 돌리고 실패로 끝나면 그 사유를 원장에 남긴다."""
+        """준비와 생성과 종결을 차례로 실행하고 실패로 끝나면 그 사유를 원장에 남긴다."""
         try:
             prepared = await self._prepare_until_thread_frees(request)
             generated = await self._generate(prepared)
@@ -153,7 +153,7 @@ class ChatThreadWorkflow:
             )
             if execution_id is None:
                 return
-            # 같은 실행이 연달아 실패하면 원장에 그대로 남아 무한히 다시 집히므로 이번 회차를 줄인다.
+            # 같은 실행이 연달아 실패하면 원장에 그대로 남아 무한히 다시 선택되므로 이번 회차를 줄인다.
             if execution_id == last_failed:
                 return
             if await self._run_child(request.thread_id, execution_id):

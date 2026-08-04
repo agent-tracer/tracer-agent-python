@@ -1,4 +1,4 @@
-"""브라우저가 치는 접수 창구가 tracer-api와 같은 상태와 봉투를 내는지 검증한다."""
+"""브라우저가 부르는 접수 창구가 tracer-api와 같은 상태와 봉투를 내는지 검증한다."""
 
 from __future__ import annotations
 

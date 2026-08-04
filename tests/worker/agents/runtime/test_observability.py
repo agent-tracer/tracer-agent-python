@@ -1,4 +1,4 @@
-"""GenAI 관측 속성·전파·스팬 경계 검증."""
+"""GenAI 관측 속성과 추적 전파와 스팬 경계를 검증한다."""
 
 from __future__ import annotations
 

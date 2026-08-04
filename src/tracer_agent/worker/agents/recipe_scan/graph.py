@@ -23,7 +23,7 @@ from .reservation import load_wall_clock_policy
 _RECIPE_SCAN_DEADLINE_MS = CATALOG["recipe.scan"].deadline_ms
 _WALL_CLOCK = load_wall_clock_policy()
 
-# 전문가가 진전 없이 머무는 상한이며, 몫이 큰 전문가가 자연히 더 오래 진행 중인 것을 막지 않는다.
+# 전문가가 진전 없이 머무는 상한이며, 몫이 큰 전문가가 자연히 더 오래 실행되는 것을 막지 않는다.
 PROBE_WALL_CLOCK_CEILING_S = deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)
 _PROBE_SEND_TIMEOUT = TimeoutPolicy(
     idle_timeout=deadline_fraction_s(_RECIPE_SCAN_DEADLINE_MS, _WALL_CLOCK.probe)

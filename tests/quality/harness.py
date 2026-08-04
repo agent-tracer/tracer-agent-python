@@ -50,7 +50,7 @@ def live_enabled() -> bool:
 
 @dataclass(frozen=True)
 class CaseSources:
-    """사례가 근거로 인정하는 출처의 전부이며 판정기의 정답 노릇을 한다."""
+    """사례가 근거로 인정하는 출처의 전부이며 판정기가 이것을 정답으로 쓴다."""
 
     event_ids_by_task: dict[str, set[str]] = field(default_factory=dict)
     turn_ids_by_task: dict[str, set[str]] = field(default_factory=dict)
@@ -104,7 +104,7 @@ def collect_sources(case: GoldenCase) -> CaseSources:
     event_ids = {str(event["id"]) for event in events}
     turn_ids = {str(event["turnId"]) for event in events if event.get("turnId")}
     if case.agent == "task-cleanup":
-        # 대역 창구는 어느 태스크의 타임라인을 물어도 같은 행을 내므로 이벤트 있는 후보가 모두 같은 출처를 갖는다.
+        # 대역 창구는 어느 태스크의 타임라인을 물어도 같은 행을 내므로 이벤트가 있는 후보는 모두 같은 출처를 갖는다.
         by_task = {item.id: set(event_ids) for item in candidates if item.hasEvents}
         turns_by_task: dict[str, set[str]] = {}
     else:

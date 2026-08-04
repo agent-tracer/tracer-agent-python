@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 # 이 표시가 붙은 메시지는 호출마다 다시 쓰이므로 캐시 경계가 그 앞에서 멈춘다.
 VOLATILE_KEY = "agent_tracer.volatile"
 
-# 경계를 얹으면 서명이 깨지거나 공급자가 거절하는 블록 종류다.
+# 경계를 놓으면 서명이 깨지거나 공급자가 거절하는 블록 종류다.
 _UNCACHEABLE_BLOCK_TYPES = frozenset(
     {"thinking", "redacted_thinking", "server_tool_use", "code_execution_tool_result"}
 )
@@ -41,7 +41,7 @@ class PromptCacheMiddleware(AgentMiddleware[Any, Any, Any]):
         request: ModelRequest[Any],
         handler: Callable[[ModelRequest[Any]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
-        """이 호출의 프롬프트에 캐시 경계를 얹어 모델을 부른다."""
+        """이 호출의 프롬프트에 캐시 경계를 놓고 모델을 부른다."""
         # 경계의 모양이 공급자마다 달라 이 미들웨어는 Anthropic 모델에만 손을 댄다.
         if not isinstance(request.model, ChatAnthropic):
             return await handler(request)
@@ -62,7 +62,7 @@ class PromptCacheMiddleware(AgentMiddleware[Any, Any, Any]):
 
 
 def _tagged_system(system_message: Any, cache_control: _CacheControl) -> SystemMessage | None:
-    """시스템 프롬프트의 마지막 블록에 경계를 얹은 사본을 낸다."""
+    """시스템 프롬프트의 마지막 블록에 경계를 놓은 사본을 낸다."""
     if system_message is None:
         return None
     content = _tagged_content(system_message.content, cache_control)
@@ -70,7 +70,7 @@ def _tagged_system(system_message: Any, cache_control: _CacheControl) -> SystemM
 
 
 def _tagged_tools(tools: Sequence[Any] | None, cache_control: _CacheControl) -> list[Any] | None:
-    """도구 선언은 한 덩어리로 실리므로 마지막 하나에만 경계를 얹은 사본을 낸다."""
+    """도구 선언은 한 덩어리로 실리므로 마지막 하나에만 경계를 놓은 사본을 낸다."""
     if not tools:
         return None
     last = tools[-1]
@@ -83,7 +83,7 @@ def _tagged_tools(tools: Sequence[Any] | None, cache_control: _CacheControl) -> 
 def _tagged_messages(
     messages: Sequence[BaseMessage], cache_control: _CacheControl
 ) -> list[BaseMessage] | None:
-    """호출마다 다시 쓰이는 꼬리를 건너뛰고 그 앞의 마지막 메시지에 경계를 얹은 사본을 낸다."""
+    """호출마다 다시 쓰이는 꼬리를 건너뛰고 그 앞의 마지막 메시지에 경계를 놓은 사본을 낸다."""
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
         if message.additional_kwargs.get(VOLATILE_KEY):
@@ -97,7 +97,7 @@ def _tagged_messages(
 
 
 def _tagged_content(content: Any, cache_control: _CacheControl) -> list[_Block] | None:
-    """경계를 받을 수 있는 마지막 블록에 경계를 얹은 본문을 내고 그런 블록이 없으면 아무것도 내지 않는다."""
+    """경계를 받을 수 있는 마지막 블록에 경계를 놓은 본문을 내고 그런 블록이 없으면 아무것도 내지 않는다."""
     if isinstance(content, str):
         if not content:
             return None

@@ -1,4 +1,4 @@
-"""recipe-scan 정책 함수의 인용 검증 규칙을 검증한다."""
+"""recipe-scan 정책 함수의 인용 검증 규칙을 고정한다."""
 
 from __future__ import annotations
 

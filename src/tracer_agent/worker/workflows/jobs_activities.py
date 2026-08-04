@@ -1,4 +1,4 @@
-"""title·recipe·cleanup 요청을 돌리고 종료 상태를 원장에 적은 뒤 완료 창구로 배달하는 액티비티다."""
+"""title·recipe·cleanup 요청을 실행하고 종료 상태를 원장에 적은 뒤 완료 창구로 배달하는 액티비티다."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ class AgentJobActivities:
 
     @activity.defn(name=GENERATE_AGENT_JOB_ACTIVITY)
     async def generate(self, request: AgentJobRequest) -> JsonObject:
-        """이 시도가 쓸 봉투를 받아 그래프를 돌리며 자격을 이 액티비티 밖으로 내보내지 않는다."""
+        """이 시도가 쓸 봉투를 받아 그래프를 실행하며 자격을 이 액티비티 밖으로 내보내지 않는다."""
         payload = await self._resolve_payload(request)
         job = JOB_AGENTS[request.kind]
         tracer = self._tracer(str(payload["userId"]))
@@ -142,7 +142,7 @@ class AgentJobActivities:
 
     @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
     async def settle_canceled(self, execution_id: str) -> None:
-        """실행 액티비티가 못 돈 취소를 원장에서 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
+        """실행 액티비티가 못 받은 취소를 원장에서 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
         async with self._execution_sql.connect() as sql:
             await JobLedger(sql).settle(
                 execution_id, "canceled", {}, {}, "canceled before execution started", datetime.now(UTC)
@@ -178,7 +178,7 @@ class AgentJobActivities:
     async def _run_once(
         self, job: JobAgent[Any], req: AgentExecutionRequest, tracer: TracerApiPort
     ) -> AgentResponse:
-        """그래프 하나를 실행 궤적과 데드라인 안에서 돌려 이 시도의 응답을 낸다."""
+        """그래프 하나를 실행 궤적과 데드라인 안에서 실행해 이 시도의 응답을 낸다."""
         prompt = self._prompts[job.kind]
 
         async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:

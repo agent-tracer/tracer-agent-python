@@ -19,7 +19,7 @@ from ..tools import SURVEY_TOOLS
 
 
 class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
-    """조율자가 어디를 얼마나 팔지 depth로 스스로 정하게 한다."""
+    """조율자가 어디를 얼마나 조사할지 depth로 스스로 정하게 한다."""
 
     name = "survey"
 

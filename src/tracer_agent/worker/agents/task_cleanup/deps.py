@@ -60,7 +60,7 @@ class CleanupDeps:
         exposed_candidates: dict[str, CleanupCandidate] | None = None,
         event_ids_by_task: dict[str, set[str]] | None = None,
     ) -> StructuredAgentResult[OutputT]:
-        """맡은 도구만 연 채 모델을 돌려 구조화 출력과 메시지와 이 호출이 쓴 턴을 낸다."""
+        """맡은 도구만 연 채 모델을 호출해 구조화 출력과 메시지와 이 호출이 쓴 턴을 낸다."""
         max_turns = self.req.limits.maxTurns
         names = tuple(tool_names)
         agent = self.agents.compiled(

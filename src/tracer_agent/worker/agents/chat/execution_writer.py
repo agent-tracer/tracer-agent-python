@@ -170,7 +170,7 @@ class ChatExecutionWriter:
         rows = await self._sql.fetch(
             _RECORD_THREAD_TURN, outcome.thread_id, AGENT_BACKEND, now, outcome.user_id
         )
-        # 목록 정렬 기준을 밀지 못했다면 남의 스레드에 적으려 한 것이므로 턴 전체를 되돌린다.
+        # 목록 정렬 기준을 갱신하지 못했다면 남의 스레드에 적으려 한 것이므로 턴 전체를 되돌린다.
         if not rows:
             raise ValueError("chat thread not found for this user")
 

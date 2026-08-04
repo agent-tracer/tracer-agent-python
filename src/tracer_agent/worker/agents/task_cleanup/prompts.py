@@ -151,7 +151,7 @@ def build_inspect_prompt(task_id: str) -> str:
 
 
 def render_reports(reports: Sequence[InspectReport] | None) -> str:
-    """후보별 조사 결과를 조율자가 읽을 근거로 편다."""
+    """후보별 조사 결과를 조율자가 읽을 근거로 정리한다."""
     if not reports:
         return ""
     lines = [

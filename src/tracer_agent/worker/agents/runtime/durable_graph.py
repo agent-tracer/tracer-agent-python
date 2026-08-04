@@ -12,7 +12,7 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from .llm.structured_agent import recursion_config
 from .telemetry.disclosure import TraceSafeMetadata
 
-# 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 입진행 중인 노드 하나면 충분하다.
+# 노드마다 쓰되 쓰기 완료를 기다리지 않으며, 잡의 재개 지점은 노드 하나면 충분하다.
 _JOB_DURABILITY: Literal["sync", "async", "exit"] = "async"
 
 # 실행이 그때까지 쓴 달러와 턴을 그래프 상태가 싣고 다니는 자리다.

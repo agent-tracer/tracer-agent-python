@@ -8,7 +8,7 @@ from .wakeup import UpdatePublisher
 
 
 class JobStatusNotifier:
-    """잡 상태 전이를 알림 봉투에 담아 흘리며 보내지 못해도 실행을 멈추지 않는다."""
+    """잡 상태 전이를 알림 봉투에 담아 전송하며 보내지 못해도 실행을 멈추지 않는다."""
 
     def __init__(self, publisher: UpdatePublisher, notification_type: str) -> None:
         self._publisher = publisher

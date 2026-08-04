@@ -15,10 +15,10 @@ EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
 
 
 class UpdateSignal(Protocol):
-    """실행이 바뀌었다는 사실만 다른 replica에 흘리는 창구다."""
+    """실행이 바뀌었다는 사실만 다른 replica에 전송하는 창구다."""
 
     async def publish(self, key: str, payload: dict[str, str]) -> bool:
-        """갱신 사실 하나를 흘리고 보냈는지 낸다."""
+        """갱신 사실 하나를 전송하고 보냈는지 낸다."""
         ...
 
 

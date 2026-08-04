@@ -62,7 +62,7 @@ class ChatMemoryStore(BaseStore):
         self._client = client
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        """이 저장소는 비동기 그래프에서만 도므로 동기 배치는 지원하지 않는다."""
+        """이 저장소는 비동기 그래프에서만 실행되므로 동기 배치는 지원하지 않는다."""
         raise NotImplementedError("ChatMemoryStore is async-only; use abatch")
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:

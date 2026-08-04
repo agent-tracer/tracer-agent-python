@@ -118,7 +118,7 @@ IDEMPOTENCY_KEYS: dict[str, tuple[str, ...]] = {
 
 
 def canonical_input(kind: str, job_input: BaseModel) -> str:
-    """두 구현체가 같은 바이트를 먹도록 그 종류가 정한 칸만 정해진 순서로 적는다."""
+    """두 구현체가 같은 바이트를 만들도록 그 종류가 정한 칸만 정해진 순서로 적는다."""
     dumped = job_input.model_dump(mode="json")
     canonical = {key: _read_path(dumped, key) for key in IDEMPOTENCY_KEYS[kind]}
     return json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))

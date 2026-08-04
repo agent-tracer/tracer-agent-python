@@ -1,4 +1,4 @@
-"""task-cleanup의 역할별 프롬프트 조합을 콘솔에 펴 보이고 핵심 구성을 단언한다."""
+"""task-cleanup의 역할별 프롬프트 조합을 콘솔에 출력하고 핵심 구성을 단언한다."""
 
 from __future__ import annotations
 

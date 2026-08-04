@@ -1,4 +1,4 @@
-"""Anthropic 채팅 클라이언트 실행 제한 검증."""
+"""Anthropic 채팅 클라이언트가 봉투가 정한 실행 제한을 그대로 세우는지 검증한다."""
 
 from __future__ import annotations
 

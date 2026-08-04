@@ -26,7 +26,7 @@ type JobDeliver = Callable[[TracerApiPort, str, JsonObject], Awaitable[None]]
 
 @dataclass(frozen=True)
 class JobAgent[RequestT: AgentExecutionRequest]:
-    """접수 payload를 자기 요청으로 세우고 그래프를 돌리며 산출물을 창구로 보내는 잡 하나다."""
+    """접수 payload를 자기 요청으로 세우고 그래프를 실행하며 산출물을 창구로 보내는 잡 하나다."""
 
     kind: AgentJobKind
     prepare: JobPrepare[RequestT]

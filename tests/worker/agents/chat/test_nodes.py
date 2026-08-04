@@ -72,7 +72,7 @@ async def test_접수된_실행은_누적_답변을_창구로_되돌려_보낸�
 
 
 async def test_서버가_종결을_알리면_실행을_더_끌지_않는다() -> None:
-    # 취소 레지스트리는 프로세스 로컬이라 다른 인스턴스에서 돈 실행에는 닿지 않는다.
+    # 취소 레지스트리는 프로세스 로컬이라 다른 인스턴스에서 실행된 것에는 닿지 않는다.
     chat = FakeToolLoopChat(["한참 답하는 중"])
     chats = ChatPair(chat, None)
 
@@ -204,7 +204,7 @@ async def test_사실과_요약은_시스템_메시지_밖에_붙는다() -> Non
 
 
 async def test_사실이_늘어도_캐시되는_시스템_접두사는_그대로다() -> None:
-    # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 끝나는다.
+    # 접두사 일치라 사실 하나가 시스템 메시지에 섞이면 remember_fact 한 번에 캐시가 통째로 끝난다.
     _first, before = await _system_content(["정리했습니다"], summary="요약 A", facts=[])
     _chat, after = await _system_content(
         [[{"name": "search_tasks", "args": {"query": "x"}}], "정리했습니다"],

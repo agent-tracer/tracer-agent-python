@@ -1,4 +1,4 @@
-"""title-suggestion 정책 함수의 후보 정규화 규칙을 검증한다."""
+"""title-suggestion 정책 함수의 후보 정규화 규칙을 고정한다."""
 
 from __future__ import annotations
 

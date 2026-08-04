@@ -38,7 +38,7 @@ def chat_tool_note(name: str) -> str:
 
 
 def chat_tool_failure_text(key: str) -> str:
-    """도구가 무너졌을 때 모델이 읽는 문장이며 두 구현체가 계약의 같은 칸을 읽는다."""
+    """도구가 실패했을 때 모델이 읽는 문장이며 두 구현체가 계약의 같은 칸을 읽는다."""
     declared: Mapping[str, Any] = _chat_tool_contract()["failures"]
     if key not in declared:
         raise ValueError(f"chat contract declares no failure text: {key}")

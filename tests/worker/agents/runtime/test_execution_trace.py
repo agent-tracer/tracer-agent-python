@@ -97,7 +97,6 @@ class TestExecutionTrace:
         )
         cost = rates.estimate_cost_usd("claude-sonnet-4-6", usage)
         assert cost is not None
-        # 올바른 계산: 베이스 1000 * $3 + 캐시읽기 99000 * $0.30, 모두 /1e6.
         expected = (1_000 * 3.0 + 99_000 * 0.30) / 1_000_000
         assert cost == round(expected, 6)
         # 캐시 토큰을 중복 반영한 비용보다 작아야 한다.

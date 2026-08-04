@@ -1,4 +1,4 @@
-"""title-suggestion 도구 루프와 결정적 검증을 검증한다(페이크 모델, 네트워크 없음)."""
+"""title-suggestion 도구 루프와 결정론 검증을 확인한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 

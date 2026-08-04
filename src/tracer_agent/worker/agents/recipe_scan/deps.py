@@ -68,7 +68,7 @@ class RecipeDeps:
         call_id: str,
         tool_owner: str = AGENT_NAME,
     ) -> StructuredAgentResult[OutputT]:
-        """맡은 도구만 연 채 모델을 돌려 구조화 출력과 그 호출이 그은 턴을 낸다."""
+        """맡은 도구만 연 채 모델을 호출해 구조화 출력과 그 호출이 그은 턴을 낸다."""
         names = tuple(tools)
         agent = self.agents.compiled(
             (system_prompt, names, output, max_turns),

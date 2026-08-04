@@ -237,13 +237,13 @@ class SqliteLedgerSql(LedgerSql):
     """chat 쓰기 테이블을 메모리에 세우고 원장 문장을 그대로 평가한다."""
 
     def __init__(self) -> None:
-        # HTTP 테스트는 앱을 다른 스레드에서 돌리므로 연결을 만든 스레드 밖에서도 쓰게 연다.
+        # HTTP 테스트는 앱을 다른 스레드에서 실행하므로 연결을 만든 스레드 밖에서도 쓰게 연다.
         self._connection = sqlite3.connect(":memory:", isolation_level=None, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.executescript(SCHEMA)
 
     async def fetch(self, sql: str, *args: Any) -> list[SqlRow]:
-        """문장 하나를 돌리고 돌아온 행을 원장 열의 형태로 낸다."""
+        """문장 하나를 실행하고 돌아온 행을 원장 열의 형태로 낸다."""
         if "INSERT INTO agent_run_observations" in sql:
             return self._insert_observation(str(args[0]), json.dumps(args[1]), args[2])
         statement, order = rewrite(sql)

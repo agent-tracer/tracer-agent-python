@@ -64,7 +64,7 @@ def mk_ai(
     )
 
 
-# 전문가 보고와 선별 계획은 조율자 턴을 소비하지 않고 대역이 알아서 채운다.
+# 전문가 보고와 선별 계획은 조율자 턴을 소비하지 않고 대역이 직접 채운다.
 _AUTO_REPORTS: dict[str, dict[str, Any]] = {
     "ProbeReport": {"probe": "timeline", "verdict": "조사했다"},
     "InspectReport": {"taskId": "task-1", "archivable": True, "reason": "의미 있는 활동이 없다"},
@@ -72,7 +72,7 @@ _AUTO_REPORTS: dict[str, dict[str, Any]] = {
 }
 
 
-# 계획을 안 준 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 실행한다.
+# 계획을 주지 않은 테스트는 전체 예산을 한 전문가에게 몰아준 계획으로 실행한다.
 _DEFAULT_PLAN = DispatchPlan.model_validate(
     {"probes": [{"probe": "timeline", "depth": "deep", "question": "무엇을 했나"}]}
 )
@@ -168,7 +168,7 @@ class FakeToolLoopChat:
                     for index, call in enumerate(scripted)
                 ]
                 return mk_ai(tool_calls=calls)
-            # 전문가 보고는 조율자 턴을 소비하지 않으므로 무엇을 가지고 돌았는지만 기록한다.
+            # 전문가 보고는 조율자 턴을 소비하지 않으므로 무엇을 가지고 실행했는지만 기록한다.
             self.probe_calls.append(
                 [getattr(tool, "name", "") for tool in self.bound_tools if tool is not probe_tool]
             )
@@ -178,7 +178,7 @@ class FakeToolLoopChat:
             (tool for tool in self.bound_tools if getattr(tool, "name", "") == "DispatchPlan"), None
         )
         if plan_tool is not None:
-            # 조율자 조사 계획은 턴 대본을 소비하지 않고 대역이 짠 계획을 그대로 되돌린다.
+            # 조율자 조사 계획은 턴 대본을 소비하지 않고 대역이 만든 계획을 그대로 되돌린다.
             plan = self.plan if self.plan is not None else _DEFAULT_PLAN
             args = plan.model_dump() if isinstance(plan, DispatchPlan) else plan
             return mk_ai(

@@ -48,7 +48,7 @@ FAIL_TIMEOUT_S = 60.0
 
 # 신호가 끊긴 스레드는 이만큼 조용하면 다음 턴을 새 워크플로가 연다.
 THREAD_IDLE_S = 5.0
-# 이력이 무한정 자라지 않도록 이 만큼 실행한 스레드는 대기 줄을 안고 새 실행으로 넘어간다.
+# 이력이 무한정 자라지 않도록 이만큼 실행한 스레드는 남은 대기 줄과 함께 새 실행으로 넘어간다.
 THREAD_MAX_CHILDREN = 100
 
 STOP_COMPLETED = "completed"
@@ -76,7 +76,7 @@ class ChatExecutionRequest:
 
 @dataclass
 class ChatThreadRequest:
-    """스레드 하나의 턴을 직렬로 흘리는 워크플로 입력이며 대기 줄은 원장이 갖는다."""
+    """스레드 하나의 턴을 직렬로 실행하는 워크플로 입력이며 대기 줄은 원장이 갖는다."""
 
     thread_id: str
 

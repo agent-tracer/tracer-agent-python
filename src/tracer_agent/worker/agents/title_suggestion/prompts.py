@@ -17,7 +17,7 @@ class TitlePrompts:
     repair_directive: str
 
 
-# 도구 예산을 무엇으로 세는지는 실행 기계가 소유하므로 근거를 더 캐라는 문단만 이 백엔드가 쓴다.
+# 도구 예산을 무엇으로 세는지는 실행 기계가 소유하므로 근거를 더 수집하라는 문단만 이 백엔드가 쓴다.
 def build_prompt_bundle(prompt: AgentPrompt) -> TitlePrompts:
     """받은 조각을 이 에이전트의 scaffold 문장 사이에 끼워 프롬프트 둘을 만든다."""
     template = prompt.template("title-suggestion.investigator.system")

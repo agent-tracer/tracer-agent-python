@@ -27,7 +27,7 @@ from ..store import (
 from ..writer import ChatWriteClient
 from .specs import AGENT_READ_TOOL_NAMES, ARGS_MODELS, MEMORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES
 
-# 도구가 무너졌을 때 모델이 읽는 문구이며 계약이 문장을 소유한다.
+# 도구가 실패했을 때 모델이 읽는 문구이며 계약이 문장을 소유한다.
 TOOL_FAILED = chat_tool_failure_text(TOOL_FAILED_KEY)
 
 # 읽기 진입점이 아예 없는 실행에서 도구가 모델에게 대는 사유다.

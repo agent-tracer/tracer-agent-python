@@ -223,7 +223,7 @@ class JobLedger:
         return len(rows) == 1
 
     async def release_lease(self, job_id: str, owner: str, now: datetime) -> bool:
-        """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 실행한다."""
+        """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 되돌린다."""
         rows = await self._sql.fetch(_RELEASE_LEASE, job_id, owner, now)
         return len(rows) == 1
 

@@ -1,4 +1,4 @@
-"""task-cleanup 도구 루프와 결정적 검증을 검증한다(페이크 모델, 네트워크 없음)."""
+"""task-cleanup 도구 루프와 결정론 검증을 확인한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -184,7 +184,7 @@ async def test_선별자가_노출하지_않은_후보는_버린다() -> None:
 async def test_검토자가_읽지_않은_이벤트_후보는_제안으로_받지_않는다() -> None:
     ledger = FakeTracerApi()
     candidates = [_candidate("task-1", has_events=True), _candidate("task-2", has_events=False)]
-    # 선별자는 빈 껍데기 task-2만 배정하고, 조율자가 아무도 읽지 않은 task-1을 멋대로 제안한다.
+    # 선별자는 이벤트가 없는 task-2만 배정하고, 조율자가 아무도 읽지 않은 task-1을 근거 없이 제안한다.
     worker_turns = {
         **_triage({"taskId": "task-2", "depth": "shallow"}),
         **_reviewer(
@@ -316,7 +316,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
         async def ainvoke(self, messages: list[Any]) -> Any:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
             text = " ".join(str(getattr(message, "content", message)) for message in messages)
-            # CleanupDraft를 쥔 조율자는 걸리지 않아 task-2 조사만 골라 실패한다.
+            # CleanupDraft를 내는 조율자는 걸리지 않아 task-2 조사만 골라 실패한다.
             if "InspectReport" in names and "task-2" in text:
                 raise RuntimeError("inspect blew up")
             return await super().ainvoke(messages)
@@ -331,7 +331,7 @@ async def test_후보_하나가_무너져도_그래프가_완주하고_나머지
         _candidate("task-2", has_events=True),
     )
 
-    # 한 후보 조사가 예외를 던져도 잡은 실패하지 않고 끝까지 실행한다.
+    # 한 후보 조사가 예외를 던져도 잡은 실패하지 않고 끝까지 실행된다.
     assert res.error is None and res.data == {"suggestions": [], "tasksScanned": 0}
     inspected = [step for step in res.steps if step.nodeName == "inspect"]
     assert sum(1 for step in inspected if step.eventKind == "node.completed") == 2

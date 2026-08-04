@@ -54,7 +54,7 @@ class DraftPublisher:
             await self._send()
 
     async def push_tool(self, tool_name: str) -> None:
-        """도구가 진행 중인 동안에도 진행이 보이도록 호출을 누적분에 남긴다."""
+        """도구가 실행되는 동안에도 진행이 보이도록 호출을 누적분에 남긴다."""
         await self.push(tool_marker(tool_name))
 
     async def flush(self) -> None:
