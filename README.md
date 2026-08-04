@@ -175,7 +175,7 @@ LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소
 
 ## 에이전트 구현 문서
 
-노드 토폴로지, 노드 간 이동, 도구, 프롬프트 원문·번역, 미들웨어, 구조화 출력과 워크플로 시각화는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
+네 에이전트의 노드 토폴로지와 검증 꼬리, 도구 표면, 프롬프트 계층, 미들웨어 순서, 예산과 재개, 대화·잡 워크플로를 한 장에 모은 그림은 [실행 토폴로지와 워크플로](ARCHITECTURE.md)에서 확인한다. 노드 간 이동, 프롬프트 원문·번역, 구조화 출력의 상세는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
 
 ## 관련 저장소
 
