@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     ProvenanceCatalog,
     RecipeScanRequest,
 )
-from tracer_agent.worker.agents.recipe_scan.deps import RecipeDeps
+from tracer_agent.worker.agents.recipe_scan.deps import RecipeDeps, new_recipe_caller
 from tracer_agent.worker.agents.recipe_scan.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
 from tracer_agent.worker.agents.recipe_scan.search import RecipeSearchReader
@@ -103,7 +103,7 @@ def _deps(chat: Any) -> RecipeDeps:
         reader=RecipeLedgerReader(api),  # type: ignore[arg-type]
         search=RecipeSearchReader(api),  # type: ignore[arg-type]
         usage=ExecutionTrace(),
-        chats=ChatPair(chat, None),  # type: ignore[arg-type]
+        caller=new_recipe_caller(ChatPair(chat, None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),
         prompts=build_prompt_bundle(RECIPE_SCAN_PROMPT),
         prompt=RECIPE_SCAN_PROMPT,
@@ -132,7 +132,7 @@ async def test_같은_역할의_전문가는_컴파일된_agent를_다시_쓴다
     await _probe(deps, "task-a", ProvenanceCatalog())
     await _probe(deps, "task-b", ProvenanceCatalog())
 
-    assert deps.agents.size() == 1
+    assert deps.caller.compiled_agents() == 1
 
 
 async def test_도구_집합이_다른_역할은_자기_agent를_갖는다() -> None:
@@ -151,7 +151,7 @@ async def test_도구_집합이_다른_역할은_자기_agent를_갖는다() -> 
         call_id="survey",
     )
 
-    assert deps.agents.size() == 2
+    assert deps.caller.compiled_agents() == 2
 
 
 async def test_전문가는_컴파일된_agent를_함께_써도_자기_장부만_쌓는다() -> None:
@@ -161,7 +161,7 @@ async def test_전문가는_컴파일된_agent를_함께_써도_자기_장부만
     await _probe(deps, "task-a", first)
     await _probe(deps, "task-b", second)
 
-    assert deps.agents.size() == 1
+    assert deps.caller.compiled_agents() == 1
     assert set(first.eventIdsByTask) == {"task-a"}
     assert set(second.eventIdsByTask) == {"task-b"}
 
@@ -176,7 +176,7 @@ async def test_병렬로_도는_전문가는_남이_읽은_이벤트를_인용�
         _probe(deps, "task-b", second),
     )
 
-    assert deps.agents.size() == 1
+    assert deps.caller.compiled_agents() == 1
     # 장부가 자기 태스크만 담으므로 검증은 남이 읽은 이벤트를 인용으로 받지 않는다.
     assert set(first.eventIdsByTask) == {"task-a"}
     assert set(second.eventIdsByTask) == {"task-b"}

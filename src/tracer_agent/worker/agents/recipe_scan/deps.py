@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
@@ -12,22 +12,27 @@ from tracer_agent.shared.agents.recipe_scan.models import ProvenanceCatalog, Rec
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.llm.agent_cache import CompiledAgentCache
 from ..runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
 from ..runtime.llm.client import ChatPair
-from ..runtime.llm.structured_agent import (
-    StructuredAgentResult,
-    invoke_structured_agent,
-    recursion_limit_for,
-)
+from ..runtime.llm.model_caller import ModelCall, StructuredModelCaller
+from ..runtime.llm.structured_agent import StructuredAgentResult
 from ..shared.prompt_source_port import AgentPrompt
-from .langchain_agent import build_recipe_agent
 from .prompts import RecipePrompts
 from .reader import RecipeLedgerReader
 from .search import RecipeSearchReader
 from .tools import RECIPE_TOOLS, RecipeToolContext
 
 AGENT_NAME = AgentJobKind.RECIPE_SCAN
+
+
+def new_recipe_caller(chats: ChatPair) -> StructuredModelCaller[RecipeToolContext]:
+    """이 실행이 쓸 모델 호출자를 세우며 같은 조건의 호출은 컴파일한 agent를 다시 쓴다."""
+    return StructuredModelCaller(
+        chats,
+        RECIPE_TOOLS,
+        name="recipe-scan-investigator",
+        context_schema=RecipeToolContext,
+    )
 
 
 @dataclass(frozen=True)
@@ -38,12 +43,11 @@ class RecipeDeps:
     reader: RecipeLedgerReader
     search: RecipeSearchReader
     usage: ExecutionTrace
-    chats: ChatPair
+    caller: StructuredModelCaller[RecipeToolContext]
     budget: ExecutionBudget
     prompts: RecipePrompts
     prompt: AgentPrompt
     language_directives: Mapping[str, str]
-    agents: CompiledAgentCache = field(default_factory=CompiledAgentCache)
 
     def new_loop(self, role: str | None = None, *, max_cost_usd: float | None = None) -> SharedToolLoopBudget:
         """노드가 자기 역할 이름으로 여는 도구 루프의 예산이며 역할이 없으면 조율자가 연 것이다."""
@@ -69,23 +73,17 @@ class RecipeDeps:
         tool_owner: str = AGENT_NAME,
     ) -> StructuredAgentResult[OutputT]:
         """맡은 도구만 연 채 모델을 호출해 구조화 출력과 그 호출이 그은 턴을 낸다."""
-        names = tuple(tools)
-        agent = self.agents.compiled(
-            (system_prompt, names, output, max_turns),
-            lambda: build_recipe_agent(
-                self.chats.primary,
-                system_prompt,
-                RECIPE_TOOLS.langchain_tools(names),
-                RECIPE_TOOLS.transient_errors(names),
+        return await self.caller.invoke(
+            ModelCall(
+                system_prompt=system_prompt,
                 output=output,
-                fallback_chat=self.chats.fallback,
+                messages=messages,
+                missing_response=missing_response,
                 max_turns=max_turns,
+                tools=tuple(tools),
+                call_id=call_id,
             ),
-        )
-        return await invoke_structured_agent(
-            agent,
-            messages=messages,
-            context=RecipeToolContext(
+            RecipeToolContext(
                 agent_name=budget.agent_name,
                 trace=self.usage,
                 budget=budget,
@@ -95,8 +93,4 @@ class RecipeDeps:
                 search=self.search,
                 catalog=catalog,
             ),
-            response_type=output,
-            recursion_limit=recursion_limit_for(max_turns),
-            missing_response=missing_response,
-            call_id=call_id,
         )

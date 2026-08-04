@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
@@ -12,21 +12,27 @@ from tracer_agent.shared.agents.task_cleanup.models import CleanupCandidate, Tas
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.llm.agent_cache import CompiledAgentCache
 from ..runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
 from ..runtime.llm.client import ChatPair
-from ..runtime.llm.structured_agent import (
-    StructuredAgentResult,
-    invoke_structured_agent,
-    recursion_limit_for,
-)
+from ..runtime.llm.model_caller import ModelCall, StructuredModelCaller
+from ..runtime.llm.structured_agent import StructuredAgentResult
 from ..shared.prompt_source_port import AgentPrompt
-from .langchain_agent import build_cleanup_agent
 from .prompts import CleanupPrompts
 from .reader import CleanupLedgerReader
 from .tools import CLEANUP_TOOLS, CleanupToolContext
 
 AGENT_NAME = AgentJobKind.TASK_CLEANUP
+
+
+def new_cleanup_caller(chats: ChatPair) -> StructuredModelCaller[CleanupToolContext]:
+    """이 실행이 쓸 모델 호출자를 세우며 노출 장부를 공유하므로 도구를 직렬화한다."""
+    return StructuredModelCaller(
+        chats,
+        CLEANUP_TOOLS,
+        name="task-cleanup-investigator",
+        context_schema=CleanupToolContext,
+        serializes_tools=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -36,12 +42,11 @@ class CleanupDeps:
     req: TaskCleanupRequest
     reader: CleanupLedgerReader
     usage: ExecutionTrace
-    chats: ChatPair
+    caller: StructuredModelCaller[CleanupToolContext]
     budget: ExecutionBudget
     prompts: CleanupPrompts
     prompt: AgentPrompt
     language_directives: Mapping[str, str]
-    agents: CompiledAgentCache = field(default_factory=CompiledAgentCache)
 
     def new_loop(self, role: str | None = None, *, max_cost_usd: float | None = None) -> SharedToolLoopBudget:
         """노드가 자기 역할 이름으로 여는 도구 루프의 예산이며 역할이 없으면 조율자가 연 것이다."""
@@ -62,23 +67,16 @@ class CleanupDeps:
     ) -> StructuredAgentResult[OutputT]:
         """맡은 도구만 연 채 모델을 호출해 구조화 출력과 메시지와 이 호출이 쓴 턴을 낸다."""
         max_turns = self.req.limits.maxTurns
-        names = tuple(tool_names)
-        agent = self.agents.compiled(
-            (system_prompt, names, output, max_turns),
-            lambda: build_cleanup_agent(
-                self.chats.primary,
-                system_prompt,
-                CLEANUP_TOOLS.langchain_tools(names),
-                CLEANUP_TOOLS.transient_errors(),
+        return await self.caller.invoke(
+            ModelCall(
+                system_prompt=system_prompt,
                 output=output,
-                fallback_chat=self.chats.fallback,
+                messages=messages,
+                missing_response=missing_response,
                 max_turns=max_turns,
+                tools=tuple(tool_names),
             ),
-        )
-        return await invoke_structured_agent(
-            agent,
-            messages=messages,
-            context=CleanupToolContext(
+            CleanupToolContext(
                 agent_name=budget.agent_name,
                 trace=self.usage,
                 budget=budget,
@@ -89,7 +87,4 @@ class CleanupDeps:
                 exposed_candidates={} if exposed_candidates is None else exposed_candidates,
                 event_ids_by_task={} if event_ids_by_task is None else event_ids_by_task,
             ),
-            response_type=output,
-            recursion_limit=recursion_limit_for(max_turns),
-            missing_response=missing_response,
         )

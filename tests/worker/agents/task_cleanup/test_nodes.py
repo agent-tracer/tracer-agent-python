@@ -16,7 +16,7 @@ from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerAp
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ExecutionBudget
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
-from tracer_agent.worker.agents.task_cleanup.deps import CleanupDeps
+from tracer_agent.worker.agents.task_cleanup.deps import CleanupDeps, new_cleanup_caller
 from tracer_agent.worker.agents.task_cleanup.nodes.inspect import InspectNode
 from tracer_agent.worker.agents.task_cleanup.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
@@ -74,7 +74,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
             req=req,
             reader=CleanupLedgerReader(FakeTracerApi()),
             usage=ExecutionTrace(),
-            chats=ChatPair(BoomChat([]), None),  # type: ignore[arg-type]
+            caller=new_cleanup_caller(ChatPair(BoomChat([]), None)),  # type: ignore[arg-type]
             budget=ExecutionBudget(1.0, mk_rates()),
             prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
             prompt=TASK_CLEANUP_PROMPT,
@@ -145,7 +145,7 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
         req=req,
         reader=CleanupLedgerReader(FakeTracerApi(_EVENT_ROWS)),  # type: ignore[arg-type]
         usage=ExecutionTrace(),
-        chats=ChatPair(_ReadingChat(asyncio.Barrier(2)), None),  # type: ignore[arg-type]
+        caller=new_cleanup_caller(ChatPair(_ReadingChat(asyncio.Barrier(2)), None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),
         prompts=build_prompt_bundle(TASK_CLEANUP_PROMPT),
         prompt=TASK_CLEANUP_PROMPT,
@@ -163,6 +163,6 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
     )
 
     # 두 검토가 컴파일된 agent 하나를 함께 써도 장부는 각자의 것으로 남는다.
-    assert deps.agents.size() == 1
+    assert deps.caller.compiled_agents() == 1
     assert set(results[0]["event_ids_by_task"]) == {"task-1"}
     assert set(results[1]["event_ids_by_task"]) == {"task-2"}
