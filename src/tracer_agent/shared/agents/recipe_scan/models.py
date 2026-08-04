@@ -13,7 +13,7 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
-from ..shared.graph_state import BudgetSnapshotState
+from ..shared.graph_state import TurnCeilingState, fresh_budget_snapshot
 from ..shared.models import AgentExecutionRequest, Language, ModelFacing, TrimmedStr
 
 # 한 태스크가 서로 다른 작업 turn을 담을 수 있으므로 스캔 한 번이 낼 수 있는 후보 수의 상한이다.
@@ -301,7 +301,7 @@ class ResultUpdate(TypedDict):
     result: RecipeScanResult
 
 
-class RecipeScanState(BudgetSnapshotState):
+class RecipeScanState(TurnCeilingState):
     plan: DispatchPlan | None
     # 조율자가 종합 대신 요청한 추가 파견 계획이며 없으면 검증으로 넘어간다.
     redispatch: DispatchPlan | None
@@ -314,13 +314,34 @@ class RecipeScanState(BudgetSnapshotState):
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 그대로 남아 캐시된다.
     messages: list[BaseMessage]
     provenance: Annotated[ProvenanceCatalog, merged_provenance]
-    # repair·survey·synthesisFloor 예약을 뗀 뒤 팬아웃과 종합이 나눠 쓰는 턴과 달러 잔량이다.
-    max_cost_usd: float
-    max_turns: int
     candidates: list[RecipeCandidate]
     validation_errors: list[str]
     repair_attempted: bool
     result: RecipeScanResult | None
+
+
+def initial_recipe_scan_state(
+    req: RecipeScanRequest, *, max_cost_usd: float, max_turns: int
+) -> RecipeScanState:
+    """실행을 처음 시작하는 상태이며 잔량 두 칸은 예약을 뗀 뒤의 값을 받는다."""
+    return {
+        "plan": None,
+        "redispatch": None,
+        "redispatch_count": 0,
+        "reports": [],
+        "task_id": req.taskId,
+        "language": req.language,
+        "user_prompt": req.userPrompt,
+        "messages": [],
+        "provenance": ProvenanceCatalog(),
+        "max_cost_usd": max_cost_usd,
+        "max_turns": max_turns,
+        "candidates": [],
+        "validation_errors": [],
+        "repair_attempted": False,
+        "result": None,
+        **fresh_budget_snapshot(),
+    }
 
 
 _ANCHOR_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "recipe-scan" / "agent.json"

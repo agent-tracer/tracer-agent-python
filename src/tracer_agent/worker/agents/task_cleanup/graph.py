@@ -5,6 +5,7 @@ from __future__ import annotations
 from langgraph.graph import START
 from langgraph.types import Send
 
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd
 from tracer_agent.shared.agents.task_cleanup.models import InspectDispatch, TaskCleanupState
 
 from ..runtime.durable_graph import DurableGraph
@@ -20,7 +21,7 @@ def _dispatch(state: TaskCleanupState) -> list[Send]:
     # 조율자가 도구를 갖지 않으므로 조회할 후보가 없으면 바로 빈 결과로 끝낸다.
     if plan is None or not plan.assignments:
         return [Send(EMPTY, state)]
-    remaining = state["max_cost_usd"] - state.get("model_cost_usd", 0.0)
+    remaining = remaining_cost_usd(state)
     if remaining <= 0.0:
         return [Send(EMPTY, state)]
     return [

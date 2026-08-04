@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
-from ..shared.graph_state import BudgetSnapshotState
+from ..shared.graph_state import CostCeilingState, fresh_budget_snapshot
 from ..shared.models import AgentExecutionRequest, Language, TrimmedStr
 
 # 저장 계약의 판별자와 같은 값이어야 하는 정리 제안의 종류다.
@@ -265,7 +265,7 @@ class ResultUpdate(TypedDict):
     result: CleanupResult
 
 
-class TaskCleanupState(BudgetSnapshotState):
+class TaskCleanupState(CostCeilingState):
     scanned_at: str
     # 후보를 가리기 전에 조회한 태스크 수이며 제안이 없어도 산출이 이 수를 싣는다.
     tasks_scanned: int
@@ -283,9 +283,31 @@ class TaskCleanupState(BudgetSnapshotState):
     reports: Annotated[list[InspectReport], operator.add]
     exposed_candidates: Annotated[dict[str, CleanupCandidate], merged_candidates]
     event_ids_by_task: Annotated[dict[str, set[str]], merged_event_ids]
-    # 팬아웃이 남은 몫을 나눌 때 봐야 하는 이 실행의 달러 상한이다.
-    max_cost_usd: float
     suggestions: list[CleanupDraftSuggestion]
     validation_errors: list[str]
     repair_attempted: bool
     result: CleanupResult | None
+
+
+def initial_task_cleanup_state(req: TaskCleanupRequest) -> TaskCleanupState:
+    """실행을 처음 시작하는 상태이며 채널이 늘면 이 자리가 함께 갱신된다."""
+    return {
+        "scanned_at": req.scannedAt,
+        "tasks_scanned": req.batch.tasksScanned,
+        "language": req.language,
+        "max_suggestions": req.maxSuggestions,
+        "messages": [],
+        "plan": None,
+        "redispatch": None,
+        "redispatch_ceiling": 0.0,
+        "redispatch_count": 0,
+        "reports": [],
+        "exposed_candidates": {},
+        "event_ids_by_task": {},
+        "max_cost_usd": req.limits.budgetUsd,
+        "suggestions": [],
+        "validation_errors": [],
+        "repair_attempted": False,
+        "result": None,
+        **fresh_budget_snapshot(),
+    }

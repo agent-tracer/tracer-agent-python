@@ -8,6 +8,7 @@ from langgraph.types import Command, RetryPolicy, Send, TimeoutPolicy
 
 from tracer_agent.shared.agents.envelope.catalog import CATALOG
 from tracer_agent.shared.agents.recipe_scan.models import ProbeAssignment, ProbeDispatch, RecipeScanState
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 
 from ..runtime.durable_graph import DurableGraph
 from ..runtime.errors import is_retryable_node_failure
@@ -50,10 +51,8 @@ async def _survey_error_handler(
 
 
 def _remaining(state: RecipeScanState) -> tuple[int, float]:
-    """repair·survey·synthesisFloor 예약을 뗀 뒤 팬아웃이 아직 쓰지 않은 턴과 달러다."""
-    remaining_turns = state["max_turns"] - state.get("model_turns_used", 0)
-    remaining_usd = state["max_cost_usd"] - state.get("model_cost_usd", 0.0)
-    return remaining_turns, remaining_usd
+    """예약을 뗀 뒤 팬아웃이 아직 쓰지 않은 턴과 달러다."""
+    return remaining_turns(state), remaining_cost_usd(state)
 
 
 def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:

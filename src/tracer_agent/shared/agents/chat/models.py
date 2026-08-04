@@ -7,7 +7,7 @@ from typing import Literal, TypedDict, get_args
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..shared.graph_state import BudgetSnapshotState
+from ..shared.graph_state import BudgetSnapshotState, fresh_budget_snapshot
 from ..shared.json_view import JsonObject
 from ..shared.models import AgentExecutionEnvelope, Language, TrimmedStr
 
@@ -164,3 +164,17 @@ class ChatState(BudgetSnapshotState):
     # 대화가 세운 확인 대기 행이며 종결이 결과에 인용한다.
     proposals: list[ProposedWrite]
     result: ChatResult | None
+
+
+def initial_chat_state(req: ChatRequest) -> ChatState:
+    """실행을 처음 시작하는 상태이며 채널이 늘면 이 자리가 함께 갱신된다."""
+    return {
+        "language": req.language,
+        "summary": req.summary,
+        "facts": req.facts,
+        "history": [],
+        "messages": [],
+        "proposals": [],
+        "result": None,
+        **fresh_budget_snapshot(),
+    }

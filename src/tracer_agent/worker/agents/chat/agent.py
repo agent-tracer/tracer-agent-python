@@ -6,8 +6,7 @@ from typing import Any
 
 import httpx
 
-from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, ChatState
-from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
+from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, initial_chat_state
 
 from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
@@ -59,19 +58,6 @@ def _build_node(
     )
 
 
-def _initial_state(req: ChatRequest) -> ChatState:
-    return {
-        "language": req.language,
-        "summary": req.summary,
-        "facts": req.facts,
-        "history": [],
-        "messages": [],
-        **fresh_budget_snapshot(),
-        "proposals": [],
-        "result": None,
-    }
-
-
 async def run_chat(
     req: ChatRequest,
     http_client: httpx.AsyncClient,
@@ -107,7 +93,7 @@ async def run_chat(
         _no_validation,
     )
     final = await CHAT_GRAPH.ainvoke(
-        _initial_state(req),
+        initial_chat_state(req),
         context=context,
         config=recursion_config(
             recursion_limit_for(req.limits.maxTurns),

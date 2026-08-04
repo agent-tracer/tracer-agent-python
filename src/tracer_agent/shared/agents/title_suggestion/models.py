@@ -7,7 +7,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..shared.graph_state import BudgetSnapshotState
+from ..shared.graph_state import BudgetSnapshotState, fresh_budget_snapshot
 from ..shared.models import (
     AgentExecutionRequest,
     Language,
@@ -103,3 +103,18 @@ class TitleSuggestionState(BudgetSnapshotState):
     validation_errors: list[str]
     repair_attempted: bool
     result: TitleSuggestionDraft | None
+
+
+def initial_title_suggestion_state(req: TitleSuggestionRequest) -> TitleSuggestionState:
+    """실행을 처음 시작하는 상태이며 채널이 늘면 이 자리가 함께 갱신된다."""
+    return {
+        "task_id": req.taskId,
+        "language": req.language,
+        "context": req.context,
+        "messages": [],
+        "candidate": None,
+        "validation_errors": [],
+        "repair_attempted": False,
+        "result": None,
+        **fresh_budget_snapshot(),
+    }
