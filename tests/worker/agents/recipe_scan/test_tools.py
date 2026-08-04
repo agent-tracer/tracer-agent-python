@@ -7,6 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from tests.support.agents import mk_recipe_agent
 from tests.support.fakes import FakeToolLoopChat
 from tests.support.tool_contexts import mk_recipe_context
 from tracer_agent.shared.agents.recipe_scan.models import (
@@ -18,7 +19,6 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RecipeDraft,
     merged_provenance,
 )
-from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.tools import (
     PROBE_TOOLS,
     RECIPE_TOOL_CLASSES,
@@ -268,17 +268,15 @@ def test_전문가는_자기_근거_원천의_도구만_쥔다() -> None:
 
 
 def test_전문가는_후보가_아니라_보고를_내도록_조립된다() -> None:
-    probe = build_recipe_agent(
+    probe = mk_recipe_agent(
         FakeToolLoopChat([]),
-        "system",
         RECIPE_TOOLS.langchain_tools(PROBE_TOOLS["rules"]),
         RECIPE_TOOLS.transient_errors(PROBE_TOOLS["rules"]),
         max_turns=3,
         output=ProbeReport,
     )
-    coordinator = build_recipe_agent(
+    coordinator = mk_recipe_agent(
         FakeToolLoopChat([]),
-        "system",
         RECIPE_TOOLS.langchain_tools(),
         RECIPE_TOOLS.transient_errors(),
         max_turns=15,

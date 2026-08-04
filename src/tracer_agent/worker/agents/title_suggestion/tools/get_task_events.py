@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
+from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
 from .context import TitleToolContext
 
 GET_TASK_EVENTS = "get_task_events"
@@ -64,6 +65,8 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, TitleToolContext]):
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION
     args_model = GetTaskEventsArgs
+    # 같은 창구를 읽는 recipe·cleanup의 도구와 같은 오류를 일시로 본다.
+    transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: GetTaskEventsArgs, context: TitleToolContext) -> str:
         page = await context.reader.task_events(args.taskId, args.limit, args.cursor, args.order)

@@ -1,4 +1,4 @@
-"""미들웨어 스택의 순서 의존이 두 에이전트에서 지켜지는지 검증한다(모델 호출 없음)."""
+"""미들웨어 스택의 순서 의존이 네 에이전트에서 지켜지는지 검증한다(모델 호출 없음)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,22 @@ import httpx
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
-from tracer_agent.worker.agents.chat.langchain_agent import chat_middleware
-from tracer_agent.worker.agents.recipe_scan.langchain_agent import recipe_middleware
+from tracer_agent.worker.agents.chat.langchain_agent import chat_stack
+from tracer_agent.worker.agents.runtime.llm.middleware_stack import AgentMiddlewareStack
 
 _TRANSIENT: tuple[type[Exception], ...] = (httpx.TransportError,)
 _FALLBACK = GenericFakeChatModel(messages=iter([]))
+
+
+def _job_stack(*, fallback: bool = False, serializes_tools: bool = False) -> AgentMiddlewareStack:
+    """구조화 출력을 요구하는 잡 에이전트가 세우는 스택이다."""
+    return AgentMiddlewareStack(
+        max_turns=4,
+        transient_errors=_TRANSIENT,
+        fallback_chat=_FALLBACK if fallback else None,
+        repairs_structured_output=True,
+        serializes_tools=serializes_tools,
+    )
 
 
 def _kinds(middleware: list[Any]) -> list[str]:
@@ -20,58 +31,76 @@ def _kinds(middleware: list[Any]) -> list[str]:
     return [type(one).__name__ for one in middleware]
 
 
+def _stacks(*, fallback: bool = False) -> list[tuple[str, list[str]]]:
+    """네 에이전트가 실제로 세우는 스택을 바깥에서 안쪽 순서의 이름 목록으로 낸다."""
+    chat = chat_stack(_TRANSIENT, max_turns=4, fallback_chat=_FALLBACK if fallback else None)
+    return [
+        ("chat", _kinds(chat.build())),
+        ("recipe-scan", _kinds(_job_stack(fallback=fallback).build())),
+        ("task-cleanup", _kinds(_job_stack(fallback=fallback, serializes_tools=True).build())),
+        ("title-suggestion", _kinds(_job_stack(fallback=fallback).build())),
+    ]
+
+
 class Test미들웨어순서:
     def test_캐시_경계가_남은_몫을_알리는_꼬리보다_안쪽에_선다(self) -> None:
         # 꼬리가 붙기 전에 서면 경계가 호출마다 바뀌는 그 꼬리 위에 놓여 다시 읽히지 않는다.
-        for kinds in (
-            _kinds(recipe_middleware(_TRANSIENT, max_turns=4)),
-            _kinds(chat_middleware(_TRANSIENT, max_turns=4)),
-        ):
-            assert kinds.index("StandardAgentMiddleware") < kinds.index("PromptCacheMiddleware")
+        for name, kinds in _stacks():
+            assert kinds.index("StandardAgentMiddleware") < kinds.index("PromptCacheMiddleware"), name
+
+    def test_맥락_정리가_비용_장부보다_바깥에_선다(self) -> None:
+        for name, kinds in _stacks():
+            assert kinds.index("ContextEditingMiddleware") < kinds.index("StandardAgentMiddleware"), name
+
+    def test_도구_재시도가_모델_재시도보다_바깥에_선다(self) -> None:
+        for name, kinds in _stacks():
+            assert kinds.index("ToolRetryMiddleware") < kinds.index("ModelRetryMiddleware"), name
+
+    def test_같은_모델_재시도가_대체_모델보다_안쪽에_선다(self) -> None:
+        for name, kinds in _stacks(fallback=True):
+            assert kinds.index("FallbackModelMiddleware") < kinds.index("ModelRetryMiddleware"), name
+
+    def test_대체_모델이_없으면_그_미들웨어를_세우지_않는다(self) -> None:
+        for name, kinds in _stacks():
+            assert "FallbackModelMiddleware" not in kinds, name
+
+    def test_네_에이전트가_같은_층을_같은_순서로_세운다(self) -> None:
+        # 구조화 복구만 산출 형태에 따라 갈리고 나머지 층과 그 순서는 넷이 함께 쓴다.
+        for name, kinds in _stacks():
+            assert [one for one in kinds if one != "StructuredOutputRepairMiddleware"] == [
+                "TurnLimitMiddleware" if name == "chat" else "ModelCallLimitMiddleware",
+                "ContextEditingMiddleware",
+                "StandardAgentMiddleware",
+                "PromptCacheMiddleware",
+                "ToolRetryMiddleware",
+                "ModelRetryMiddleware",
+            ], name
+
+    def test_구조화_출력을_요구하는_잡만_산출을_다시_받는다(self) -> None:
+        # 대화는 자유 텍스트를 내므로 스키마에 걸려 버려질 산출 자체가 없다.
+        by_name = dict(_stacks())
+        assert "StructuredOutputRepairMiddleware" not in by_name["chat"]
+        for name in ("recipe-scan", "task-cleanup", "title-suggestion"):
+            kinds = by_name[name]
+            assert kinds.index("StructuredOutputRepairMiddleware") < kinds.index("StandardAgentMiddleware"), (
+                name
+            )
 
     def test_상한은_알리는_총량보다_마무리_몫만큼_넉넉하다(self) -> None:
         # 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 딱 맞추면 산출을 낼 자리가 없다.
-        for middleware in (
-            recipe_middleware(_TRANSIENT, max_turns=4),
-            chat_middleware(_TRANSIENT, max_turns=4),
-        ):
-            limit = next(one for one in middleware if isinstance(one, ModelCallLimitMiddleware))
+        for stack in (chat_stack(_TRANSIENT, max_turns=4), _job_stack()):
+            limit = next(one for one in stack.build() if isinstance(one, ModelCallLimitMiddleware))
             assert limit.run_limit == 6
 
-    def test_맥락_정리가_비용_장부보다_바깥에_선다(self) -> None:
-        for kinds in (
-            _kinds(recipe_middleware(_TRANSIENT, max_turns=4)),
-            _kinds(chat_middleware(_TRANSIENT, max_turns=4)),
-        ):
-            assert kinds.index("ContextEditingMiddleware") < kinds.index("StandardAgentMiddleware")
-
-    def test_같은_모델_재시도가_대체_모델보다_안쪽에_선다(self) -> None:
-        for kinds in (
-            _kinds(recipe_middleware(_TRANSIENT, max_turns=4, fallback_chat=_FALLBACK)),
-            _kinds(chat_middleware(_TRANSIENT, max_turns=4, fallback_chat=_FALLBACK)),
-        ):
-            assert kinds.index("FallbackModelMiddleware") < kinds.index("ModelRetryMiddleware")
-
-    def test_대체_모델이_없으면_그_미들웨어를_세우지_않는다(self) -> None:
-        assert "FallbackModelMiddleware" not in _kinds(recipe_middleware(_TRANSIENT, max_turns=4))
-        assert "FallbackModelMiddleware" not in _kinds(chat_middleware(_TRANSIENT, max_turns=4))
-
-    def test_도구_재시도가_모델_재시도보다_바깥에_선다(self) -> None:
-        for kinds in (
-            _kinds(recipe_middleware(_TRANSIENT, max_turns=4)),
-            _kinds(chat_middleware(_TRANSIENT, max_turns=4)),
-        ):
-            assert kinds.index("ToolRetryMiddleware") < kinds.index("ModelRetryMiddleware")
-
-    def test_구조화_복구가_비용_장부보다_바깥에_선다(self) -> None:
-        # 안쪽에 서면 거부된 산출이 장부에 닿지 못해 그 호출의 토큰이 예산에서 빠진다.
-        kinds = _kinds(recipe_middleware(_TRANSIENT, max_turns=4))
-        assert kinds.index("StructuredOutputRepairMiddleware") < kinds.index("StandardAgentMiddleware")
+    def test_대화만_상한에서_그때까지의_답을_남기고_끝낸다(self) -> None:
+        # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
+        assert _kinds(chat_stack(_TRANSIENT, max_turns=4).build())[0] == "TurnLimitMiddleware"
+        assert _kinds(_job_stack().build())[0] == "ModelCallLimitMiddleware"
 
     def test_대화의_도구는_공유_장부를_직렬화한다(self) -> None:
         standard = next(
             one
-            for one in chat_middleware(_TRANSIENT, max_turns=4)
+            for one in chat_stack(_TRANSIENT, max_turns=4).build()
             if type(one).__name__ == "StandardAgentMiddleware"
         )
         assert standard._serializes_tools  # noqa: SLF001

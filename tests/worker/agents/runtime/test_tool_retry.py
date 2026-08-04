@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 from langchain.tools import tool
 
+from tests.support.agents import mk_recipe_agent
 from tests.support.fakes import FakeToolLoopChat
 from tests.support.tool_contexts import mk_recipe_context
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
-from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.tools import RECIPE_TOOLS, RecipeToolContext
 from tracer_agent.worker.agents.runtime.tracer_client import TracerApiUnavailable
 from tracer_agent.worker.agents.task_cleanup.tools import GetTaskEventsTool
@@ -55,7 +55,7 @@ async def test_일시_오류는_도구_계층에서_재시도해_실행이_이�
             {"recipes": []},
         ]
     )
-    agent = build_recipe_agent(chat, "system", (flaky,), RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
+    agent = mk_recipe_agent(chat, [flaky], RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
     output = await agent.ainvoke(
         {"messages": [{"role": "user", "content": "go"}]},
@@ -71,7 +71,7 @@ async def test_일시_오류는_도구_계층에서_재시도해_실행이_이�
 async def test_소진해도_실패하면_오류가_그대로_올라온다() -> None:
     flaky, calls = _flaky_tool(9, TracerApiUnavailable("tracer api down"))
     chat = FakeToolLoopChat([[{"name": "get_task_events", "args": {"taskId": "t1"}}]])
-    agent = build_recipe_agent(chat, "system", (flaky,), RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
+    agent = mk_recipe_agent(chat, [flaky], RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
     with pytest.raises(TracerApiUnavailable):
         await agent.ainvoke(
@@ -87,7 +87,7 @@ async def test_소진해도_실패하면_오류가_그대로_올라온다() -> N
 async def test_도메인_오류는_재시도하지_않는다() -> None:
     flaky, calls = _flaky_tool(9, ValueError("bad citation"))
     chat = FakeToolLoopChat([[{"name": "get_task_events", "args": {"taskId": "t1"}}]])
-    agent = build_recipe_agent(chat, "system", (flaky,), RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
+    agent = mk_recipe_agent(chat, [flaky], RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
     with pytest.raises(ValueError, match="bad citation"):
         await agent.ainvoke(

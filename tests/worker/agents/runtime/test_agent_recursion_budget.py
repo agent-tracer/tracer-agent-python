@@ -7,13 +7,11 @@ from typing import Any
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
+from tests.support.agents import mk_cleanup_agent, mk_recipe_agent, mk_title_agent
 from tests.support.fakes import FakeToolLoopChat
-from tracer_agent.worker.agents.recipe_scan.langchain_agent import build_recipe_agent
 from tracer_agent.worker.agents.recipe_scan.tools import RECIPE_TOOLS
 from tracer_agent.worker.agents.runtime.llm.structured_agent import recursion_limit_for
-from tracer_agent.worker.agents.task_cleanup.langchain_agent import build_cleanup_agent
 from tracer_agent.worker.agents.task_cleanup.tools import CLEANUP_TOOLS
-from tracer_agent.worker.agents.title_suggestion.langchain_agent import build_title_agent
 from tracer_agent.worker.agents.title_suggestion.tools import TITLE_TOOLS
 
 # 봉투가 실어 오는 값이라 테스트는 카탈로그의 최대치를 대표로 잡아 유도 규칙만 검증한다.
@@ -29,9 +27,8 @@ def _agents() -> list[tuple[str, CompiledStateGraph[Any, Any, Any, Any], int, in
     return [
         (
             "task-cleanup",
-            build_cleanup_agent(
+            mk_cleanup_agent(
                 chat,
-                "system",
                 CLEANUP_TOOLS.langchain_tools(),
                 CLEANUP_TOOLS.transient_errors(),
                 max_turns=_TURNS,
@@ -41,9 +38,8 @@ def _agents() -> list[tuple[str, CompiledStateGraph[Any, Any, Any, Any], int, in
         ),
         (
             "recipe-scan",
-            build_recipe_agent(
+            mk_recipe_agent(
                 chat,
-                "system",
                 RECIPE_TOOLS.langchain_tools(),
                 RECIPE_TOOLS.transient_errors(),
                 max_turns=_TURNS,
@@ -53,7 +49,12 @@ def _agents() -> list[tuple[str, CompiledStateGraph[Any, Any, Any, Any], int, in
         ),
         (
             "title-suggestion",
-            build_title_agent(chat, "system", TITLE_TOOLS.langchain_tools(), max_turns=_TURNS),
+            mk_title_agent(
+                chat,
+                TITLE_TOOLS.langchain_tools(),
+                TITLE_TOOLS.transient_errors(),
+                max_turns=_TURNS,
+            ),
             _TURNS,
             recursion_limit_for(_TURNS),
         ),

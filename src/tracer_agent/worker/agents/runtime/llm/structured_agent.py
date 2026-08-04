@@ -8,8 +8,11 @@ from functools import lru_cache
 from typing import Any, TypedDict
 from uuid import UUID, uuid5
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain.agents import create_agent
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.graph.state import CompiledStateGraph
 from langsmith.client import Client
@@ -18,6 +21,7 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.shared.env import env_flag
 
 from ..telemetry.disclosure import TraceSafeMetadata, disclosable_run_payload
+from .middleware_stack import AgentMiddlewareStack
 from .standard_agent import StandardAgentContext
 
 _LANGSMITH_RUN_NAMESPACE = UUID("90dd2ae3-e1b4-43bc-9538-f70898c147bd")
@@ -30,6 +34,38 @@ class StructuredAgentResult[Response: BaseModel]:
     response: Response
     messages: list[BaseMessage]
     num_turns: int
+
+
+def build_structured_agent(
+    chat: BaseChatModel,
+    system_prompt: str,
+    tools: list[BaseTool],
+    transient_errors: tuple[type[Exception], ...],
+    *,
+    output: type[BaseModel],
+    context_schema: type[Any],
+    name: str,
+    max_turns: int,
+    fallback_chat: BaseChatModel | None = None,
+    serializes_tools: bool = False,
+) -> CompiledStateGraph[Any, Any, Any, Any]:
+    """표준 도구 실행과 구조화 출력을 갖춘 잡 에이전트를 공통 미들웨어 순서로 컴파일한다."""
+    middleware = AgentMiddlewareStack(
+        max_turns=max_turns,
+        transient_errors=transient_errors,
+        fallback_chat=fallback_chat,
+        repairs_structured_output=True,
+        serializes_tools=serializes_tools,
+    ).build()
+    return create_agent(
+        chat,
+        tools=list(tools),
+        system_prompt=SystemMessage(content=system_prompt),
+        middleware=middleware,
+        response_format=output,
+        context_schema=context_schema,
+        name=name,
+    )
 
 
 # 한 턴이 langchain agent의 여러 슈퍼스텝을 거치므로 재귀 한도는 예산이 아니라 폭주만 끊는 상한이다.
