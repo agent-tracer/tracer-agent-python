@@ -9,6 +9,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import AgentExecutionRequest, Language, TrimmedStr
 
 # 저장 계약의 판별자와 같은 값이어야 하는 정리 제안의 종류다.
@@ -207,6 +208,7 @@ class TriageUpdate(TypedDict):
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
     model_cost_usd: float
+    model_turns_used: int
 
 
 class InspectUpdate(TypedDict):
@@ -215,6 +217,7 @@ class InspectUpdate(TypedDict):
     reports: list[InspectReport]
     event_ids_by_task: dict[str, set[str]]
     model_cost_usd: float
+    model_turns_used: int
 
 
 class InvestigateUpdate(TypedDict):
@@ -225,6 +228,7 @@ class InvestigateUpdate(TypedDict):
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
     model_cost_usd: float
+    model_turns_used: int
     # None이면 검증으로 넘어가고, 계획이 담기면 그 후보들을 한 번 더 조회한다.
     redispatch: TriagePlan | None
     redispatch_ceiling: float
@@ -247,6 +251,7 @@ class RepairUpdate(TypedDict):
     event_ids_by_task: dict[str, set[str]]
     repair_attempted: bool
     model_cost_usd: float
+    model_turns_used: int
 
 
 class CleanupResult(BaseModel):
@@ -261,7 +266,7 @@ class ResultUpdate(TypedDict):
     result: CleanupResult
 
 
-class TaskCleanupState(TypedDict):
+class TaskCleanupState(BudgetSnapshotState):
     scanned_at: str
     language: Language
     max_suggestions: int
@@ -277,7 +282,6 @@ class TaskCleanupState(TypedDict):
     reports: Annotated[list[InspectReport], operator.add]
     exposed_candidates: Annotated[dict[str, CleanupCandidate], merged_candidates]
     event_ids_by_task: Annotated[dict[str, set[str]], merged_event_ids]
-    model_cost_usd: Annotated[float, operator.add]
     # 팬아웃이 남은 몫을 나눌 때 봐야 하는 이 실행의 달러 상한이다.
     max_cost_usd: float
     suggestions: list[CleanupDraftSuggestion]

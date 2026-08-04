@@ -87,7 +87,8 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         )
         return {
             "messages": messages,
-            "model_cost_usd": prepared.budget.spent,
+            "model_cost_usd": prepared.budget.delta,
+            "model_turns_used": sum(1 for message in messages if isinstance(message, AIMessage)),
             "proposals": prepared.proposals,
         }
 

@@ -9,6 +9,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RecipeScanRequest,
     RecipeScanResult,
 )
+from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.checkpoint import GraphCheckpointProvider
@@ -119,10 +120,9 @@ async def run_recipe_scan(
         "redispatch_count": 0,
         "reports": [],
         "provenance": ProvenanceCatalog(),
-        "model_cost_usd": 0.0,
+        **fresh_budget_snapshot(),
         "max_cost_usd": budget.remaining_budget_usd,
         "max_turns": budget.remaining_turns,
-        "model_turns_used": 0,
         "candidates": [],
         "validation_errors": [],
         "repair_attempted": False,

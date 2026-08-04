@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
 from tracer_agent.shared.agents.title_suggestion.models import (
     TitleSuggestionDraft,
     TitleSuggestionRequest,
@@ -110,7 +111,7 @@ async def run_title_suggestion(
         "language": req.language,
         "context": req.context,
         "messages": [],
-        "model_cost_usd": 0.0,
+        **fresh_budget_snapshot(),
         "candidate": None,
         "validation_errors": [],
         "repair_attempted": False,

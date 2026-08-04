@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -19,7 +20,6 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 )
 
 from ...runtime.execution.trace import ExecutionTrace
-from ...runtime.llm.budget import SharedToolLoopBudget
 from ...runtime.node import GraphNode
 from ..deps import AGENT_NAME, CleanupDeps
 from ..policy import validate_suggestions
@@ -38,17 +38,25 @@ def _plan_redispatch(
     return TriagePlan(inspect=draft.redispatch), remaining
 
 
+@dataclass(frozen=True)
+class _Decision:
+    """조율 호출 하나가 낸 초안과 이어갈 메시지와 그 호출이 쓴 턴과 달러다."""
+
+    draft: CleanupDraft
+    messages: list[BaseMessage]
+    turns_used: int
+    cost_usd: float
+
+
 class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, UpdateT], ABC):
     def __init__(self, deps: CleanupDeps) -> None:
         self._deps = deps
 
-    async def _decide(
-        self, messages: list[BaseMessage], state: TaskCleanupState
-    ) -> tuple[CleanupDraft, list[BaseMessage], SharedToolLoopBudget]:
+    async def _decide(self, messages: list[BaseMessage], state: TaskCleanupState) -> _Decision:
         deps = self._deps
         budget = deps.new_loop()
         # 조율자는 후보를 직접 조회하지 않고 검토 전문가의 보고만으로 제안을 쓴다.
-        draft, replied = await deps.invoke(
+        call = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.investigator_system,
             tool_names=COORDINATOR_TOOL_NAMES,
@@ -58,7 +66,7 @@ class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, Upd
             exposed_candidates=state["exposed_candidates"],
             event_ids_by_task=state["event_ids_by_task"],
         )
-        return draft, replied, budget
+        return _Decision(call.response, call.messages, call.num_turns, budget.delta)
 
 
 class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
@@ -68,7 +76,7 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
 
     async def run(self, state: TaskCleanupState) -> InvestigateUpdate:
         deps = self._deps
-        draft, messages, budget = await self._decide(
+        decided = await self._decide(
             [
                 HumanMessage(
                     content=build_user_prompt(
@@ -81,12 +89,14 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
             ],
             state,
         )
+        draft = decided.draft
         update: InvestigateUpdate = {
             "suggestions": draft.suggestions,
-            "messages": messages,
+            "messages": decided.messages,
             "exposed_candidates": state["exposed_candidates"],
             "event_ids_by_task": state["event_ids_by_task"],
-            "model_cost_usd": budget.delta,
+            "model_cost_usd": decided.cost_usd,
+            "model_turns_used": decided.turns_used,
             "redispatch": None,
             "redispatch_ceiling": 0.0,
             "redispatch_count": state["redispatch_count"],
@@ -119,14 +129,15 @@ class RepairNode(_DecisionAgent[RepairUpdate]):
                 )
             ),
         ]
-        draft, messages, budget = await self._decide(repair_prompt, state)
+        decided = await self._decide(repair_prompt, state)
         return {
-            "suggestions": draft.suggestions,
-            "messages": messages,
+            "suggestions": decided.draft.suggestions,
+            "messages": decided.messages,
             "exposed_candidates": state["exposed_candidates"],
             "event_ids_by_task": state["event_ids_by_task"],
             "repair_attempted": True,
-            "model_cost_usd": budget.delta,
+            "model_cost_usd": decided.cost_usd,
+            "model_turns_used": decided.turns_used,
         }
 
 

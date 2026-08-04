@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
 from tracer_agent.shared.agents.task_cleanup.models import CleanupResult, TaskCleanupRequest
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
@@ -115,7 +116,7 @@ async def run_task_cleanup(
         "reports": [],
         "exposed_candidates": {},
         "event_ids_by_task": {},
-        "model_cost_usd": 0.0,
+        **fresh_budget_snapshot(),
         "max_cost_usd": req.limits.budgetUsd,
         "suggestions": [],
         "validation_errors": [],

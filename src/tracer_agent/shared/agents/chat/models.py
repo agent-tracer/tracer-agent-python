@@ -7,6 +7,7 @@ from typing import Literal, TypedDict, get_args
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..shared.graph_state import BudgetSnapshotState
 from ..shared.json_view import JsonObject
 from ..shared.models import AgentExecutionEnvelope, Language, TrimmedStr
 
@@ -142,6 +143,7 @@ class ConverseUpdate(TypedDict):
 
     messages: list[BaseMessage]
     model_cost_usd: float
+    model_turns_used: int
     proposals: list[ProposedWrite]
 
 
@@ -151,7 +153,7 @@ class SettleUpdate(TypedDict):
     result: ChatResult
 
 
-class ChatState(TypedDict):
+class ChatState(BudgetSnapshotState):
     language: Language
     summary: str | None
     facts: list[ChatFact]
@@ -159,7 +161,6 @@ class ChatState(TypedDict):
     history: list[ChatHistoryMessage]
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
-    model_cost_usd: float
     # 대화가 세운 확인 대기 행이며 종결이 결과에 인용한다.
     proposals: list[ProposedWrite]
     result: ChatResult | None

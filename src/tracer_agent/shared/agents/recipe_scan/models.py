@@ -12,6 +12,7 @@ from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import AgentExecutionRequest, Language, ModelFacing, TrimmedStr
 
 # 한 태스크가 서로 다른 작업 turn을 담을 수 있어 스캔 한 번이 낼 수 있는 후보 수다.
@@ -226,10 +227,6 @@ def merged_provenance(left: ProvenanceCatalog, right: ProvenanceCatalog) -> Prov
     return combined
 
 
-def _sum_cost(left: float, right: float) -> float:
-    return left + right
-
-
 class SurveyUpdate(TypedDict):
     """조율자 노드가 갱신하는 상태 부분집합이다."""
 
@@ -297,11 +294,7 @@ class ResultUpdate(TypedDict):
     result: RecipeScanResult
 
 
-def _sum_turns(left: int, right: int) -> int:
-    return left + right
-
-
-class RecipeScanState(TypedDict):
+class RecipeScanState(BudgetSnapshotState):
     plan: DispatchPlan | None
     # 조율자가 종합 대신 요청한 추가 파견 계획이며 없으면 검증으로 넘어간다.
     redispatch: DispatchPlan | None
@@ -314,11 +307,9 @@ class RecipeScanState(TypedDict):
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 그대로 남아 캐시된다.
     messages: list[BaseMessage]
     provenance: Annotated[ProvenanceCatalog, merged_provenance]
-    model_cost_usd: Annotated[float, _sum_cost]
     # repair·survey·synthesisFloor 예약을 뗀 뒤 팬아웃과 종합이 나눠 쓰는 턴과 달러 잔량이다.
     max_cost_usd: float
     max_turns: int
-    model_turns_used: Annotated[int, _sum_turns]
     candidates: list[RecipeCandidate]
     validation_errors: list[str]
     repair_attempted: bool

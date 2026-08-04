@@ -36,7 +36,7 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
     name = "investigate"
 
     async def run(self, state: TitleSuggestionState) -> InvestigateUpdate:
-        draft, messages, budget = await self._deps.investigate(
+        call = await self._deps.investigate(
             [
                 HumanMessage(
                     content=build_user_prompt(
@@ -47,7 +47,12 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
                 )
             ],
         )
-        return {"candidate": draft, "messages": messages, "model_cost_usd": budget.delta}
+        return {
+            "candidate": call.draft,
+            "messages": call.messages,
+            "model_cost_usd": call.cost_usd,
+            "model_turns_used": call.turns_used,
+        }
 
 
 class RepairNode(_CandidateAgent[RepairUpdate]):
@@ -64,12 +69,13 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
                 )
             ),
         ]
-        draft, messages, budget = await self._deps.investigate(repair_prompt)
+        call = await self._deps.investigate(repair_prompt)
         return {
-            "candidate": draft,
-            "messages": messages,
+            "candidate": call.draft,
+            "messages": call.messages,
             "repair_attempted": True,
-            "model_cost_usd": budget.delta,
+            "model_cost_usd": call.cost_usd,
+            "model_turns_used": call.turns_used,
         }
 
 

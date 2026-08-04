@@ -126,11 +126,18 @@ class ToolLoopBudget:
         self._peak = 0.0
         self._landed = False
         self._spent = spent
+        # 상태 채널이 증분을 누적하므로 이어받은 몫과 이 루프가 더한 몫을 구분한다.
+        self._seed = spent
 
     @property
     def spent(self) -> float:
         """이 루프가 지금까지 실행한 모델 비용이다."""
         return self._spent
+
+    @property
+    def delta(self) -> float:
+        """이어받은 몫을 뺀, 이 루프가 더한 모델 비용이다."""
+        return self._spent - self._seed
 
     @property
     def landing(self) -> bool:

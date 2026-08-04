@@ -7,6 +7,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..shared.graph_state import BudgetSnapshotState
 from ..shared.models import (
     AgentExecutionRequest,
     Language,
@@ -65,6 +66,7 @@ class InvestigateUpdate(TypedDict):
     candidate: TitleSuggestionDraft
     messages: list[BaseMessage]
     model_cost_usd: float
+    model_turns_used: int
 
 
 class ValidateCandidateUpdate(TypedDict):
@@ -80,6 +82,7 @@ class RepairUpdate(TypedDict):
     messages: list[BaseMessage]
     repair_attempted: bool
     model_cost_usd: float
+    model_turns_used: int
 
 
 class ResultUpdate(TypedDict):
@@ -88,13 +91,12 @@ class ResultUpdate(TypedDict):
     result: TitleSuggestionDraft
 
 
-class TitleSuggestionState(TypedDict):
+class TitleSuggestionState(BudgetSnapshotState):
     task_id: str
     language: Language
     context: TitleSuggestionContext
     # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
-    model_cost_usd: float
     candidate: TitleSuggestionDraft | None
     validation_errors: list[str]
     repair_attempted: bool

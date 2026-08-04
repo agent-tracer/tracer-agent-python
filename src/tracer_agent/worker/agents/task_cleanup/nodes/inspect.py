@@ -46,7 +46,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
         exposed: dict[str, CleanupCandidate] = {}
         event_ids: dict[str, set[str]] = {}
         budget = deps.new_loop(self.name)
-        plan, _messages = await deps.invoke(
+        call = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.triage_system,
             tool_names=TRIAGE_TOOL_NAMES,
@@ -56,6 +56,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             exposed_candidates=exposed,
             event_ids_by_task=event_ids,
         )
+        plan = call.response
         chosen = ", ".join(f"{item.taskId}:{item.weight}" for item in plan.assignments) or "없음"
         deps.usage.record_orchestration_event(
             "route.selected",
@@ -67,6 +68,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             "exposed_candidates": exposed,
             "event_ids_by_task": event_ids,
             "model_cost_usd": budget.delta,
+            "model_turns_used": call.num_turns,
         }
 
 
@@ -86,7 +88,7 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
         budget = deps.new_loop(CLEANUP_REVIEWER_ROLE, max_cost_usd=payload.cost_budget)
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
-            report, _messages = await deps.invoke(
+            call = await deps.invoke(
                 budget=budget,
                 system_prompt=deps.prompts.inspect_system,
                 tool_names=INSPECT_TOOL_NAMES,
@@ -95,6 +97,7 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
                 missing_response=f"{task_id} inspection produced no structured report",
                 event_ids_by_task=event_ids,
             )
+            report, turns_used = call.response, call.num_turns
         except Exception as exc:
             # 조사가 실패한 후보는 안전하게 보존하도록 보관 불가로 올린다.
             _log.warning("inspect failed for %s: %s", task_id, exc)
@@ -104,8 +107,11 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
                 reason=_failure_reason(exc),
                 citedEventIds=[],
             )
+            # 끊긴 호출이 그은 턴은 셀 수 없으므로 증명할 수 있는 값만 올리고 상한은 달러가 지킨다.
+            turns_used = 0
         return {
             "reports": [report],
             "event_ids_by_task": event_ids,
             "model_cost_usd": budget.delta,
+            "model_turns_used": turns_used,
         }

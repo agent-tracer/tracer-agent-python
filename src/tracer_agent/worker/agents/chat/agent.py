@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from tracer_agent.shared.agents.chat.models import ChatRequest, ChatResult, ChatState
+from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
 
 from ..runtime.checkpoint import GraphCheckpointProvider
 from ..runtime.execution.trace import ExecutionTrace
@@ -65,7 +66,7 @@ def _initial_state(req: ChatRequest) -> ChatState:
         "facts": req.facts,
         "history": [],
         "messages": [],
-        "model_cost_usd": 0.0,
+        **fresh_budget_snapshot(),
         "proposals": [],
         "result": None,
     }

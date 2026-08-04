@@ -16,6 +16,7 @@ from ..runtime.llm.agent_cache import CompiledAgentCache
 from ..runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
 from ..runtime.llm.client import ChatPair
 from ..runtime.llm.structured_agent import (
+    StructuredAgentResult,
     invoke_structured_agent,
     recursion_limit_for,
 )
@@ -56,8 +57,8 @@ class CleanupDeps:
         missing_response: str,
         exposed_candidates: dict[str, CleanupCandidate] | None = None,
         event_ids_by_task: dict[str, set[str]] | None = None,
-    ) -> tuple[OutputT, list[BaseMessage]]:
-        """맡은 도구만 연 채 모델을 돌려 구조화 출력과 그 호출이 남긴 메시지를 낸다."""
+    ) -> StructuredAgentResult[OutputT]:
+        """맡은 도구만 연 채 모델을 돌려 구조화 출력과 메시지와 이 호출이 쓴 턴을 낸다."""
         max_turns = self.req.limits.maxTurns
         names = tuple(tool_names)
         agent = self.agents.compiled(
@@ -72,7 +73,7 @@ class CleanupDeps:
                 max_turns=max_turns,
             ),
         )
-        result = await invoke_structured_agent(
+        return await invoke_structured_agent(
             agent,
             messages=messages,
             context=CleanupToolContext(
@@ -90,4 +91,3 @@ class CleanupDeps:
             recursion_limit=recursion_limit_for(max_turns),
             missing_response=missing_response,
         )
-        return result.response, result.messages
