@@ -7,10 +7,16 @@ from typing import Any
 import httpx
 from anthropic import AuthenticationError
 
+from tests.support.contract import conformance_case
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, RECIPE_SCAN_PROMPT
-from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, RecipeScanRequest
+from tracer_agent.shared.agents.recipe_scan.models import (
+    DispatchPlan,
+    ProvenanceWire,
+    RecipeScanRequest,
+    RecipeScanResult,
+)
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
@@ -424,3 +430,12 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in probe_nodes)
     narrate("recipe-scan :: 전문가 하나가 무너져도 그래프가 완주하고 나머지가 합쳐진다", res)
+
+
+def test_산출이_계약이_적은_칸을_빠짐없이_싣는다() -> None:
+    # 화면이 축을 보지 않고 같은 칸을 읽어야 하므로 실을 칸을 계약에서 읽어 대조한다.
+    declared = conformance_case("job.intake")["results"]["byKind"]["recipe.scan"]
+
+    result = RecipeScanResult(recipes=[], provenance=ProvenanceWire())
+
+    assert sorted(result.model_dump(mode="json")) == sorted(declared["required"])

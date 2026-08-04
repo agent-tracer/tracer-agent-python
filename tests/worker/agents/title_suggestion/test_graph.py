@@ -5,11 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from tests.support.contract import conformance_case
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, TITLE_SUGGESTION_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
-from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
+from tracer_agent.shared.agents.title_suggestion.models import (
+    TitleSuggestionDraft,
+    TitleSuggestionRequest,
+)
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
@@ -185,3 +189,12 @@ async def test_단가를_모르는_모델은_내부_예산을_우회하지_못�
     assert res.error is not None
     assert "cannot enforce its internal budget" in res.error.summary
     narrate("title-suggestion :: 단가를 모르는 모델은 내부 예산을 우회하지 못한다", res)
+
+
+def test_산출이_계약이_적은_칸을_빠짐없이_싣는다() -> None:
+    # 화면이 축을 보지 않고 같은 칸을 읽어야 하므로 실을 칸을 계약에서 읽어 대조한다.
+    declared = conformance_case("job.intake")["results"]["byKind"]["title.suggestion"]
+
+    result = TitleSuggestionDraft()
+
+    assert sorted(result.model_dump(mode="json")) == sorted(declared["required"])
