@@ -135,7 +135,9 @@ async def _run(
         "recipe-scan",
         req.model,
         req.deadlineMs,
-        lambda usage: recipe_mod.run_recipe_scan(req, fake_ledger, usage, RECIPE_SCAN_PROMPT, None, chats),
+        lambda usage: recipe_mod.RECIPE_SCAN_JOB.run(
+            req, fake_ledger, usage, RECIPE_SCAN_PROMPT, None, chats
+        ),
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )

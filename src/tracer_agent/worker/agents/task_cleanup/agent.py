@@ -5,140 +5,113 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from tracer_agent.shared.agents.shared.graph_state import fresh_budget_snapshot
-from tracer_agent.shared.agents.task_cleanup.models import CleanupResult, TaskCleanupRequest
+from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.task_cleanup.models import (
+    CleanupResult,
+    TaskCleanupRequest,
+    TaskCleanupState,
+    initial_task_cleanup_state,
+)
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
-from ..runtime.checkpoint import GraphCheckpointProvider
-from ..runtime.durable_graph import execution_config, job_durability, prior_spend, resume_input
+from ..runtime.durable_graph import PriorSpend
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.job_agent import JobAgent
+from ..runtime.job_agent import GraphRun, JobGraphAgent, dumped
 from ..runtime.llm.budget import ExecutionBudget
-from ..runtime.llm.client import ChatPair, make_chat_pair
+from ..runtime.llm.client import ChatPair
 from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
-from ..runtime.telemetry.disclosure import TraceSafeMetadata
+from ..runtime.routes import EMPTY, FINALIZE
+from ..runtime.routing import build_validation_router
 from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
+from ..runtime.validation_nodes import ResultNode
 from ..shared.prompt_source_port import AgentPrompt
-from .deps import CleanupDeps
+from .deps import CleanupDeps, new_cleanup_caller
 from .graph import TASK_CLEANUP_GRAPH, TASK_CLEANUP_NODE_NAMES
 from .nodes.decision import InvestigateNode, RepairNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
-from .nodes.result import EmptyNode, FinalizeNode
+from .nodes.result import empty_result, finalize_result
 from .outputs import deliver_suggestions
-from .policy import build_routes
+from .policy import VALIDATION_REASONS, has_suggestions
 from .prompts import build_prompt_bundle
 from .reader import CleanupLedgerReader, load_cleanup_batch
 
-# 선별과 후보별 조사와 결정과 수리가 실행되는 동안 그래프가 밟는 노드 수의 상한이다.
-_RECURSION_LIMIT = 30
+
+class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
+    """정리 후보를 조사해 보관 제안을 세우는 잡이다."""
+
+    kind = AgentJobKind.TASK_CLEANUP
+    topology = TASK_CLEANUP_GRAPH
+    # 선별과 후보별 조사와 결정과 수리가 실행되는 동안 그래프가 밟는 노드 수의 상한이다.
+    recursion_limit = 30
+
+    async def collect_context(self, payload: JsonObject, tracer: TracerApiPort) -> JsonObject:
+        """접수가 후보 배치를 싣지 않았으면 이 시점에 스스로 조립해 실행 입력에 싣는다."""
+        if "batch" in payload:
+            return payload
+        now = datetime.now(UTC)
+        batch = await load_cleanup_batch(tracer, now)
+        return {**payload, "batch": batch.model_dump(mode="json"), "scannedAt": now.isoformat()}
+
+    async def prepare(self, payload: JsonObject, _tracer: TracerApiPort) -> TaskCleanupRequest:
+        """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
+        return TaskCleanupRequest.model_validate(payload)
+
+    async def settle_outputs(self, tracer: TracerApiPort, execution_id: str, data: JsonObject | None) -> None:
+        """정리 제안을 창구로 보내며 보낼 것이 없으면 아무 창구도 부르지 않는다."""
+        if not data:
+            return
+        await deliver_suggestions(tracer, execution_id, data)
+
+    def compose(
+        self,
+        req: TaskCleanupRequest,
+        tracer: TracerApiPort,
+        usage: ExecutionTrace,
+        prompt: AgentPrompt,
+        chats: ChatPair,
+        prior: PriorSpend,
+    ) -> GraphRun[TaskCleanupState]:
+        deps = CleanupDeps(
+            req=req,
+            reader=CleanupLedgerReader(tracer),
+            usage=usage,
+            caller=new_cleanup_caller(chats),
+            budget=ExecutionBudget(
+                req.limits.budgetUsd,
+                ModelRates(req.modelRates),
+                spent_usd=prior.cost_usd,
+                turns_used=prior.turns,
+            ),
+            prompts=build_prompt_bundle(prompt),
+            prompt=prompt,
+            language_directives=prompt.language_directives,
+        )
+        context: ValidationGraphContext[TaskCleanupState] = ValidationGraphContext(
+            self.kind,
+            usage,
+            NodeRegistry(
+                {
+                    TriageNode.name: TriageNode(deps),
+                    InspectNode.name: InspectNode(deps),
+                    InvestigateNode.name: InvestigateNode(deps),
+                    ValidateDecisionsNode.name: ValidateDecisionsNode(usage),
+                    RepairNode.name: RepairNode(deps),
+                    FINALIZE: ResultNode(FINALIZE, finalize_result),
+                    EMPTY: ResultNode(EMPTY, empty_result),
+                },
+                TASK_CLEANUP_NODE_NAMES,
+            ),
+            build_validation_router(
+                usage, ValidateDecisionsNode.name, VALIDATION_REASONS, has_result=has_suggestions
+            ),
+        )
+        return GraphRun(initial_task_cleanup_state(req), context)
+
+    def result_of(self, final: dict[str, Any]) -> JsonObject:
+        result: CleanupResult = final["result"] or CleanupResult()
+        return dumped(result)
 
 
-async def collect_cleanup_batch(payload: dict[str, Any], tracer: TracerApiPort) -> dict[str, Any]:
-    """접수가 후보 배치를 싣지 않았으면 이 시점에 스스로 조립해 실행 입력에 싣는다."""
-    if "batch" in payload:
-        return payload
-    now = datetime.now(UTC)
-    batch = await load_cleanup_batch(tracer, now)
-    return {**payload, "batch": batch.model_dump(mode="json"), "scannedAt": now.isoformat()}
-
-
-async def prepare_task_cleanup(payload: dict[str, Any], _tracer: TracerApiPort) -> TaskCleanupRequest:
-    """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
-    return TaskCleanupRequest.model_validate(payload)
-
-
-async def run_task_cleanup(
-    req: TaskCleanupRequest,
-    tracer: TracerApiPort,
-    usage: ExecutionTrace,
-    prompt: AgentPrompt,
-    checkpoints: GraphCheckpointProvider | None = None,
-    chats: ChatPair | None = None,
-) -> dict[str, Any]:
-    """task-cleanup 노드를 실행 의존성과 결합해 그래프를 수행한다."""
-    # 열쇠를 모르면 이어받을 자리가 없으므로 그 실행은 보존하지 않는다.
-    resume_key = req.executionId or req.jobId
-    saver = None if checkpoints is None or resume_key is None else await checkpoints.saver()
-    graph = TASK_CLEANUP_GRAPH.compiled(saver)
-    config = execution_config(
-        _RECURSION_LIMIT,
-        TraceSafeMetadata(
-            agent_name=AgentJobKind.TASK_CLEANUP,
-            model_requested=req.model,
-            prompt_version=prompt.version(),
-            job_id=req.jobId,
-        ),
-        resume_key,
-    )
-    prior = await prior_spend(graph, config, saver)
-    deps = CleanupDeps(
-        req=req,
-        reader=CleanupLedgerReader(tracer),
-        usage=usage,
-        chats=chats or make_chat_pair(req),
-        budget=ExecutionBudget(
-            req.limits.budgetUsd,
-            ModelRates(req.modelRates),
-            spent_usd=prior.cost_usd,
-            turns_used=prior.turns,
-        ),
-        prompts=build_prompt_bundle(prompt),
-        prompt=prompt,
-        language_directives=prompt.language_directives,
-    )
-    context = ValidationGraphContext(
-        AgentJobKind.TASK_CLEANUP,
-        usage,
-        NodeRegistry(
-            {
-                TriageNode.name: TriageNode(deps),
-                InspectNode.name: InspectNode(deps),
-                InvestigateNode.name: InvestigateNode(deps),
-                ValidateDecisionsNode.name: ValidateDecisionsNode(usage),
-                RepairNode.name: RepairNode(deps),
-                FinalizeNode.name: FinalizeNode(),
-                EmptyNode.name: EmptyNode(),
-            },
-            TASK_CLEANUP_NODE_NAMES,
-        ),
-        build_routes(usage, ValidateDecisionsNode.name),
-    )
-    initial: dict[str, Any] = {
-        "scanned_at": req.scannedAt,
-        "tasks_scanned": req.batch.tasksScanned,
-        "language": req.language,
-        "max_suggestions": req.maxSuggestions,
-        "messages": [],
-        "plan": None,
-        "redispatch": None,
-        "redispatch_ceiling": 0.0,
-        "redispatch_count": 0,
-        "reports": [],
-        "exposed_candidates": {},
-        "event_ids_by_task": {},
-        **fresh_budget_snapshot(),
-        "max_cost_usd": req.limits.budgetUsd,
-        "suggestions": [],
-        "validation_errors": [],
-        "repair_attempted": False,
-        "result": None,
-    }
-    final = await graph.ainvoke(
-        resume_input(initial, prior),
-        context=context,
-        config=config,
-        durability=job_durability(saver),
-    )
-    result: CleanupResult = final["result"] or CleanupResult()
-    return result.model_dump(mode="json")
-
-
-TASK_CLEANUP_JOB = JobAgent(
-    kind=AgentJobKind.TASK_CLEANUP,
-    prepare=prepare_task_cleanup,
-    run=run_task_cleanup,
-    collect=collect_cleanup_batch,
-    deliver=deliver_suggestions,
-)
+TASK_CLEANUP_JOB = TaskCleanupJob()

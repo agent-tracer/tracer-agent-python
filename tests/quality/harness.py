@@ -197,7 +197,7 @@ async def _run_recipe_scan(
         "recipe-scan",
         req.model,
         req.deadlineMs,
-        lambda usage: recipe_mod.run_recipe_scan(req, ledger, usage, RECIPE_SCAN_PROMPT, None, chats),
+        lambda usage: recipe_mod.RECIPE_SCAN_JOB.run(req, ledger, usage, RECIPE_SCAN_PROMPT, None, chats),
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
@@ -220,7 +220,7 @@ async def _run_task_cleanup(
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),
+        lambda usage: cleanup_mod.TASK_CLEANUP_JOB.run(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
@@ -243,7 +243,7 @@ async def _run_title_suggestion(
         "title-suggestion",
         req.model,
         req.deadlineMs,
-        lambda usage: title_mod.run_title_suggestion(
+        lambda usage: title_mod.TITLE_SUGGESTION_JOB.run(
             req, ledger, usage, TITLE_SUGGESTION_PROMPT, None, chats
         ),
         prompt_version=CONTRACT_VERSION,

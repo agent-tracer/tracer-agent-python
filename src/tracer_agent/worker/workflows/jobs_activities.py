@@ -37,7 +37,7 @@ from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.completion import deliver_completion
 from ..agents.runtime.execution.runner import execute
 from ..agents.runtime.execution.trace import ExecutionTrace
-from ..agents.runtime.job_agent import JobAgent
+from ..agents.runtime.job_agent import JobGraphAgent
 from ..agents.runtime.llm.client import ChatPair, make_chat_pair
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient, TracerApiPort
@@ -47,7 +47,7 @@ from ..agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
 from .jobs_outcome import job_usage, status_and_error
 from .jobs_writer import JobExecutionWriter, JobOutcome
 
-JOB_AGENTS: dict[AgentJobKind, JobAgent[Any]] = {
+JOB_AGENTS: dict[AgentJobKind, JobGraphAgent[Any, Any]] = {
     job.kind: job for job in (TITLE_SUGGESTION_JOB, TASK_CLEANUP_JOB, RECIPE_SCAN_JOB)
 }
 
@@ -176,7 +176,7 @@ class AgentJobActivities:
         return merge_envelope(request.payload, envelope)
 
     async def _run_once(
-        self, job: JobAgent[Any], req: AgentExecutionRequest, tracer: TracerApiPort
+        self, job: JobGraphAgent[Any, Any], req: AgentExecutionRequest, tracer: TracerApiPort
     ) -> AgentResponse:
         """그래프 하나를 실행 궤적과 데드라인 안에서 실행해 이 시도의 응답을 낸다."""
         prompt = self._prompts[job.kind]

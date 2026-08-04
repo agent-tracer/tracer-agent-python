@@ -75,12 +75,12 @@ async def test_같은_열쇠로_다시_실행하면_끝난_노드를_다시_태�
     req = _request()
 
     with pytest.raises(RuntimeError):
-        await recipe_mod.run_recipe_scan(  # type: ignore[arg-type]
+        await recipe_mod.RECIPE_SCAN_JOB.run(  # type: ignore[arg-type]
             req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints, chats
         )
     after_first = chat.plan_calls
 
-    await recipe_mod.run_recipe_scan(  # type: ignore[arg-type]
+    await recipe_mod.RECIPE_SCAN_JOB.run(  # type: ignore[arg-type]
         req, FakeTracerApi(), ExecutionTrace(), RECIPE_SCAN_PROMPT, checkpoints, chats
     )
 

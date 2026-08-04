@@ -87,7 +87,7 @@ async def _run(
         "title-suggestion",
         req.model,
         req.deadlineMs,
-        lambda usage: title_mod.run_title_suggestion(
+        lambda usage: title_mod.TITLE_SUGGESTION_JOB.run(
             req, fake_ledger, usage, TITLE_SUGGESTION_PROMPT, None, chats
         ),
         prompt_version=CONTRACT_VERSION,

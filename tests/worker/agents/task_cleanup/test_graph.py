@@ -85,7 +85,7 @@ async def _run(
         "task-cleanup",
         req.model,
         req.deadlineMs,
-        lambda usage: cleanup_mod.run_task_cleanup(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
+        lambda usage: cleanup_mod.TASK_CLEANUP_JOB.run(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
         prompt_version=CONTRACT_VERSION,
         tool_contract_version=CONTRACT_VERSION,
     )
