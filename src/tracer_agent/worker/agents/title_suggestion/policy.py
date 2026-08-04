@@ -9,13 +9,10 @@ from tracer_agent.shared.agents.title_suggestion.models import (
     RECENT_TURN_LIMIT,
     TitleSuggestion,
     TitleSuggestionDraft,
-    TitleSuggestionState,
     TitleSuggestionTurn,
 )
 
-from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.routes import ValidationRoute
-from ..runtime.routing import build_validation_router
+from ..runtime.routing import ValidationReasons
 
 
 def windowed_turns(
@@ -69,15 +66,11 @@ def _usable(
     return kept
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TitleSuggestionState]:
-    """후보 검증 결과에 따른 분기 함수를 만든다."""
-    return build_validation_router(
-        trace,
-        validation_node,
-        pass_reason="candidate passed deterministic title validation",
-        repair_reason="candidate failed validation and one repair attempt remains",
-        exhausted_reason="candidate remained invalid after the repair attempt",
-    )
+VALIDATION_REASONS = ValidationReasons(
+    passed="candidate passed deterministic title validation",
+    repairable="candidate failed validation and one repair attempt remains",
+    exhausted="candidate remained invalid after the repair attempt",
+)
 
 
 def _normalize_title(value: str) -> str:

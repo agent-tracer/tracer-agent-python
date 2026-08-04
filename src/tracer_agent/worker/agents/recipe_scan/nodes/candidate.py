@@ -19,15 +19,16 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RepairUpdate,
     ValidateCandidateUpdate,
 )
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 
 from ...runtime.errors import BudgetExceeded
-from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import AgentBudgetLease, combine_leases
 from ...runtime.node import GraphNode
 from ...runtime.telemetry.execution_metrics import (
     record_redispatch_rounds,
     record_validation_failure,
 )
+from ...runtime.validation_nodes import ValidationNode
 from ..deps import AGENT_NAME, RecipeDeps
 from ..policy import validate_recipe_candidates
 from ..prompts import build_user_prompt
@@ -92,12 +93,12 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
 
     async def run(self, state: RecipeScanState) -> InvestigateUpdate:
         deps = self._deps
-        remaining_turns = max(state["max_turns"] - state.get("model_turns_used", 0), 0)
-        remaining_usd = max(state["max_cost_usd"] - state.get("model_cost_usd", 0.0), 0.0)
+        pool_turns = remaining_turns(state)
+        pool_usd = remaining_cost_usd(state)
         lease = combine_leases(
             [
                 self._lease,
-                AgentBudgetLease(max_turns=remaining_turns, max_cost_usd=remaining_usd),
+                AgentBudgetLease(max_turns=pool_turns, max_cost_usd=pool_usd),
             ]
         )
         synthesis = await self._synthesize(
@@ -131,8 +132,8 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
         plan = _plan_redispatch(
             synthesis.draft,
             state["redispatch_count"],
-            remaining_usd - synthesis.cost_usd,
-            remaining_turns - pool_turns_used,
+            pool_usd - synthesis.cost_usd,
+            pool_turns - pool_turns_used,
         )
         if plan is not None:
             update["redispatch"] = plan
@@ -181,19 +182,14 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
         }
 
 
-class ValidateCandidateNode(GraphNode[RecipeScanState, ValidateCandidateUpdate]):
+class ValidateCandidateNode(ValidationNode[RecipeScanState, ValidateCandidateUpdate]):
     """레시피 후보가 전문가 장부의 근거만 인용하는지 판정한다."""
 
     name = "validate_candidate"
 
-    def __init__(self, usage: ExecutionTrace) -> None:
-        self._usage = usage
-
-    async def run(self, state: RecipeScanState) -> ValidateCandidateUpdate:
+    def validate(self, state: RecipeScanState) -> tuple[ValidateCandidateUpdate, list[str]]:
         errors = validate_recipe_candidates(state["candidates"], state["task_id"], state["provenance"])
-        if errors:
-            self._usage.record_orchestration_event(
-                "validation.failed", "; ".join(errors), node_name=self.name
-            )
-            record_validation_failure(AGENT_NAME, state["repair_attempted"])
-        return {"validation_errors": errors}
+        return {"validation_errors": errors}, errors
+
+    def record_failure(self, state: RecipeScanState) -> None:
+        record_validation_failure(AGENT_NAME, state["repair_attempted"])

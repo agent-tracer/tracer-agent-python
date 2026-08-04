@@ -6,12 +6,9 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_RECIPE_CANDIDATES,
     ProvenanceCatalog,
     RecipeCandidate,
-    RecipeScanState,
 )
 
-from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.routes import ValidationRoute
-from ..runtime.routing import build_validation_router
+from ..runtime.routing import ValidationReasons
 
 
 def validate_recipe_candidates(
@@ -91,12 +88,8 @@ def validate_recipe_candidate(
     return errors
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[RecipeScanState]:
-    """검증 결과에 따른 분기 함수를 만든다."""
-    return build_validation_router(
-        trace,
-        validation_node,
-        pass_reason="candidate passed deterministic provenance validation",
-        repair_reason="candidate failed validation and the one repair attempt is available",
-        exhausted_reason="candidate remained invalid after the repair attempt",
-    )
+VALIDATION_REASONS = ValidationReasons(
+    passed="candidate passed deterministic provenance validation",
+    repairable="candidate failed validation and the one repair attempt is available",
+    exhausted="candidate remained invalid after the repair attempt",
+)

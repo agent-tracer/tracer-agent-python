@@ -22,9 +22,9 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RecipeScanRequest,
     RecipeScanResult,
 )
-from tracer_agent.worker.agents.recipe_scan.deps import RecipeDeps
+from tracer_agent.worker.agents.recipe_scan.deps import RecipeDeps, new_recipe_caller
 from tracer_agent.worker.agents.recipe_scan.nodes.probe import ProbeNode
-from tracer_agent.worker.agents.recipe_scan.nodes.result import EmptyNode, FinalizeNode
+from tracer_agent.worker.agents.recipe_scan.nodes.result import empty_result, finalize_result
 from tracer_agent.worker.agents.recipe_scan.nodes.survey import SurveyNode
 from tracer_agent.worker.agents.recipe_scan.prompts import build_prompt_bundle
 from tracer_agent.worker.agents.recipe_scan.reader import RecipeLedgerReader
@@ -43,7 +43,7 @@ def _deps(chat: FakeToolLoopChat, req: RecipeScanRequest) -> RecipeDeps:
         reader=RecipeLedgerReader(FakeTracerApi()),
         search=RecipeSearchReader(FakeTracerApi()),
         usage=ExecutionTrace(),
-        chats=ChatPair(chat, None),  # type: ignore[arg-type]
+        caller=new_recipe_caller(ChatPair(chat, None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),
         prompts=build_prompt_bundle(RECIPE_SCAN_PROMPT),
         prompt=RECIPE_SCAN_PROMPT,
@@ -166,8 +166,8 @@ async def test_종단_노드가_이_실행의_근거_장부를_결과에_싣는�
     )
     state: Any = {"candidates": [], "provenance": catalog}
 
-    finalized = await FinalizeNode().run(state)
-    empty = await EmptyNode().run(state)
+    finalized = finalize_result(state)
+    empty = empty_result(state)
 
     wired = ProvenanceWire(
         eventIdsByTask={"task-1": ["event-1", "event-2"]},

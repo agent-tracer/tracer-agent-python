@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, ClassVar
+from typing import Any
 
 type ValidationNode = Callable[[Any], Awaitable[Mapping[str, object]]]
 
@@ -12,7 +12,8 @@ type ValidationNode = Callable[[Any], Awaitable[Mapping[str, object]]]
 class GraphNode[InputT, UpdateT: Mapping[str, object]](ABC):
     """그래프 위상과 관측이 쓰는 노드 이름과 노드의 실행을 한 객체에 모은다."""
 
-    name: ClassVar[str]
+    # 같은 기계를 여러 자리에 세우는 노드만 인스턴스가 자기 자리의 이름을 받는다.
+    name: str
 
     @abstractmethod
     async def run(self, state: InputT) -> UpdateT:

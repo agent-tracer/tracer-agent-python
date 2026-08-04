@@ -1,4 +1,4 @@
-"""recipe-scan 후보를 외부 응답으로 만드는 종단 그래프 노드를 제공한다."""
+"""recipe-scan 후보를 외부 응답으로 만드는 종단 규칙을 제공한다."""
 
 from __future__ import annotations
 
@@ -9,9 +9,6 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RecipeScanState,
     ResultUpdate,
 )
-
-from ...runtime.node import GraphNode
-from ...runtime.routes import EMPTY, FINALIZE
 
 
 def wire_provenance(catalog: ProvenanceCatalog) -> ProvenanceWire:
@@ -24,23 +21,15 @@ def wire_provenance(catalog: ProvenanceCatalog) -> ProvenanceWire:
     )
 
 
-class FinalizeNode(GraphNode[RecipeScanState, ResultUpdate]):
+def finalize_result(state: RecipeScanState) -> ResultUpdate:
     """검증된 후보 목록을 레시피 결과로 직렬화한다."""
-
-    name = FINALIZE
-
-    async def run(self, state: RecipeScanState) -> ResultUpdate:
-        return {
-            "result": RecipeScanResult(
-                recipes=state["candidates"], provenance=wire_provenance(state["provenance"])
-            )
-        }
+    return {
+        "result": RecipeScanResult(
+            recipes=state["candidates"], provenance=wire_provenance(state["provenance"])
+        )
+    }
 
 
-class EmptyNode(GraphNode[RecipeScanState, ResultUpdate]):
-    """후보가 없는 레시피 결과를 반환한다."""
-
-    name = EMPTY
-
-    async def run(self, state: RecipeScanState) -> ResultUpdate:
-        return {"result": RecipeScanResult(provenance=wire_provenance(state["provenance"]))}
+def empty_result(state: RecipeScanState) -> ResultUpdate:
+    """후보가 없는 레시피 결과를 만든다."""
+    return {"result": RecipeScanResult(provenance=wire_provenance(state["provenance"]))}

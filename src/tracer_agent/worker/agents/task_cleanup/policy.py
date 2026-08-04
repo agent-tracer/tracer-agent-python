@@ -14,9 +14,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     TaskCleanupState,
 )
 
-from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.routes import ValidationRoute
-from ..runtime.routing import build_validation_router
+from ..runtime.routing import ValidationReasons
 
 # SDK 축의 buildCleanupCandidates와 값을 맞춘 상수다.
 CLEANUP_RECENT_ACTIVITY = timedelta(minutes=30)
@@ -162,13 +160,13 @@ def _evidence_errors(
     return errors
 
 
-def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TaskCleanupState]:
-    """검증 결과에 따른 분기 함수를 만든다."""
-    return build_validation_router(
-        trace,
-        validation_node,
-        pass_reason="suggestions passed deterministic provenance validation",
-        repair_reason="suggestions failed validation and one repair attempt remains",
-        exhausted_reason="invalid suggestions were dropped after the repair attempt",
-        has_result=lambda state: bool(state["suggestions"]),
-    )
+VALIDATION_REASONS = ValidationReasons(
+    passed="suggestions passed deterministic provenance validation",
+    repairable="suggestions failed validation and one repair attempt remains",
+    exhausted="invalid suggestions were dropped after the repair attempt",
+)
+
+
+def has_suggestions(state: TaskCleanupState) -> bool:
+    """검증을 통과해도 남은 제안이 없으면 빈 결과로 보내야 하므로 그 조건을 여기서 정한다."""
+    return bool(state["suggestions"])

@@ -19,8 +19,8 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     ValidateDecisionsUpdate,
 )
 
-from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.node import GraphNode
+from ...runtime.validation_nodes import ValidationNode
 from ..deps import AGENT_NAME, CleanupDeps
 from ..policy import validate_suggestions
 from ..prompts import build_user_prompt
@@ -141,20 +141,11 @@ class RepairNode(_DecisionAgent[RepairUpdate]):
         }
 
 
-class ValidateDecisionsNode(GraphNode[TaskCleanupState, ValidateDecisionsUpdate]):
+class ValidateDecisionsNode(ValidationNode[TaskCleanupState, ValidateDecisionsUpdate]):
     """정리 제안이 도구가 노출한 후보와 이벤트만 인용하는지 판정한다."""
 
     name = "validate_decisions"
 
-    def __init__(self, usage: ExecutionTrace) -> None:
-        self._usage = usage
-
-    async def run(self, state: TaskCleanupState) -> ValidateDecisionsUpdate:
+    def validate(self, state: TaskCleanupState) -> tuple[ValidateDecisionsUpdate, list[str]]:
         valid, errors = validate_suggestions(state["suggestions"], state)
-        if errors:
-            self._usage.record_orchestration_event(
-                "validation.failed",
-                "; ".join(errors),
-                node_name=self.name,
-            )
-        return {"suggestions": valid, "validation_errors": errors}
+        return {"suggestions": valid, "validation_errors": errors}, errors
