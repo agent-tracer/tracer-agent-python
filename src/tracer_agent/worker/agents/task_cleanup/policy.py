@@ -113,38 +113,53 @@ def validate_suggestions(
     suggestions: list[CleanupDraftSuggestion],
     state: TaskCleanupState,
 ) -> tuple[list[CleanupDraftSuggestion], list[str]]:
-    """정리 제안이 도구가 돌려준 후보와 이벤트만 인용하는지 검증한다."""
+    """겹치거나 상한을 넘은 제안은 지우고 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다."""
     exposed = state["exposed_candidates"]
     valid: list[CleanupDraftSuggestion] = []
     errors: list[str] = []
     seen: set[str] = set()
-    for suggestion in suggestions:
-        item_errors: list[str] = []
-        candidate = exposed.get(suggestion.taskId)
-        if candidate is None:
-            item_errors.append(f"unsupported candidate task ID {suggestion.taskId}")
-        if suggestion.taskId in seen:
-            item_errors.append(f"duplicate suggestion for task {suggestion.taskId}")
-        seen.add(suggestion.taskId)
-        inspected = suggestion.taskId in state["event_ids_by_task"]
-        supported_events = state["event_ids_by_task"].get(suggestion.taskId, set())
-        cited_events = set(suggestion.evidenceEventIds)
-        unknown_events = sorted(cited_events - supported_events)
-        if unknown_events:
-            item_errors.append(
-                f"unsupported event IDs for task {suggestion.taskId}: {', '.join(unknown_events)}"
-            )
-        if candidate is not None and candidate.hasEvents and not inspected:
-            item_errors.append(f"eventful task {suggestion.taskId} was never inspected")
-        elif supported_events and not cited_events:
-            item_errors.append(f"eventful task {suggestion.taskId} has no inspected event evidence")
-        if len(valid) >= state["max_suggestions"]:
-            item_errors.append(f"suggestion limit {state['max_suggestions']} exceeded")
+    for suggestion in _deduplicated(suggestions, seen):
+        item_errors = _evidence_errors(suggestion, exposed, state["event_ids_by_task"])
         if item_errors:
             errors.extend(item_errors)
         else:
             valid.append(suggestion)
-    return valid, errors
+    # 상한을 넘은 꼬리는 다시 물어도 같은 수만 남으므로 사유를 남기지 않고 그 자리에서 지운다.
+    return valid[: state["max_suggestions"]], errors
+
+
+def _deduplicated(suggestions: list[CleanupDraftSuggestion], seen: set[str]) -> list[CleanupDraftSuggestion]:
+    """같은 태스크를 두 번 제안하면 뒤의 것은 앞의 것과 같은 말이라 지운다."""
+    kept: list[CleanupDraftSuggestion] = []
+    for suggestion in suggestions:
+        if suggestion.taskId in seen:
+            continue
+        seen.add(suggestion.taskId)
+        kept.append(suggestion)
+    return kept
+
+
+def _evidence_errors(
+    suggestion: CleanupDraftSuggestion,
+    exposed: dict[str, CleanupCandidate],
+    event_ids_by_task: dict[str, set[str]],
+) -> list[str]:
+    """제안이 도구가 실제로 보여준 후보와 이벤트에 기대는지 본다."""
+    errors: list[str] = []
+    candidate = exposed.get(suggestion.taskId)
+    if candidate is None:
+        errors.append(f"unsupported candidate task ID {suggestion.taskId}")
+    inspected = suggestion.taskId in event_ids_by_task
+    supported_events = event_ids_by_task.get(suggestion.taskId, set())
+    cited_events = set(suggestion.evidenceEventIds)
+    unknown_events = sorted(cited_events - supported_events)
+    if unknown_events:
+        errors.append(f"unsupported event IDs for task {suggestion.taskId}: {', '.join(unknown_events)}")
+    if candidate is not None and candidate.hasEvents and not inspected:
+        errors.append(f"eventful task {suggestion.taskId} was never inspected")
+    elif supported_events and not cited_events:
+        errors.append(f"eventful task {suggestion.taskId} has no inspected event evidence")
+    return errors
 
 
 def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TaskCleanupState]:

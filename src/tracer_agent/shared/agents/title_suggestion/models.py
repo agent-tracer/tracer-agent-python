@@ -72,6 +72,8 @@ class InvestigateUpdate(TypedDict):
 class ValidateCandidateUpdate(TypedDict):
     """검증 노드가 갱신하는 상태 부분집합이다."""
 
+    # 쓸모없는 후보를 떨어뜨린 결과를 함께 써서 종단이 걸러진 목록을 낸다.
+    candidate: TitleSuggestionDraft | None
     validation_errors: list[str]
 
 

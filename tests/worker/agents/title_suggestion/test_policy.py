@@ -1,4 +1,4 @@
-"""title-suggestion 정책 함수의 후보 검증 규칙을 검증한다."""
+"""title-suggestion 정책 함수의 후보 정규화 규칙을 검증한다."""
 
 from __future__ import annotations
 
@@ -7,39 +7,71 @@ from tracer_agent.shared.agents.title_suggestion.models import (
     TitleSuggestionDraft,
     TitleSuggestionTurn,
 )
-from tracer_agent.worker.agents.title_suggestion.policy import validate_title_candidate, windowed_turns
+from tracer_agent.worker.agents.title_suggestion.policy import (
+    normalize_title_candidate,
+    windowed_turns,
+)
 
 
-def test_후보는_둘_이상이어야_하고_중복과_현재_제목을_되풀이하면_거부한다() -> None:
-    single = TitleSuggestionDraft(suggestions=[TitleSuggestion(title="유일한 제목", rationale="근거")])
-    assert "suggestions must be empty or contain 2-3 items" in validate_title_candidate(single, "현재 제목")
-
-    repeated = TitleSuggestionDraft(
-        suggestions=[
-            TitleSuggestion(title="현재 제목", rationale="현재를 되풀이한다"),
-            TitleSuggestion(title="다른 제목", rationale="근거"),
-            TitleSuggestion(title="다른 제목", rationale="같은 제목을 되풀이한다"),
-        ]
+def _draft(*titles: str) -> TitleSuggestionDraft:
+    return TitleSuggestionDraft(
+        suggestions=[TitleSuggestion(title=title, rationale=f"{title} 근거") for title in titles]
     )
 
-    errors = validate_title_candidate(repeated, "현재 제목")
 
-    assert "suggestion 1 repeats the current title" in errors
-    assert "suggestion 3 duplicates another suggestion" in errors
+def _titles(draft: TitleSuggestionDraft | None) -> list[str]:
+    return [] if draft is None else [suggestion.title for suggestion in draft.suggestions]
 
 
-def test_자리표시자_제목_후보를_거부한다() -> None:
-    draft = TitleSuggestionDraft(
-        suggestions=[
-            TitleSuggestion(title="Untitled", rationale="자리표시자를 그대로 낸다"),
-            TitleSuggestion(title="Task 12", rationale="자동 생성된 자리표시자다"),
-        ]
-    )
+def test_현재_제목과_겹치는_후보는_사유_없이_지운다() -> None:
+    draft = _draft("현재 제목", "첫 제목", "둘째 제목")
 
-    errors = validate_title_candidate(draft, "현재 제목")
+    filtered, errors = normalize_title_candidate(draft, "현재 제목")
 
-    assert "suggestion 1 is a placeholder title" in errors
-    assert "suggestion 2 is a placeholder title" in errors
+    assert _titles(filtered) == ["첫 제목", "둘째 제목"]
+    assert errors == []
+
+
+def test_서로_겹치는_후보는_하나만_남기고_지운다() -> None:
+    draft = _draft("첫 제목", "둘째 제목", "첫 제목")
+
+    filtered, errors = normalize_title_candidate(draft, "현재 제목")
+
+    assert _titles(filtered) == ["첫 제목", "둘째 제목"]
+    assert errors == []
+
+
+def test_자리표시자_제목은_사유_없이_지운다() -> None:
+    draft = _draft("Untitled", "첫 제목", "둘째 제목")
+
+    filtered, errors = normalize_title_candidate(draft, "현재 제목")
+
+    assert _titles(filtered) == ["첫 제목", "둘째 제목"]
+    assert errors == []
+
+
+def test_지우고_나서_둘이_안_되면_그때만_다시_묻는다() -> None:
+    draft = _draft("Untitled", "첫 제목", "첫 제목")
+
+    filtered, errors = normalize_title_candidate(draft, "현재 제목")
+
+    assert _titles(filtered) == ["첫 제목"]
+    assert len(errors) == 1
+    assert "usable suggestion" in errors[0]
+
+
+def test_모델이_스스로_비운_결과는_다시_묻지_않는다() -> None:
+    filtered, errors = normalize_title_candidate(TitleSuggestionDraft(), "현재 제목")
+
+    assert _titles(filtered) == []
+    assert errors == []
+
+
+def test_후보를_아예_받지_못하면_그_사실을_남긴다() -> None:
+    filtered, errors = normalize_title_candidate(None, "현재 제목")
+
+    assert filtered is None
+    assert errors == ["No title-suggestion candidate was produced."]
 
 
 def _turn(index: int) -> TitleSuggestionTurn:

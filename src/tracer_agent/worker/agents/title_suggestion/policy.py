@@ -7,6 +7,7 @@ import unicodedata
 
 from tracer_agent.shared.agents.title_suggestion.models import (
     RECENT_TURN_LIMIT,
+    TitleSuggestion,
     TitleSuggestionDraft,
     TitleSuggestionState,
     TitleSuggestionTurn,
@@ -26,31 +27,46 @@ def windowed_turns(
     return included, len(turns) > len(included)
 
 
-def validate_title_candidate(
+# 후보 하나가 쓸모없어 떨어질 때의 사유이며 모델이 아니라 코드가 지운다.
+MIN_TITLE_SUGGESTIONS = 2
+SHORT_OF_MINIMUM = (
+    f"only {{kept}} usable suggestion(s) remain after dropping unusable ones; "
+    f"return {MIN_TITLE_SUGGESTIONS}-3 distinct titles that differ from the current one"
+)
+
+
+def normalize_title_candidate(
     candidate: TitleSuggestionDraft | None,
     current_title: str,
-) -> list[str]:
-    """제목 후보의 수·중복·자리표시자 제약을 검증한다."""
+) -> tuple[TitleSuggestionDraft | None, list[str]]:
+    """기계적으로 지울 수 있는 후보를 떨어뜨리고 모델이 고쳐야 하는 부족만 사유로 남긴다."""
     if candidate is None:
-        return ["No title-suggestion candidate was produced."]
-    suggestions = candidate.suggestions
-    if not suggestions:
-        return []
-    errors: list[str] = []
-    if len(suggestions) < 2:
-        errors.append("suggestions must be empty or contain 2-3 items")
+        return None, ["No title-suggestion candidate was produced."]
+    # 모델이 스스로 비운 결과는 계약이 허용하므로 다시 묻지 않는다.
+    if not candidate.suggestions:
+        return candidate, []
+    kept = _usable(candidate.suggestions, current_title)
+    filtered = candidate.model_copy(update={"suggestions": kept})
+    if len(kept) < MIN_TITLE_SUGGESTIONS:
+        return filtered, [SHORT_OF_MINIMUM.format(kept=len(kept))]
+    return filtered, []
+
+
+def _usable(
+    suggestions: list[TitleSuggestion],
+    current_title: str,
+) -> list[TitleSuggestion]:
+    """현재 제목을 되풀이하거나 서로 겹치거나 자리표시자인 후보를 뺀다."""
     current = _normalize_title(current_title)
     seen: set[str] = set()
-    for index, suggestion in enumerate(suggestions):
+    kept: list[TitleSuggestion] = []
+    for suggestion in suggestions:
         normalized = _normalize_title(suggestion.title)
-        if normalized == current:
-            errors.append(f"suggestion {index + 1} repeats the current title")
-        if normalized in seen:
-            errors.append(f"suggestion {index + 1} duplicates another suggestion")
+        if normalized == current or normalized in seen or _is_placeholder(normalized):
+            continue
         seen.add(normalized)
-        if _is_placeholder(normalized):
-            errors.append(f"suggestion {index + 1} is a placeholder title")
-    return errors
+        kept.append(suggestion)
+    return kept
 
 
 def build_routes(trace: ExecutionTrace, validation_node: str) -> ValidationRoute[TitleSuggestionState]:

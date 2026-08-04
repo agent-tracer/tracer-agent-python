@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.task_cleanup.models import CleanupDraftSuggestio
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionDraft
 from tracer_agent.worker.agents.recipe_scan.policy import validate_recipe_candidates
 from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
-from tracer_agent.worker.agents.title_suggestion.policy import validate_title_candidate
+from tracer_agent.worker.agents.title_suggestion.policy import normalize_title_candidate
 
 from .harness import RESULT_KEYS, CaseRun, CaseSources
 
@@ -169,7 +169,8 @@ def _validate_task_cleanup(data: dict[str, Any], run: CaseRun) -> list[str]:
 
 def _validate_title_suggestion(data: dict[str, Any], sources: CaseSources) -> list[str]:
     draft = TitleSuggestionDraft.model_validate(data)
-    return validate_title_candidate(draft, sources.current_title)
+    _filtered, errors = normalize_title_candidate(draft, sources.current_title)
+    return errors
 
 
 def _result_count_checks(results: list[dict[str, Any]], expect: dict[str, Any]) -> list[CheckResult]:

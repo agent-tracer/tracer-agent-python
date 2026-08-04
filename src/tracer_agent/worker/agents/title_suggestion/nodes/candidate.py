@@ -21,7 +21,7 @@ from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.node import GraphNode
 from ...runtime.routes import EMPTY, FINALIZE
 from ..deps import TitleDeps
-from ..policy import validate_title_candidate
+from ..policy import normalize_title_candidate
 from ..prompts import build_user_prompt
 
 
@@ -80,7 +80,7 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
 
 
 class ValidateCandidateNode(GraphNode[TitleSuggestionState, ValidateCandidateUpdate]):
-    """제목 후보가 결정적 제약을 지키는지 판정한다."""
+    """쓸모없는 후보를 떨어뜨리고 모델이 고쳐야 하는 부족만 사유로 남긴다."""
 
     name = "validate_candidate"
 
@@ -88,14 +88,14 @@ class ValidateCandidateNode(GraphNode[TitleSuggestionState, ValidateCandidateUpd
         self._usage = usage
 
     async def run(self, state: TitleSuggestionState) -> ValidateCandidateUpdate:
-        errors = validate_title_candidate(state["candidate"], state["context"].title)
+        candidate, errors = normalize_title_candidate(state["candidate"], state["context"].title)
         if errors:
             self._usage.record_orchestration_event(
                 "validation.failed",
                 "; ".join(errors),
                 node_name=self.name,
             )
-        return {"validation_errors": errors}
+        return {"candidate": candidate, "validation_errors": errors}
 
 
 class FinalizeNode(GraphNode[TitleSuggestionState, ResultUpdate]):

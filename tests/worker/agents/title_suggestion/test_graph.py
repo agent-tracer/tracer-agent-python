@@ -128,7 +128,7 @@ async def test_발췌가_부족하면_모델이_스스로_이벤트를_읽는다
     narrate("title-suggestion :: 발췌가 부족하면 태스크 이벤트를 직접 읽는다", res)
 
 
-async def test_현재_제목을_되풀이한_후보는_한_번_수정한다() -> None:
+async def test_되풀이한_후보를_지우고_수가_모자라면_한_번_수정한다() -> None:
     repeated = {
         "suggestions": [
             {"title": "Untitled", "rationale": "현재 제목을 그대로 되풀이한다."},
@@ -144,8 +144,29 @@ async def test_현재_제목을_되풀이한_후보는_한_번_수정한다() ->
         "인증 회귀 테스트 추가",
     ]
     failures = [step for step in res.steps if step.eventKind == "validation.failed"]
-    assert len(failures) == 1 and "repeats the current title" in failures[0].content
-    narrate("title-suggestion :: 현재 제목을 되풀이한 후보는 한 번 수정한다", res)
+    assert len(failures) == 1 and "usable suggestion" in failures[0].content
+    narrate("title-suggestion :: 되풀이한 후보를 지우고 수가 모자라면 한 번 수정한다", res)
+
+
+async def test_지우고도_수가_충분하면_수정하지_않는다() -> None:
+    with_placeholder = {
+        "suggestions": [
+            {"title": "Task 42", "rationale": "자동 생성된 자리표시자다."},
+            {"title": "인증 토큰 누수 수정", "rationale": "누수 수정이 핵심 작업이다."},
+            {"title": "인증 회귀 테스트 추가", "rationale": "회귀 검증을 추가했다."},
+        ]
+    }
+
+    chat, res, _ledger = await _run([with_placeholder])
+
+    assert res.error is None
+    assert [item["title"] for item in res.data["suggestions"]] == [
+        "인증 토큰 누수 수정",
+        "인증 회귀 테스트 추가",
+    ]
+    assert not [step for step in res.steps if step.eventKind == "validation.failed"]
+    assert len(chat.requests) == 1
+    narrate("title-suggestion :: 지우고도 수가 충분하면 수정하지 않는다", res)
 
 
 async def test_수정_후에도_후보가_유효하지_않으면_빈_결과를_낸다() -> None:

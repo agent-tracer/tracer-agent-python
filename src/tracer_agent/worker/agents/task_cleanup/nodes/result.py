@@ -18,7 +18,8 @@ class FinalizeNode(GraphNode[TaskCleanupState, ResultUpdate]):
     name = FINALIZE
 
     async def run(self, state: TaskCleanupState) -> ResultUpdate:
-        return {"result": CleanupResult(suggestions=state["suggestions"][: state["max_suggestions"]])}
+        # 상한은 검증이 이미 끊었으므로 종단은 통과한 제안을 그대로 싣는다.
+        return {"result": CleanupResult(suggestions=state["suggestions"])}
 
 
 class EmptyNode(GraphNode[TaskCleanupState, ResultUpdate]):
