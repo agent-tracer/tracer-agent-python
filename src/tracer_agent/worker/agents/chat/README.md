@@ -62,7 +62,7 @@ Chat은 후보 검증 graph tail을 사용하지 않는다. `_no_validation` rou
 | `memory` | 1 | `recall_facts` | LangGraph `BaseStore` 장기기억 조회 |
 | `confirm` | 23 | `remember_fact`, `update_task`, `archive_task`, `unarchive_task`, `delete_task`, `create_memo`, `update_memo`, `delete_memo`, `create_rule`, `update_rule`, `delete_rule`, `approve_rule`, `reevaluate_rule`, `create_tag`, `update_tag`, `delete_tag`, `set_task_tags`, `accept_recipe`, `dismiss_recipe`, `retire_recipe`, `accept_cleanup`, `dismiss_cleanup`, `enqueue_job` | agent API confirmation 창구 |
 
-`confirm` 도구는 `ChatWriteClient.propose`를 호출하고 반환된 `confirmationId`를 `ProposedWrite`로 누적한다. `remember_fact`는 즉시 실행되는 유일한 write 도구이므로 모델이 기억 저장 사실을 명시해야 한다. 나머지 쓰기 동작은 사용자 승인 전까지 외부 상태를 변경하지 않는다.
+`confirm` 도구는 `ChatWriteClient.propose`를 호출하고 반환된 `confirmationId`를 `ProposedWrite`로 누적한다. `remember_fact`도 예외가 아니라 확인 대기 행만 세우므로 모델은 기억을 제안했다고만 말한다. 모든 쓰기 동작은 사용자 승인 전까지 외부 상태를 변경하지 않는다.
 
 ## 프롬프트 구성
 
