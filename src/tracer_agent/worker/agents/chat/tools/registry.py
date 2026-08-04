@@ -1,4 +1,4 @@
-"""요청별 의존을 받아 chat의 35개 도구를 langchain 도구로 조립한다."""
+"""요청별 의존을 받아 계약이 선언한 chat 도구를 langchain 도구로 조립한다."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import ValidationError
 
 from tracer_agent.shared.agents.chat.models import ProposedWrite
-from tracer_agent.shared.agents.chat.tools.surface import recall_tool_name
+from tracer_agent.shared.agents.chat.tools.surface import chat_tool_failure_text, recall_tool_name
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.telemetry.spans import tool_span
+from ...shared.contract_failures import TOOL_FAILED_KEY
 from ..reader import ChatReadClient
 from ..store import (
     FACTS_FIELD,
@@ -27,10 +28,7 @@ from ..writer import ChatWriteClient
 from .specs import AGENT_READ_TOOL_NAMES, ARGS_MODELS, MEMORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES
 
 # 도구가 무너졌을 때 모델이 읽는 문구이며 계약이 문장을 소유한다.
-TOOL_FAILED = (
-    "Tool {tool} failed: {reason}. Do not call it again more than once. Continue with what you "
-    "already know, and tell the user plainly which information you could not read."
-)
+TOOL_FAILED = chat_tool_failure_text(TOOL_FAILED_KEY)
 
 # 읽기 진입점이 아예 없는 실행에서 도구가 모델에게 대는 사유다.
 READ_BACKEND_MISSING = "the read backend is not available in this execution"
@@ -104,7 +102,7 @@ def build_chat_registry(
 
 
 def _structured(name: str, descriptions: dict[str, str], coroutine: Any) -> StructuredTool:
-    # 인자 스키마를 계약 와이어 이름(예: from) 그대로 노출하려면 별칭을 적용한 JSON 스키마를 넘긴다.
+    # 모델 대신 별칭을 적용한 JSON 스키마를 넘겨야 와이어 이름이 그대로 서고 인자 거절 문구도 계약이 갖는다.
     return StructuredTool(
         name=name,
         description=descriptions.get(name, name),

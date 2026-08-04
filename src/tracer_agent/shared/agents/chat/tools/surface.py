@@ -37,6 +37,14 @@ def chat_tool_note(name: str) -> str:
     return str(_chat_tool_contract()[name])
 
 
+def chat_tool_failure_text(key: str) -> str:
+    """도구가 무너졌을 때 모델이 읽는 문장이며 두 구현체가 계약의 같은 칸을 읽는다."""
+    declared: Mapping[str, Any] = _chat_tool_contract()["failures"]
+    if key not in declared:
+        raise ValueError(f"chat contract declares no failure text: {key}")
+    return str(declared[key])
+
+
 def tool_surface(name: str) -> str:
     """도구가 모델에게 열리는 표면이며 확인 게이트와 네 분류가 모두 이 한 값에서 나온다."""
     return str(chat_tool_declarations()[name]["surface"])
