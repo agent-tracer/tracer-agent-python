@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,9 @@ import pytest
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 CHECKER = SERVICE_ROOT / "scripts" / "check_comments.py"
+
+sys.path.insert(0, str(SERVICE_ROOT / "scripts"))
+import check_comments  # noqa: E402
 
 
 def run_checker(path: Path) -> subprocess.CompletedProcess[str]:
@@ -109,3 +113,13 @@ def test_없는_검사_경로를_거부한다(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "경로가 없다" in result.stdout
+
+
+def test_커밋_메시지_검사기와_같은_표를_쓴다() -> None:
+    commit_checker = (SERVICE_ROOT / "scripts" / "check-commit-msg.mjs").read_text(encoding="utf-8")
+    table = commit_checker.split("REGISTER_WORDS = [", 1)[1].split("\n];", 1)[0]
+    commit_surfaces = re.findall(r"\[/(.+?)/, \"([^\"]+)\"\]", table)
+
+    comment_surfaces = [(surface.pattern, plain) for surface, plain in check_comments.FIGURATIVE]
+
+    assert comment_surfaces == commit_surfaces
