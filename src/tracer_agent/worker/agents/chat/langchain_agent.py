@@ -30,7 +30,7 @@ def chat_middleware(
     max_turns: int,
     fallback_chat: BaseChatModel | None = None,
 ) -> list[AgentMiddleware[Any, Any, Any]]:
-    """chat agent의 미들웨어를 안쪽부터 바깥쪽 순서로 세운다."""
+    """chat agent의 미들웨어를 바깥쪽부터 안쪽 순서로 세우며 목록의 첫 항목이 가장 바깥이다."""
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
         TurnLimitMiddleware(run_limit=max_turns + 2, exit_behavior="end"),

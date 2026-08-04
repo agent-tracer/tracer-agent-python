@@ -32,9 +32,9 @@ def build_title_agent(
     system = SystemMessage(content=system_prompt)
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="error"),
-        StandardAgentMiddleware(),
-        # 공급자는 길이와 개수 같은 제약을 강제하지 않으므로 걸린 산출을 한 번 되먹인다.
+        # 거부된 산출도 장부를 지나야 하므로 다시 받는 자리는 StandardAgentMiddleware보다 앞에 둔다.
         StructuredOutputRepairMiddleware(),
+        StandardAgentMiddleware(),
         # 남은 몫을 알리는 꼬리가 붙은 뒤에 서야 경계를 그 꼬리 앞에 놓을 수 있다.
         PromptCacheMiddleware(ttl="1h"),
     ]

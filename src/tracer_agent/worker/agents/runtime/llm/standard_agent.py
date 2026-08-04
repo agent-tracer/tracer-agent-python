@@ -15,6 +15,7 @@ from langchain.agents.middleware import (
     ModelResponse,
     ToolCallRequest,
 )
+from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
@@ -69,17 +70,26 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
         request: ModelRequest[StandardAgentContext],
         handler: Callable[[ModelRequest[StandardAgentContext]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
-        response: ModelResponse[Any] = await handler(_with_budget(request))
+        context = request.runtime.context
+        try:
+            response: ModelResponse[Any] = await handler(_with_budget(request))
+        except StructuredOutputValidationError as invalid:
+            # 스키마에 걸려 버려지는 산출도 공급자는 이미 청구했으므로 다시 받기 전에 장부에 싣는다.
+            self._record(context, invalid.ai_message)
+            raise
         for message in response.result:
-            if not isinstance(message, AIMessage):
-                continue
-            context = request.runtime.context
-            context.trace.add_message(message)
-            context.trace.record_message(message)
-            context.budget.charge(message)
-            if is_truncated(message):
-                raise OutputTruncated(f"{context.agent_name} structured output truncated at max_tokens")
+            if isinstance(message, AIMessage):
+                self._record(context, message)
         return response
+
+    @staticmethod
+    def _record(context: StandardAgentContext, message: AIMessage) -> None:
+        """모델 응답 하나를 궤적과 예산에 싣고 잘린 산출이면 그 자리에서 끊는다."""
+        context.trace.add_message(message)
+        context.trace.record_message(message)
+        context.budget.charge(message)
+        if is_truncated(message):
+            raise OutputTruncated(f"{context.agent_name} structured output truncated at max_tokens")
 
     async def awrap_tool_call(
         self,

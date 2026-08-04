@@ -16,6 +16,7 @@ _FALLBACK = GenericFakeChatModel(messages=iter([]))
 
 
 def _kinds(middleware: list[Any]) -> list[str]:
+    """LangChain이 목록의 첫 항목을 가장 바깥으로 합성하므로 낮은 자리가 더 바깥이다."""
     return [type(one).__name__ for one in middleware]
 
 
@@ -37,14 +38,14 @@ class Test미들웨어순서:
             limit = next(one for one in middleware if isinstance(one, ModelCallLimitMiddleware))
             assert limit.run_limit == 6
 
-    def test_맥락_정리가_비용_장부보다_안쪽에_선다(self) -> None:
+    def test_맥락_정리가_비용_장부보다_바깥에_선다(self) -> None:
         for kinds in (
             _kinds(recipe_middleware(_TRANSIENT, max_turns=4)),
             _kinds(chat_middleware(_TRANSIENT, max_turns=4)),
         ):
             assert kinds.index("ContextEditingMiddleware") < kinds.index("StandardAgentMiddleware")
 
-    def test_같은_모델_재시도가_대체_모델보다_바깥에_선다(self) -> None:
+    def test_같은_모델_재시도가_대체_모델보다_안쪽에_선다(self) -> None:
         for kinds in (
             _kinds(recipe_middleware(_TRANSIENT, max_turns=4, fallback_chat=_FALLBACK)),
             _kinds(chat_middleware(_TRANSIENT, max_turns=4, fallback_chat=_FALLBACK)),
@@ -55,12 +56,17 @@ class Test미들웨어순서:
         assert "FallbackModelMiddleware" not in _kinds(recipe_middleware(_TRANSIENT, max_turns=4))
         assert "FallbackModelMiddleware" not in _kinds(chat_middleware(_TRANSIENT, max_turns=4))
 
-    def test_도구_재시도가_모델_재시도보다_안쪽에_선다(self) -> None:
+    def test_도구_재시도가_모델_재시도보다_바깥에_선다(self) -> None:
         for kinds in (
             _kinds(recipe_middleware(_TRANSIENT, max_turns=4)),
             _kinds(chat_middleware(_TRANSIENT, max_turns=4)),
         ):
             assert kinds.index("ToolRetryMiddleware") < kinds.index("ModelRetryMiddleware")
+
+    def test_구조화_복구가_비용_장부보다_바깥에_선다(self) -> None:
+        # 안쪽에 서면 거부된 산출이 장부에 닿지 못해 그 호출의 토큰이 예산에서 빠진다.
+        kinds = _kinds(recipe_middleware(_TRANSIENT, max_turns=4))
+        assert kinds.index("StructuredOutputRepairMiddleware") < kinds.index("StandardAgentMiddleware")
 
     def test_대화의_도구는_공유_장부를_직렬화한다(self) -> None:
         standard = next(

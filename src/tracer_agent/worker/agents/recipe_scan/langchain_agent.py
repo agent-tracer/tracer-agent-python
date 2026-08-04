@@ -31,14 +31,14 @@ def recipe_middleware(
     max_turns: int,
     fallback_chat: BaseChatModel | None = None,
 ) -> list[AgentMiddleware[Any, Any, Any]]:
-    """recipe-scan agent의 미들웨어를 안쪽부터 바깥쪽 순서로 세운다."""
+    """recipe-scan agent의 미들웨어를 바깥쪽부터 안쪽 순서로 세우며 목록의 첫 항목이 가장 바깥이다."""
     middleware: list[AgentMiddleware[Any, Any, Any]] = [
         ModelCallLimitMiddleware(run_limit=max_turns + 2, exit_behavior="error"),
         # 장부가 정리 뒤의 토큰을 세도록 StandardAgentMiddleware보다 앞에 둔다.
         context_editing_middleware(),
-        StandardAgentMiddleware(),
-        # 공급자는 길이와 개수 같은 제약을 강제하지 않으므로 걸린 산출을 한 번 되먹인다.
+        # 거부된 산출도 장부를 지나야 하므로 다시 받는 자리는 StandardAgentMiddleware보다 앞에 둔다.
         StructuredOutputRepairMiddleware(),
+        StandardAgentMiddleware(),
         # 남은 몫을 알리는 꼬리가 붙은 뒤에 서야 경계를 그 꼬리 앞에 놓을 수 있다.
         PromptCacheMiddleware(ttl="1h"),
         tool_retry_middleware(transient_errors),
