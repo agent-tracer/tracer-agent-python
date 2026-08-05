@@ -15,7 +15,6 @@ from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
-from tracer_agent.shared.workflows.jobs_anchor import RuleAnchor, ScanAnchor
 
 PATH = "/api/agent/jobs"
 _INTAKE = conformance_case("job.intake")
@@ -24,10 +23,6 @@ CREDENTIAL_REJECTION = next(
     rejection
     for rejection in _INTAKE["rejections"]
     if rejection["code"] == _INTAKE["credentialCheck"]["rejection"]
-)
-LEASE_OWNER = _INTAKE["leaseOwner"]
-LEASE_REJECTION = next(
-    rejection for rejection in _INTAKE["rejections"] if rejection["code"] == LEASE_OWNER["rejection"]
 )
 
 
@@ -73,26 +68,6 @@ class FakeCredentials:
         return self.key
 
 
-class FakeRuleAnchors:
-    """미리 기록해 둔 근거만 그 사용자에게 내주는 근거 창구 대역이다."""
-
-    def __init__(self) -> None:
-        self.anchors: dict[tuple[str, str], RuleAnchor] = {}
-
-    def add(self, user_id: str, anchor: RuleAnchor) -> None:
-        self.anchors[(user_id, anchor.id)] = anchor
-
-    async def find(self, user_id: str, event_id: str) -> RuleAnchor | None:
-        return self.anchors.get((user_id, event_id))
-
-
-@pytest.fixture
-def anchors() -> FakeRuleAnchors:
-    source = FakeRuleAnchors()
-    source.add("local", RuleAnchor(id="ev-1", task_id="task-1", user_message=True))
-    return source
-
-
 @pytest.fixture
 def dispatch() -> FakeJobDispatch:
     return FakeJobDispatch()
@@ -119,14 +94,12 @@ def scan_anchors() -> FakeScanAnchors:
 def client(
     dispatch: FakeJobDispatch,
     credentials: FakeCredentials,
-    anchors: FakeRuleAnchors,
     scan_anchors: FakeScanAnchors,
     store: SqliteLedgerSql,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
         test_client.app.state.job_dispatch = dispatch
         test_client.app.state.model_credentials = credentials
-        test_client.app.state.rule_anchors = anchors
         test_client.app.state.scan_anchors = scan_anchors
         test_client.app.state.execution_sql = SingleSql(store)
         yield test_client
@@ -346,235 +319,3 @@ def test_자격을_보지_않은_거절은_원장에_행을_남기지_않는다(
     assert store.rows("ai_jobs") == []
 
 
-_RULE_INPUT = {"taskId": "task-1", "anchorEventId": "ev-1", "intent": "테스트를 먼저 쓴다"}
-
-
-def test_rule_generation_접수는_202와_로컬_실행기의_원장_행을_낸다(
-    client: TestClient, dispatch: FakeJobDispatch, credentials: FakeCredentials, store: SqliteLedgerSql
-) -> None:
-    res = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT})
-
-    assert res.status_code == 202
-    job = res.json()["data"]["job"]
-    assert list(job) == JOB_FIELDS
-    assert job["kind"] == "rule.generation"
-    assert job["executor"] == "local"
-    assert job["status"] == "pending"
-    row = store.rows("ai_jobs")[0]
-    assert row["executor"] == "local"
-    # 워크플로가 아니라 로컬 실행기가 실행해도 접수구가 정한 축은 같다.
-    assert row["backend"] == AGENT_BACKEND
-    assert row["task_id"] == "task-1"
-    # 로컬 실행기가 가져가는 잡이라 워크플로도 실행 봉투도 접수가 부르지 않는다.
-    assert dispatch.started == []
-    assert credentials.asked_for == []
-
-
-def test_rule_generation_잡은_대기_목록으로_실행기에_보인다(client: TestClient) -> None:
-    client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT})
-
-    res = client.get(PATH, params={"kind": "rule.generation", "status": "pending"})
-
-    assert res.status_code == 200
-    assert [item["kind"] for item in res.json()["data"]["items"]] == ["rule.generation"]
-
-
-def test_없는_근거로_온_rule_generation은_400이다(client: TestClient, store: SqliteLedgerSql) -> None:
-    res = client.post(
-        PATH,
-        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-9"}},
-    )
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
-    assert store.rows("ai_jobs") == []
-
-
-def test_다른_태스크의_근거는_거절한다(client: TestClient, anchors: FakeRuleAnchors) -> None:
-    anchors.add("local", RuleAnchor(id="ev-2", task_id="task-2", user_message=True))
-
-    res = client.post(
-        PATH,
-        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-2"}},
-    )
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
-
-
-def test_사용자_발화가_아닌_근거는_거절한다(client: TestClient, anchors: FakeRuleAnchors) -> None:
-    anchors.add("local", RuleAnchor(id="ev-3", task_id="task-1", user_message=False))
-
-    res = client.post(
-        PATH,
-        json={"kind": "rule.generation", "input": {**_RULE_INPUT, "anchorEventId": "ev-3"}},
-    )
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
-
-
-def test_남의_근거는_없는_것으로_본다(client: TestClient) -> None:
-    res = client.post(
-        PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}, headers={"x-monitor-user": "u2"}
-    )
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "job.invalid-rule-anchor"
-
-
-def test_근거를_싣지_않은_rule_generation은_스키마에서_막힌다(client: TestClient) -> None:
-    res = client.post(PATH, json={"kind": "rule.generation", "input": {"taskId": "task-1"}})
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "validation_error"
-
-
-def test_로컬_잡의_취소는_워크플로_취소를_부르지_않는다(
-    client: TestClient, dispatch: FakeJobDispatch
-) -> None:
-    accepted = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}).json()
-
-    res = client.post(f"{PATH}/{accepted['data']['job']['id']}/cancel")
-
-    assert res.status_code == 200
-    assert res.json()["data"]["job"]["status"] == "canceled"
-    assert dispatch.cancelled == []
-
-
-@pytest.mark.parametrize(
-    ("anchor", "expected"),
-    [
-        (ScanAnchor(id="task-1", origin="server-sdk", root=True, status="completed"), 400),
-        (ScanAnchor(id="task-1", origin="user", root=False, status="completed"), 400),
-        (ScanAnchor(id="task-1", origin="user", root=True, status="running"), 400),
-        (ScanAnchor(id="task-1", origin="user", root=True, status="completed"), 202),
-        (None, 400),
-    ],
-)
-def test_스캔은_계약이_정한_앵커_자격만_접수한다(
-    dispatch: FakeJobDispatch,
-    credentials: FakeCredentials,
-    anchors: FakeRuleAnchors,
-    store: SqliteLedgerSql,
-    anchor: ScanAnchor | None,
-    expected: int,
-) -> None:
-    with TestClient(app_module.create_app()) as client:
-        client.app.state.job_dispatch = dispatch
-        client.app.state.model_credentials = credentials
-        client.app.state.rule_anchors = anchors
-        client.app.state.scan_anchors = FakeScanAnchors(anchor)
-        client.app.state.execution_sql = SingleSql(store)
-
-        res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
-
-    assert res.status_code == expected
-
-
-def test_자격이_없는_앵커의_거절은_계약이_정한_코드로_나간다(
-    dispatch: FakeJobDispatch,
-    credentials: FakeCredentials,
-    anchors: FakeRuleAnchors,
-    store: SqliteLedgerSql,
-) -> None:
-    with TestClient(app_module.create_app()) as client:
-        client.app.state.job_dispatch = dispatch
-        client.app.state.model_credentials = credentials
-        client.app.state.rule_anchors = anchors
-        client.app.state.scan_anchors = FakeScanAnchors(None)
-        client.app.state.execution_sql = SingleSql(store)
-
-        res = client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
-
-    assert res.json()["error"]["code"] == "job.invalid-scan-anchor"
-
-
-def test_세션에서_부른_스캔은_아직_도는_태스크도_접수한다(
-    dispatch: FakeJobDispatch,
-    credentials: FakeCredentials,
-    anchors: FakeRuleAnchors,
-    store: SqliteLedgerSql,
-) -> None:
-    running = ScanAnchor(id="task-1", origin="user", root=True, status="running")
-    with TestClient(app_module.create_app()) as client:
-        client.app.state.job_dispatch = dispatch
-        client.app.state.model_credentials = credentials
-        client.app.state.rule_anchors = anchors
-        client.app.state.scan_anchors = FakeScanAnchors(running)
-        client.app.state.execution_sql = SingleSql(store)
-
-        res = client.post(
-            PATH,
-            json={"kind": "recipe.scan", "input": {"taskId": "task-1", "trigger": "session"}},
-        )
-
-    assert res.status_code == 202
-
-
-# 본문을 요구하는 창구는 리스 이름이 아니라 본문 때문에 거절당하지 않도록 성립하는 본문을 싣는다.
-REPORTED_USAGE = {"model": "claude", "durationMs": 10, "costUsd": 0.1, "numTurns": 1}
-LEASE_BODIES = {
-    "results": {"rules": [], "usage": REPORTED_USAGE, "steps": []},
-    "fail": {"message": "boom", "usage": REPORTED_USAGE, "steps": []},
-}
-
-
-@pytest.mark.parametrize("declared", LEASE_OWNER["paths"])
-def test_리스를_요구하는_창구는_이름_없는_요청을_계약의_낱말로_거절한다(
-    client: TestClient, declared: str
-) -> None:
-    path = declared.replace("{id}", "no-such-run")
-
-    res = client.post(path, json=LEASE_BODIES.get(declared.rsplit("/", 1)[-1]))
-
-    assert res.status_code == LEASE_REJECTION["status"]
-    assert res.json()["error"] == {
-        "code": LEASE_REJECTION["code"],
-        "message": LEASE_REJECTION["message"],
-    }
-
-
-@pytest.mark.parametrize("declared", ["results", "fail"])
-def test_본문을_요구하는_창구도_계약이_정한_400으로_거절한다(client: TestClient, declared: str) -> None:
-    # FastAPI 의 자동 검증에 맡기면 계약에 없는 422 가 나가 실행기가 거절을 가리지 못한다.
-    res = client.post(
-        f"{PATH}/no-such-run/{declared}",
-        json={"쓸모없는칸": 1, "usage": REPORTED_USAGE, "steps": []},
-        headers={"x-monitor-lease-owner": "runner-1"},
-    )
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "validation_error"
-
-
-LOCAL_EXECUTOR = _INTAKE["localExecutor"]
-
-
-@pytest.mark.parametrize("declared", ["results", "fail"])
-def test_관측_없는_보고를_거절한다(client: TestClient, declared: str) -> None:
-    # 관측을 받지 않으면 로컬 실행기가 쓴 비용이 원장에 닿을 길이 없다.
-    body = {key: value for key, value in LEASE_BODIES[declared].items() if key != "usage"}
-
-    res = client.post(f"{PATH}/no-such-run/{declared}", json=body, headers={"x-monitor-lease-owner": "r1"})
-
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "validation_error"
-
-
-def test_실행기의_관측과_궤적이_원장에_실린다(client: TestClient) -> None:
-    accepted = client.post(PATH, json={"kind": "rule.generation", "input": _RULE_INPUT}).json()
-    run_id = accepted["data"]["job"]["id"]
-    lease = {"x-monitor-lease-owner": "runner-1"}
-    client.post(f"{PATH}/{run_id}/start", headers=lease)
-    usage = {**REPORTED_USAGE, "inputTokens": 5}
-    step = {"seq": 0, "role": "assistant", "content": "규칙을 쓴다", "truncated": False, "toolCalls": []}
-
-    settled = client.post(
-        f"{PATH}/{run_id}/results", json={"rules": [], "usage": usage, "steps": [step]}, headers=lease
-    )
-
-    assert settled.status_code == 200
-    assert settled.json()["data"]["job"]["usage"] == usage
-    steps = client.get(f"{PATH}/{run_id}/steps").json()["data"]
-    assert [(item["seq"], item["role"], item["attempt"]) for item in steps] == [(0, "assistant", 1)]

@@ -17,7 +17,7 @@ from tracer_agent.shared.workflows.jobs_input import (
     input_hash,
 )
 from tracer_agent.shared.workflows.jobs_intake import JobEnqueueBody
-from tracer_agent.shared.workflows.jobs_kinds import JOB_EXECUTOR, JOB_KINDS, JobExecutor
+from tracer_agent.shared.workflows.jobs_kinds import JOB_EXECUTOR, JOB_KINDS
 
 _INTAKE = conformance_case("job.intake")
 _WIRE_KINDS: dict[str, dict[str, object]] = wire_contract("job.kinds.json")["kinds"]
@@ -47,25 +47,12 @@ class Test접수가_받는_잡_종류:
 
 class Test잡_실행_데드라인:
     def test_워크플로가_태우는_종류마다_계약이_적은_값을_카탈로그가_갖는다(self) -> None:
-        declared = {
-            kind: _WIRE_KINDS[kind]["deadlineMs"]
-            for kind in _INTAKE["kinds"]
-            if JOB_EXECUTOR[kind] != JobExecutor.LOCAL
-        }
+        declared = {kind: _WIRE_KINDS[kind]["deadlineMs"] for kind in _INTAKE["kinds"]}
 
         assert {kind: CATALOG[kind].deadline_ms for kind in declared} == declared
 
-    def test_로컬_실행기가_가져가는_종류는_계약도_데드라인을_적지_않는다(self) -> None:
-        for kind in _INTAKE["kinds"]:
-            if JOB_EXECUTOR[kind] != JobExecutor.LOCAL:
-                continue
-            assert "deadlineMs" not in _WIRE_KINDS[kind]
-            assert kind not in CATALOG
-
     def test_카탈로그는_대화와_워크플로_잡만_갖는다(self) -> None:
-        temporal = [k for k in _INTAKE["kinds"] if JOB_EXECUTOR[k] != JobExecutor.LOCAL]
-
-        assert sorted(CATALOG) == sorted([CHAT_KIND, *temporal])
+        assert sorted(CATALOG) == sorted([CHAT_KIND, *_INTAKE["kinds"]])
 
 
 class Test멱등_입력의_정규형:

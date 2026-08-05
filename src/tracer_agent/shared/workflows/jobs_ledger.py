@@ -49,54 +49,9 @@ UPDATE ai_jobs
 RETURNING id
 """
 
-_CLAIM_LEASE = """
-UPDATE ai_jobs
-   SET status = 'running',
-       lease_owner = $2,
-       lease_expires_at = $3,
-       started_at = COALESCE(started_at, $4),
-       updated_at = $4
- WHERE id = $1 AND status IN ('pending', 'running')
-   AND (
-       lease_owner IS NULL
-       OR lease_owner = $2
-       OR lease_expires_at IS NULL
-       OR lease_expires_at <= $4
-   )
-RETURNING id
-"""
 
-_RENEW_LEASE = """
-UPDATE ai_jobs
-   SET lease_expires_at = $3, updated_at = $4
- WHERE id = $1 AND status = 'running' AND lease_owner = $2 AND lease_expires_at > $4
-RETURNING id
-"""
 
-_SETTLE_WITH_LEASE = """
-UPDATE ai_jobs
-   SET status = $3,
-       result = $4,
-       error = $5,
-       usage = $6,
-       lease_owner = NULL,
-       lease_expires_at = NULL,
-       completed_at = $7,
-       updated_at = $7
- WHERE id = $1 AND status = 'running' AND lease_owner = $2
-RETURNING id
-"""
 
-_RELEASE_LEASE = """
-UPDATE ai_jobs
-   SET status = 'pending',
-       lease_owner = NULL,
-       lease_expires_at = NULL,
-       started_at = NULL,
-       updated_at = $3
- WHERE id = $1 AND status = 'running' AND lease_owner = $2
-RETURNING id
-"""
 
 _FIND = "SELECT * FROM ai_jobs WHERE id = $1"
 
@@ -198,34 +153,9 @@ class JobLedger:
         rows = await self._sql.fetch(_SETTLE, job_id, status, result, usage, error, now)
         return len(rows) == 1
 
-    async def claim_lease(self, job_id: str, owner: str, expires_at: datetime, now: datetime) -> bool:
-        """살아 있는 리스를 남이 가지고 있지 않을 때만 이 실행기의 것으로 가져간다."""
-        rows = await self._sql.fetch(_CLAIM_LEASE, job_id, owner, expires_at, now)
-        return len(rows) == 1
 
-    async def renew_lease(self, job_id: str, owner: str, expires_at: datetime, now: datetime) -> bool:
-        """가지고 있는 실행기의 리스 수명을 늘린다."""
-        rows = await self._sql.fetch(_RENEW_LEASE, job_id, owner, expires_at, now)
-        return len(rows) == 1
 
-    async def settle_with_lease(
-        self,
-        job_id: str,
-        owner: str,
-        status: str,
-        result: dict[str, Any],
-        error: str | None,
-        usage: dict[str, Any],
-        now: datetime,
-    ) -> bool:
-        """리스를 쥔 실행기가 산출물이나 실패와 그 실행의 관측을 싣고 잡을 종결한다."""
-        rows = await self._sql.fetch(_SETTLE_WITH_LEASE, job_id, owner, status, result, error, usage, now)
-        return len(rows) == 1
 
-    async def release_lease(self, job_id: str, owner: str, now: datetime) -> bool:
-        """끝내지 못한 실행기가 리스를 놓아 잡을 곧바로 대기로 되돌린다."""
-        rows = await self._sql.fetch(_RELEASE_LEASE, job_id, owner, now)
-        return len(rows) == 1
 
     async def cancel(self, job_id: str, now: datetime) -> bool:
         """아직 살아 있는 잡을 취소로 닫는다."""

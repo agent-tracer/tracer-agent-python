@@ -2,29 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from enum import StrEnum
-from functools import lru_cache
-from pathlib import Path
-
-
-def _job_kinds_path() -> Path:
-    """워크플로 샌드박스가 모듈을 다시 읽을 때 경로를 풀지 않도록 계약의 자리를 부를 때 정한다."""
-    return Path(__file__).resolve().parents[4] / "contract" / "wire" / "job.kinds.json"
-
-
-@lru_cache(maxsize=1)
-def lease_ttl_ms() -> int:
-    """리스가 이만큼 살아 있고 하트비트가 이보다 잦아야 다른 실행기가 같은 잡을 가져가지 않는다."""
-    document = json.loads(_job_kinds_path().read_text(encoding="utf-8"))
-    return int(document["lease"]["ttlMs"])
 
 
 class JobExecutor(StrEnum):
-    """워크플로가 실행하는 잡과 플러그인이 궤적을 넘기는 잡을 구분하는 실행 주체다."""
+    """잡을 실제로 실행하는 주체이며 지금은 모두 워크플로가 실행한다."""
 
     TEMPORAL = "temporal"
-    LOCAL = "local"
 
 
 class AgentJobKind(StrEnum):
@@ -54,12 +38,7 @@ JOB_EXECUTOR: dict[str, JobExecutor] = {
     AgentJobKind.TITLE_SUGGESTION.wire: JobExecutor.TEMPORAL,
     AgentJobKind.RECIPE_SCAN.wire: JobExecutor.TEMPORAL,
     AgentJobKind.TASK_CLEANUP.wire: JobExecutor.TEMPORAL,
-    "rule.generation": JobExecutor.LOCAL,
 }
 
 JOB_KINDS: tuple[str, ...] = tuple(JOB_EXECUTOR)
 
-
-def runs_locally(kind: str) -> bool:
-    """로컬 실행기가 가져가는 잡은 워크플로로 보내지 않고 원장에만 세운다."""
-    return JOB_EXECUTOR[kind] is JobExecutor.LOCAL

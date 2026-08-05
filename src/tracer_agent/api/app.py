@@ -27,7 +27,7 @@ from ..shared.agents.settings.secret import SettingCipher
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
-from ..shared.workflows.jobs_anchor import RuleAnchorClient, ScanAnchorClient
+from ..shared.workflows.jobs_anchor import ScanAnchorClient
 from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_intake import router as job_intake_router
 from ..shared.workflows.jobs_query import router as job_query_router
@@ -70,18 +70,15 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
-    application.state.rule_anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
-    application.state.rule_anchors = RuleAnchorClient(
-        application.state.rule_anchor_http, settings.tracer_api_url
-    )
+    application.state.anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
     application.state.scan_anchors = ScanAnchorClient(
-        application.state.rule_anchor_http, settings.tracer_api_url
+        application.state.anchor_http, settings.tracer_api_url
     )
     try:
         yield
     finally:
         shutdown_observability()
-        await application.state.rule_anchor_http.aclose()
+        await application.state.anchor_http.aclose()
         await application.state.chat_tool_http.aclose()
         await application.state.execution_watch.close()
         await application.state.execution_updates.close()

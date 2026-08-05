@@ -18,7 +18,7 @@ JOB_PATH = f"{JOBS_PATH}/{{execution_id}}"
 JOB_STEPS_PATH = f"{JOB_PATH}/steps"
 
 # 원장에 남을 수 있는 잡의 종류이며 접수가 받는 것보다 넓다.
-JOB_LEDGER_KINDS: tuple[str, ...] = ("title.suggestion", "recipe.scan", "task.cleanup", "rule.generation")
+JOB_LEDGER_KINDS: tuple[str, ...] = ("title.suggestion", "recipe.scan", "task.cleanup")
 JOB_STATUSES: tuple[str, ...] = ("pending", "running", "completed", "failed", "canceled")
 PENDING = "pending"
 

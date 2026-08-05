@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..agents.recipe_scan.models import scan_anchor_conditions, scan_anchor_requirements
 from ..agents.shared.models import TrimmedStr
-from .jobs_anchor import RuleAnchorSource, ScanAnchorSource
+from .jobs_anchor import ScanAnchorSource
 
 DEFAULT_MAX_SUGGESTIONS = 20
 MAX_SUGGESTIONS_CAP = 50
@@ -28,9 +28,6 @@ class AdmissionRejection:
     message: str
 
 
-INVALID_RULE_ANCHOR = AdmissionRejection(
-    400, "job.invalid-rule-anchor", "Rule generation requires an owned user-message anchor"
-)
 INELIGIBLE_SCAN_ANCHOR = AdmissionRejection(
     400, "job.invalid-scan-anchor", "Recipe scan requires a completed root user task"
 )
@@ -41,7 +38,6 @@ class AdmissionContext:
     """접수가 잡 하나를 받아들일지 판정할 때 보는 사용자와 앵커 창구다."""
 
     user_id: str
-    rule_anchors: RuleAnchorSource
     scan_anchors: ScanAnchorSource
 
 
@@ -92,21 +88,6 @@ class TaskCleanupJobInput(JobInput):
     filters: TaskCleanupFilters = Field(default_factory=TaskCleanupFilters)
 
 
-class RuleGenerationJobInput(JobInput):
-    """rule-generation 접수가 받는 도메인 입력이며 로컬 실행기가 이 잡을 가져간다."""
-
-    taskId: TrimmedStr = Field(min_length=1, max_length=64)
-    # 규칙이 매달릴 근거 입력이며 판정은 이 입력 이후의 이벤트만 본다.
-    anchorEventId: TrimmedStr = Field(min_length=1, max_length=64)
-    focus: Literal["recent"] | None = None
-    maxRules: int | None = Field(default=None, ge=1, le=MAX_RULES_CAP)
-    intent: TrimmedStr | None = Field(default=None, min_length=1, max_length=INTENT_MAX_LENGTH)
-
-    async def admit(self, context: AdmissionContext) -> AdmissionRejection | None:
-        """규칙 생성의 근거는 이 사용자의 그 태스크에 속한 사용자 발화여야 한다."""
-        anchor = await context.rule_anchors.find(context.user_id, self.anchorEventId)
-        owned = anchor is not None and anchor.task_id == self.taskId and anchor.user_message
-        return None if owned else INVALID_RULE_ANCHOR
 
 
 # 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
@@ -114,7 +95,6 @@ INPUT_MODEL_BY_KIND: dict[str, type[JobInput]] = {
     "recipe.scan": RecipeScanJobInput,
     "title.suggestion": TitleSuggestionJobInput,
     "task.cleanup": TaskCleanupJobInput,
-    "rule.generation": RuleGenerationJobInput,
 }
 
 
@@ -158,7 +138,6 @@ IDEMPOTENCY_KEYS: dict[str, tuple[str, ...]] = {
     "title.suggestion": ("taskId",),
     "recipe.scan": ("taskId", "userPrompt", "language", "trigger"),
     "task.cleanup": ("filters.maxSuggestions",),
-    "rule.generation": ("taskId", "anchorEventId", "focus", "maxRules", "intent"),
 }
 
 
