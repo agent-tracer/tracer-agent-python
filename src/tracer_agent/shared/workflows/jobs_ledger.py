@@ -50,9 +50,6 @@ RETURNING id
 """
 
 
-
-
-
 _FIND = "SELECT * FROM ai_jobs WHERE id = $1"
 
 _INSERT_STEP = """
@@ -152,10 +149,6 @@ class JobLedger:
         """살아 있는 잡을 종료 상태와 산출과 사용량으로 닫는다."""
         rows = await self._sql.fetch(_SETTLE, job_id, status, result, usage, error, now)
         return len(rows) == 1
-
-
-
-
 
     async def cancel(self, job_id: str, now: datetime) -> bool:
         """아직 살아 있는 잡을 취소로 닫는다."""

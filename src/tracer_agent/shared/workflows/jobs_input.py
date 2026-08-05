@@ -88,8 +88,6 @@ class TaskCleanupJobInput(JobInput):
     filters: TaskCleanupFilters = Field(default_factory=TaskCleanupFilters)
 
 
-
-
 # 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
 INPUT_MODEL_BY_KIND: dict[str, type[JobInput]] = {
     "recipe.scan": RecipeScanJobInput,

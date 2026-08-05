@@ -317,5 +317,3 @@ def test_자격을_보지_않은_거절은_원장에_행을_남기지_않는다(
     client.post(PATH, json={"kind": "recipe.scan", "input": {"taskId": "task-1"}})
 
     assert store.rows("ai_jobs") == []
-
-

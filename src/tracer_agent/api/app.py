@@ -71,9 +71,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
     application.state.job_dispatch = TemporalJobDispatch(temporal_client)
     application.state.anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
-    application.state.scan_anchors = ScanAnchorClient(
-        application.state.anchor_http, settings.tracer_api_url
-    )
+    application.state.scan_anchors = ScanAnchorClient(application.state.anchor_http, settings.tracer_api_url)
     try:
         yield
     finally:

@@ -66,8 +66,6 @@ def get_scan_anchors(request: Request) -> ScanAnchorSource:
     return anchors
 
 
-
-
 def get_model_credentials(request: Request) -> ModelCredentialSource:
     """접수가 이 사용자의 모델 자격을 보는 통로를 낸다."""
     credentials: ModelCredentialSource = request.app.state.model_credentials
@@ -214,9 +212,3 @@ class JobFailureBody(BaseModel):
     retryable: bool = False
     usage: JobExecutionUsage
     steps: list[AgentStepDTO]
-
-
-
-
-
-

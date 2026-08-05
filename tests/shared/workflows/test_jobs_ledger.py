@@ -222,5 +222,3 @@ async def test_남의_잡_궤적은_읽히지_않는다(store: SqliteLedgerSql) 
     await ledger.record_steps("j1", "u1", 1, [AgentStepDTO(seq=0, role="assistant", content="mine")], NOW)
 
     assert await ledger.steps("j1", "u2") == []
-
-

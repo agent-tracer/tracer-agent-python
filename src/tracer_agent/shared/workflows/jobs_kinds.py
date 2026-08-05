@@ -41,4 +41,3 @@ JOB_EXECUTOR: dict[str, JobExecutor] = {
 }
 
 JOB_KINDS: tuple[str, ...] = tuple(JOB_EXECUTOR)
-
