@@ -250,7 +250,8 @@ def test_task_cleanup_접수는_202와_실행_식별자를_낸다(
     assert res.json()["ok"] is True
     kind, _key, payload = dispatch.started[0]
     assert kind == "task-cleanup"
-    assert payload["maxSuggestions"] == 20
+    # 요청이 개수를 비워 두면 접수가 값을 정하지 않고 준비 액티비티가 설정에서 채운다.
+    assert "maxSuggestions" not in payload
     assert "batch" not in payload
     # 사용자 전체를 조회하는 잡이라 태스크에 매이지 않는다.
     assert store.rows("ai_jobs")[0]["task_id"] is None

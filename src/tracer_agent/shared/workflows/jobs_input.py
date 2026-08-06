@@ -13,7 +13,6 @@ from ..agents.recipe_scan.models import scan_anchor_conditions, scan_anchor_requ
 from ..agents.shared.models import TrimmedStr
 from .jobs_anchor import ScanAnchorSource
 
-DEFAULT_MAX_SUGGESTIONS = 20
 MAX_SUGGESTIONS_CAP = 50
 MAX_RULES_CAP = 20
 INTENT_MAX_LENGTH = 500
@@ -108,7 +107,7 @@ def build_payload(
     execution_id: str,
     idempotency_key: str | None,
 ) -> dict[str, Any]:
-    """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치와 한도는 워커 액티비티가 스스로 채운다."""
+    """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치와 설정에서 오는 칸은 준비가 채운다."""
     base = {
         "userId": user_id,
         "executionId": execution_id,
@@ -118,17 +117,14 @@ def build_payload(
         return {
             **base,
             "taskId": job_input.taskId,
-            "language": job_input.language or "auto",
+            **({"language": job_input.language} if job_input.language is not None else {}),
             "userPrompt": job_input.userPrompt,
         }
     if isinstance(job_input, TitleSuggestionJobInput):
-        return {**base, "taskId": job_input.taskId, "language": "auto"}
+        return {**base, "taskId": job_input.taskId}
     assert isinstance(job_input, TaskCleanupJobInput)
-    return {
-        **base,
-        "language": "auto",
-        "maxSuggestions": job_input.filters.maxSuggestions or DEFAULT_MAX_SUGGESTIONS,
-    }
+    requested = job_input.filters.maxSuggestions
+    return {**base, **({"maxSuggestions": requested} if requested is not None else {})}
 
 
 # 같은 멱등키의 두 접수가 같은 입력인지 구분하는 칸이며 종류마다 이 순서로 적는다.

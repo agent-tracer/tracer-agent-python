@@ -12,6 +12,15 @@ from temporalio import activity
 
 from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.runtime.notification import JobStatusNotifier
+from ...shared.agents.settings.execution import (
+    LANGUAGE_FIELD,
+    MAX_SUGGESTIONS_FIELD,
+    carries,
+    normalize_language,
+    normalize_max_suggestions,
+    setting_key,
+)
+from ...shared.agents.settings.store import PlainSettingReader
 from ...shared.agents.shared.json_view import JsonObject, JsonValue, opt_text
 from ...shared.agents.shared.models import (
     AgentExecutionRequest,
@@ -20,6 +29,7 @@ from ...shared.agents.shared.models import (
     CompletionCallback,
 )
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
+from ...shared.workflows.jobs_input import MAX_SUGGESTIONS_CAP
 from ...shared.workflows.jobs_kinds import AgentJobKind
 from ...shared.workflows.jobs_ledger import JobLedger
 from ...shared.workflows.jobs_spec import (
@@ -77,12 +87,13 @@ class AgentJobActivities:
 
     @activity.defn(name=PREPARE_AGENT_JOB_ACTIVITY)
     async def prepare(self, request: AgentJobRequest) -> JsonObject:
-        """도메인 문맥을 모아 실행 입력에 싣고 원장을 실행 중으로 옮긴다."""
+        """도메인 문맥과 설정을 모아 실행 입력에 싣고 원장을 실행 중으로 옮긴다."""
         job = JOB_AGENTS[request.kind]
         user_id = opt_text(request.payload.get("userId"))
         if not user_id:
             raise ValueError("agent job request has no user id to collect context for")
-        prepared = await job.collect_context(request.payload, self._tracer(user_id))
+        collected = await job.collect_context(request.payload, self._tracer(user_id))
+        prepared = await self._carry_settings(request.kind, user_id, collected)
         execution_id = opt_text(prepared.get("executionId"))
         if execution_id:
             async with self._execution_sql.connect() as sql:
@@ -162,6 +173,22 @@ class AgentJobActivities:
     def _tracer(self, user_id: str) -> TracerApiPort:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
         return TracerApiClient(self._http, self._tracer_api_url, user_id)
+
+    async def _carry_settings(self, kind: AgentJobKind, user_id: str, payload: JsonObject) -> JsonObject:
+        """계약이 설정에서 채우라고 적은 칸 가운데 요청이 비워 둔 것만 채운다."""
+        carried: dict[str, JsonValue] = {}
+        if LANGUAGE_FIELD not in payload and carries(LANGUAGE_FIELD, kind.wire):
+            stored = await self._read_setting(user_id, setting_key(LANGUAGE_FIELD))
+            carried[LANGUAGE_FIELD] = normalize_language(stored)
+        if MAX_SUGGESTIONS_FIELD not in payload and carries(MAX_SUGGESTIONS_FIELD, kind.wire):
+            stored = await self._read_setting(user_id, setting_key(MAX_SUGGESTIONS_FIELD))
+            carried[MAX_SUGGESTIONS_FIELD] = normalize_max_suggestions(stored, MAX_SUGGESTIONS_CAP)
+        return {**payload, **carried} if carried else payload
+
+    async def _read_setting(self, user_id: str, key: str) -> str | None:
+        """그 사용자가 저장해 둔 설정 하나이며 없으면 None 이다."""
+        async with self._execution_sql.connect() as sql:
+            return await PlainSettingReader(sql).read(user_id, key)
 
     async def _resolve_payload(self, request: AgentJobRequest) -> JsonObject:
         """자격이 있으면 그대로 쓰고, 없으면 잡 종류와 사용자로 이 시도가 쓸 봉투를 가져온다."""

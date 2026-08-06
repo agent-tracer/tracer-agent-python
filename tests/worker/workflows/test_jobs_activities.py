@@ -22,6 +22,7 @@ from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
+from tracer_agent.shared.workflows.jobs_input import MAX_SUGGESTIONS_CAP
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
 from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest, AgentJobSettlement
@@ -511,3 +512,98 @@ async def test_종결이_받는_값에_자격이_실리지_않는다(http: Captu
 
     assert "apiKey" not in generated["outcome"]
     assert "apiKey" not in generated["response"]
+
+
+def _settings_source(rows: dict[str, str]) -> _StaticSql:
+    """그 사용자가 저장해 둔 설정만 담은 원장을 세운다."""
+    store = SqliteLedgerSql()
+    store.seed(
+        "app_settings",
+        [{"scope": "user-1", "key": key, "value": value, "updated_at": NOW} for key, value in rows.items()],
+    )
+    return _StaticSql(store)
+
+
+async def test_준비가_요청이_비운_언어를_설정에서_채운다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        _settings_source({"claude.outputLanguage": "ko"}),
+        JOB_PROMPTS,
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert prepared["language"] == "ko"
+
+
+async def test_준비가_요청이_실은_언어를_설정으로_덮지_않는다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        _settings_source({"claude.outputLanguage": "ko"}),
+        JOB_PROMPTS,
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "language": "en", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert prepared["language"] == "en"
+
+
+async def test_준비가_설정이_없으면_계약의_기본_언어를_쓴다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(TRACER_API_URL, http, _settings_source({}), JOB_PROMPTS)  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert prepared["language"] == "auto"
+
+
+async def test_준비가_모르는_언어_설정을_기본값으로_본다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        _settings_source({"claude.outputLanguage": " KL "}),
+        JOB_PROMPTS,
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert prepared["language"] == "auto"
+
+
+async def test_준비가_정리_제안_개수를_설정에서_채우고_상한으로_조인다(
+    http: CapturingCompletionClient,
+) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        _settings_source({"taskCleanup.maxSuggestions": "500"}),
+        JOB_PROMPTS,
+    )  # type: ignore[arg-type]
+    payload = {
+        "userId": "user-1",
+        "scannedAt": "2026-07-28T00:00:00Z",
+        "batch": {"candidates": [], "batchTruncated": False},
+    }
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TASK_CLEANUP, payload))
+
+    assert prepared["maxSuggestions"] == MAX_SUGGESTIONS_CAP
+
+
+async def test_준비가_제목_제안에는_개수_설정을_싣지_않는다(http: CapturingCompletionClient) -> None:
+    activities = AgentJobActivities(
+        TRACER_API_URL,
+        http,
+        _settings_source({"taskCleanup.maxSuggestions": "7"}),
+        JOB_PROMPTS,
+    )  # type: ignore[arg-type]
+    payload = {"taskId": "task-1", "userId": "user-1", "context": _TITLE_CONTEXT}
+
+    prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert "maxSuggestions" not in prepared

@@ -97,13 +97,13 @@ class Test호출별실행상태:
 
 class Test구조화출력전략:
     def test_산출을_도구로_선언한다(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 출력 타입을 그대로 넘기면 공급자 강제로 내려가 첫 응답이 곧 산출이 되고 조사할 턴이 사라진다.
+        # 출력 타입을 그대로 넘기면 공급자 강제로 넘어가 첫 응답이 곧 산출이 되고 조사할 턴이 남지 않는다.
         strategy = _compiled_strategy(monkeypatch)
 
         assert isinstance(strategy, ToolStrategy)
 
-    def test_스키마를_어긴_산출을_SDK가_삼키지_않는다(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # handle_errors 기본값이 참이라 명시하지 않으면 SDK가 되받아 이 저장소의 장부와 되받는 층을 건너뛴다.
+    def test_스키마를_어긴_산출을_SDK가_대신_처리하지_않는다(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # handle_errors 기본값이 참이라 명시하지 않으면 SDK가 대신 처리해 이 저장소의 다시 받는 층을 건너뛴다.
         strategy = _compiled_strategy(monkeypatch)
 
         assert strategy.handle_errors is False
