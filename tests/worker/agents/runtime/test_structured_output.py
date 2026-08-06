@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from langchain.agents.factory import _supports_provider_strategy
-from langchain_anthropic import ChatAnthropic
+from langchain.agents.structured_output import ToolStrategy
 
 from tests.support.fakes import FakeToolLoopChat, mk_rates
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm import structured_agent
 from tracer_agent.worker.agents.runtime.llm.budget import single_loop_budget
 from tracer_agent.worker.agents.runtime.llm.standard_agent import StandardAgentContext
 from tracer_agent.worker.agents.runtime.llm.structured_agent import (
@@ -96,12 +96,36 @@ class Test호출별실행상태:
 
 
 class Test구조화출력전략:
-    def test_실제_모델은_공급자_강제로_해석된다(self) -> None:
-        # 이 판정이 뒤집히면 산출 강제가 도구 호출로 내려가 TypeScript 축과 갈린다.
-        model = ChatAnthropic(model="claude-sonnet-4-6", api_key="sk-test")  # type: ignore[call-arg]
+    def test_산출을_도구로_선언한다(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 출력 타입을 그대로 넘기면 공급자 강제로 내려가 첫 응답이 곧 산출이 되고 조사할 턴이 사라진다.
+        strategy = _compiled_strategy(monkeypatch)
 
-        assert _supports_provider_strategy(model, tools=["get_task_events"]) is True
+        assert isinstance(strategy, ToolStrategy)
 
-    def test_대역_모델은_도구_전략으로_내려간다(self) -> None:
-        # 검사가 지나는 경로는 운영과 다르므로 대역이 무엇을 밟는지 여기서 드러낸다.
-        assert _supports_provider_strategy(FakeToolLoopChat([]), tools=["get_task_events"]) is False
+    def test_스키마를_어긴_산출을_SDK가_삼키지_않는다(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # handle_errors 기본값이 참이라 명시하지 않으면 SDK가 되받아 이 저장소의 장부와 되받는 층을 건너뛴다.
+        strategy = _compiled_strategy(monkeypatch)
+
+        assert strategy.handle_errors is False
+
+
+def _compiled_strategy(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """컴파일이 실제로 넘긴 산출 강제 방식을 꺼낸다."""
+    seen: dict[str, Any] = {}
+
+    def _spy(*_args: Any, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(structured_agent, "create_agent", _spy)
+    structured_agent.build_structured_agent(
+        FakeToolLoopChat([]),  # type: ignore[arg-type]
+        "지시문",
+        [],
+        (),
+        output=RecipeDraft,
+        context_schema=StandardAgentContext,
+        name="recipe-scan-investigator",
+        max_turns=4,
+    )
+    return seen["response_format"]

@@ -9,6 +9,7 @@ from typing import Any, TypedDict
 from uuid import UUID, uuid5
 
 from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -62,10 +63,17 @@ def build_structured_agent(
         tools=list(tools),
         system_prompt=SystemMessage(content=system_prompt),
         middleware=middleware,
-        response_format=output,
+        response_format=_output_tool(output),
         context_schema=context_schema,
         name=name,
     )
+
+
+# 출력 타입을 그대로 넘기면 공급자 강제로 내려가 첫 응답이 곧 산출이 되고 조사 도구를 부를 턴이 사라진다.
+def _output_tool(output: type[BaseModel]) -> ToolStrategy[Any]:
+    """산출을 도구 하나로 선언해 모델이 도구를 먼저 부른 뒤 답을 낼 수 있게 한다."""
+    # 스키마를 어긴 산출은 SDK가 삼키지 않고 이 저장소의 되받는 층과 장부를 지나야 한다.
+    return ToolStrategy(output, handle_errors=False)
 
 
 # 한 턴이 langchain agent의 여러 슈퍼스텝을 거치므로 재귀 한도는 예산이 아니라 폭주만 끊는 상한이다.

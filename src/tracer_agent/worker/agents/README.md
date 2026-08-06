@@ -186,7 +186,7 @@ flowchart LR
     USER --> AGENT
 ```
 
-`AgentPrompt.version()`은 template들이 동일한 계약 판을 사용하는지 확인한다. 구조화 에이전트는 출력 타입을 그대로 `response_format`에 주어 모델 프로파일이 지원하면 공급자가 스키마를 강제하고, Chat은 자유 텍스트 응답과 `ChatResult`를 사용한다.
+`AgentPrompt.version()`은 template들이 동일한 계약 판을 사용하는지 확인한다. 구조화 에이전트는 `ToolStrategy`로 산출을 도구 하나로 선언해 모델이 조사 도구를 먼저 부른 뒤 답을 낼 수 있게 하고, Chat은 자유 텍스트 응답과 `ChatResult`를 사용한다.
 
 ## 대화의 안전 정책 prompt
 
