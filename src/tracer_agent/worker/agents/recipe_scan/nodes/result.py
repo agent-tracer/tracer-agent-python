@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from tracer_agent.shared.agents.recipe_scan.models import (
     ProvenanceCatalog,
     ProvenanceWire,
     RecipeScanResult,
     RecipeScanState,
     ResultUpdate,
+)
+from tracer_agent.shared.agents.shared.models import EmptyResultReason
+
+from ...runtime.execution.trace import ExecutionTrace
+from ...runtime.routes import EMPTY, FINALIZE
+from ...shared.empty_result import (
+    DEGRADED,
+    INSUFFICIENT_EVIDENCE,
+    default_empty_result_reason,
 )
 
 
@@ -21,15 +32,48 @@ def wire_provenance(catalog: ProvenanceCatalog) -> ProvenanceWire:
     )
 
 
-def finalize_result(state: RecipeScanState) -> ResultUpdate:
-    """검증된 후보 목록을 레시피 결과로 직렬화한다."""
-    return {
-        "result": RecipeScanResult(
-            recipes=state["candidates"], provenance=wire_provenance(state["provenance"])
-        )
-    }
+def empty_result_reason(state: RecipeScanState) -> EmptyResultReason:
+    """후보 없이 끝난 실행이 왜 비었는지를 계약의 어휘로 판정한다."""
+    recorded = state["empty_result_reason"]
+    if recorded is not None:
+        return recorded
+    if state["validation_errors"]:
+        # 수리를 쓰고도 검증을 통과하지 못한 산출이라 저장할 패턴이 없던 실행과 갈린다.
+        return DEGRADED
+    if any(report.exhausted for report in state["reports"]):
+        return INSUFFICIENT_EVIDENCE
+    return default_empty_result_reason()
 
 
-def empty_result(state: RecipeScanState) -> ResultUpdate:
-    """후보가 없는 레시피 결과를 만든다."""
-    return {"result": RecipeScanResult(provenance=wire_provenance(state["provenance"]))}
+def finalize_result(trace: ExecutionTrace) -> Callable[[RecipeScanState], ResultUpdate]:
+    """검증된 후보 목록을 레시피 결과로 직렬화하는 종단 규칙이다."""
+
+    def build(state: RecipeScanState) -> ResultUpdate:
+        if not state["candidates"]:
+            _record_empty(trace, state, FINALIZE)
+        return {
+            "result": RecipeScanResult(
+                recipes=state["candidates"], provenance=wire_provenance(state["provenance"])
+            )
+        }
+
+    return build
+
+
+def empty_result(trace: ExecutionTrace) -> Callable[[RecipeScanState], ResultUpdate]:
+    """후보가 없는 레시피 결과를 만드는 종단 규칙이다."""
+
+    def build(state: RecipeScanState) -> ResultUpdate:
+        _record_empty(trace, state, EMPTY)
+        return {"result": RecipeScanResult(provenance=wire_provenance(state["provenance"]))}
+
+    return build
+
+
+def _record_empty(trace: ExecutionTrace, state: RecipeScanState, node_name: str) -> None:
+    """빈 결과의 사유를 궤적에 남겨 저장할 패턴이 없던 실행과 실패한 실행을 원장에서 구분한다."""
+    trace.record_orchestration_event(
+        "route.selected",
+        f"{node_name} -> empty result: {empty_result_reason(state)}",
+        node_name=node_name,
+    )

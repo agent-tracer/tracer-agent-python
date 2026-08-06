@@ -67,7 +67,22 @@ sequenceDiagram
 | `finalize` | `RecipeScanState` | 후보와 `ProvenanceCatalog`를 wire 결과로 직렬화한다 | `recipes`, `provenance` |
 | `empty` | `RecipeScanState` | 후보가 없거나 검증이 소진된 결과를 직렬화한다 | 빈 `recipes` |
 
+후보 없이 끝난 실행은 `finalize`와 `empty` 두 자리 모두에서 왜 비었는지를 `route.selected`
+궤적 이벤트로 남긴다. 사유의 어휘와 기본값은 계약의 `agent/shared/execution.budget.json`
+`orchestratorFailureDemotion.emptyResultReason`이 소유하며 `shared/empty_result.py`가 읽는다.
+`survey` 실패와 `repair` 예산 소진은 그 자리에서 `generation-degraded`를 상태에 적고,
+나머지는 종단 노드가 검증 오류와 전문가 소진 여부로 판정한다.
+
 `MAX_REDISPATCH_ROUNDS`를 넘는 재배정은 허용하지 않는다. 기준 task는 후보의 `contributing_slices`에 포함되어야 하며, 동일 turn의 중복 인용은 검증에서 거부한다.
+
+## 저장 창구로 보내는 draft
+
+`outputs.py`의 `_DRAFT_FIELDS`가 후보의 snake_case 칸을 저장 창구가 받는 camelCase 칸으로
+옮긴다. 목록에 없는 칸은 창구로 나가지 않으므로 후보에만 선 값은 배달되지 않는다. 모델의
+`revises_recipe_id`는 `parentRecipeId`가 되며, 이 실행이 본 판(`provenance.recipeRevs`)을
+`parentRecipeSeenRev`로 함께 싣고 본 판을 모르면 두 칸을 함께 뺀다. 받는 칸의 목록은 계약의
+`http/tracer-dependency.openapi.yaml`의 `RecipeDraft`와
+`conformance/cases/tracer.outputs.json`의 `drafts.recipe`가 소유한다.
 
 ## 도구 타입
 
@@ -176,4 +191,5 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py`, `reservation.py` |
 | 추적 API 읽기 | `reader.py`, `search.py`, `summary.py` |
+| 후보를 저장 창구로 배달 | `outputs.py` |
 | 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |

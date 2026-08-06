@@ -141,6 +141,8 @@ OrchestrationEventKind = Literal[
     "route.selected",
     "validation.failed",
 ]
+# 빈 결과로 끝난 실행이 왜 비었는지를 적는 어휘이며 계약의 execution.budget.json이 값을 소유한다.
+EmptyResultReason = Literal["no-pattern", "insufficient-evidence", "generation-degraded"]
 
 
 class AgentStepToolCall(BaseModel):

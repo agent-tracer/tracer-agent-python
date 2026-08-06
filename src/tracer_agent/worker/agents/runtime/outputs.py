@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from ..shared.empty_result import DEGRADED
 from .tracer_client import TracerApiPort
 
 _log = logging.getLogger(__name__)
@@ -14,17 +15,21 @@ _log = logging.getLogger(__name__)
 AGENT_AUTHOR = "agent"
 
 
-async def post_output(tracer: TracerApiPort, path: str, body: Mapping[str, Any], execution_id: str) -> None:
+async def post_output(tracer: TracerApiPort, path: str, body: Mapping[str, Any], execution_id: str) -> bool:
     """창구가 자기 트랜잭션으로 한 벌을 쓰며, 실패하면 원장의 결과가 남고 산출물은 서지 않는다."""
     try:
         await tracer.post(path, body)
     except Exception as undelivered:
-        _log.warning(
-            "agent.job.output.undelivered path=%s executionId=%s reason=%s",
+        # 종결은 이미 닫혔으므로 되돌리지 않되, 산출이 서지 않았다는 사실은 사유와 함께 남긴다.
+        _log.error(
+            "agent.job.output.undelivered path=%s executionId=%s emptyResultReason=%s cause=%s",
             path,
             execution_id,
+            DEGRADED,
             undelivered,
         )
+        return False
+    return True
 
 
 def object_items(data: Mapping[str, Any], key: str) -> list[dict[str, Any]]:

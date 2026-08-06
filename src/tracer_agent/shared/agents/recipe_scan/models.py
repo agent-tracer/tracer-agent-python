@@ -14,7 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import TurnCeilingState, fresh_budget_snapshot
-from ..shared.models import AgentExecutionRequest, Language, ModelFacing, TrimmedStr
+from ..shared.models import (
+    AgentExecutionRequest,
+    EmptyResultReason,
+    Language,
+    ModelFacing,
+    TrimmedStr,
+)
 
 # 한 태스크가 서로 다른 작업 turn을 담을 수 있으므로 스캔 한 번이 낼 수 있는 후보 수의 상한이다.
 MAX_RECIPE_CANDIDATES = 4
@@ -154,12 +160,16 @@ class RecipeStep(ModelFacing):
     order: int = Field(ge=1, le=50)
     action: TrimmedStr = Field(min_length=1, max_length=200)
     rationale: TrimmedStr | None = Field(default=None, max_length=300)
+    # 모든 단계가 이벤트로 관측되지는 않으므로 근거를 요구하지 않고 적힌 것만 대조한다.
+    evidence: list[TrimmedStr] = Field(default_factory=list, max_length=50)
     verify: RecipeVerify | None = None
 
 
 class RecipeTouchedFile(ModelFacing):
     path: TrimmedStr = Field(min_length=1, max_length=500)
     role: Literal["read", "write", "both"]
+    why: TrimmedStr | None = Field(default=None, max_length=200)
+    loadWhen: TrimmedStr | None = Field(default=None, max_length=200)
 
 
 class RecipeSlice(ModelFacing):
@@ -180,16 +190,35 @@ class RecipePitfall(ModelFacing):
     evidence: list[TrimmedStr] = Field(min_length=1, max_length=50)
 
 
+class RecipeRecovery(ModelFacing):
+    symptom: TrimmedStr = Field(min_length=1, max_length=500)
+    action: TrimmedStr = Field(min_length=1, max_length=500)
+    # 근거 없는 복구는 검증할 수 없는 주장이라 corrections·pitfalls와 같은 근거를 요구한다.
+    evidence: list[TrimmedStr] = Field(min_length=1, max_length=50)
+    stepOrder: int | None = Field(default=None, ge=1, le=50)
+
+
+# 계약이 항목 하나에 준 길이 한도이며 목록의 상한과 따로 강제한다.
+RecipeNote = Annotated[TrimmedStr, Field(min_length=1, max_length=200)]
+# 적용 조건과 입출력이 각각 실을 수 있는 항목 수의 상한이다.
+MAX_RECIPE_NOTES = 6
+
+
 class RecipeCandidate(ModelFacing):
     title: TrimmedStr = Field(min_length=1, max_length=120)
     intent: TrimmedStr = Field(min_length=1, max_length=200)
     description: TrimmedStr = Field(min_length=1, max_length=400)
+    use_when: list[RecipeNote] = Field(default_factory=list, max_length=MAX_RECIPE_NOTES)
     summary_md: TrimmedStr = Field(min_length=1, max_length=4000)
     request: TrimmedStr = Field(min_length=1, max_length=2000)
+    inputs: list[RecipeNote] = Field(default_factory=list, max_length=MAX_RECIPE_NOTES)
+    outputs: list[RecipeNote] = Field(default_factory=list, max_length=MAX_RECIPE_NOTES)
     corrections: list[RecipeCorrection] = Field(default_factory=list, max_length=20)
     pitfalls: list[RecipePitfall] = Field(default_factory=list, max_length=20)
+    recovery: list[RecipeRecovery] = Field(default_factory=list, max_length=10)
     governing_rules: list[TrimmedStr] = Field(default_factory=list, max_length=50)
-    revises_recipe_id: TrimmedStr | None = Field(default=None, max_length=200)
+    # 계약이 minLength 1을 두므로 공백만 남은 값이 개정 대상 검사를 비켜 가지 못하게 한다.
+    revises_recipe_id: TrimmedStr | None = Field(default=None, min_length=1, max_length=200)
     steps: list[RecipeStep] = Field(default_factory=list, max_length=20)
     touched_files: list[RecipeTouchedFile] = Field(default_factory=list, max_length=30)
     contributing_slices: list[RecipeSlice] = Field(min_length=1, max_length=20)
@@ -277,6 +306,7 @@ class RepairUpdate(TypedDict, total=False):
     provenance: ProvenanceCatalog
     repair_attempted: Required[bool]
     model_cost_usd: float
+    empty_result_reason: EmptyResultReason
 
 
 class ProvenanceWire(BaseModel):
@@ -317,6 +347,8 @@ class RecipeScanState(TurnCeilingState):
     candidates: list[RecipeCandidate]
     validation_errors: list[str]
     repair_attempted: bool
+    # 실패한 단계가 스스로 적은 사유이며, 없으면 종단 노드가 남은 상태로 판정한다.
+    empty_result_reason: EmptyResultReason | None
     result: RecipeScanResult | None
 
 
@@ -339,6 +371,7 @@ def initial_recipe_scan_state(
         "candidates": [],
         "validation_errors": [],
         "repair_attempted": False,
+        "empty_result_reason": None,
         "result": None,
         **fresh_budget_snapshot(),
     }

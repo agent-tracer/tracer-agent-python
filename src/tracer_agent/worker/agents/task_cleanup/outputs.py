@@ -13,10 +13,10 @@ CLEANUP_SUGGESTIONS_PATH = "/api/v1/task-cleanup/suggestions"
 MAX_SUGGESTIONS = 50
 
 
-async def deliver_suggestions(tracer: TracerApiPort, execution_id: str, data: dict[str, Any]) -> None:
+async def deliver_suggestions(tracer: TracerApiPort, execution_id: str, data: dict[str, Any]) -> bool:
     """스캔이 세운 정리 제안을 창구로 보내며 제안이 없으면 부르지 않는다."""
     suggestions = object_items(data, "suggestions")
     if not suggestions:
-        return
+        return True
     body = {"suggestions": suggestions[:MAX_SUGGESTIONS], "jobId": execution_id}
-    await post_output(tracer, CLEANUP_SUGGESTIONS_PATH, body, execution_id)
+    return await post_output(tracer, CLEANUP_SUGGESTIONS_PATH, body, execution_id)

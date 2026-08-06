@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import pytest
 from anthropic import AuthenticationError
 
-from tests.support.contract import conformance_case
+from tests.support.contract import agent_cases, conformance_case
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.narrate import narrate
 from tests.support.prompts import CONTRACT_VERSION, RECIPE_SCAN_PROMPT
@@ -23,6 +24,10 @@ from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerAp
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.execution.runner import execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
+from tracer_agent.worker.agents.shared.empty_result import (
+    default_empty_result_reason,
+    empty_result_reasons,
+)
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-recipe"}
 
@@ -105,7 +110,7 @@ _EVIDENCE_PLAN = DispatchPlan(
 )
 
 
-def _evidence_probes() -> dict[str, list[Any]]:
+def _evidence_probes(*, exhausted: bool = False) -> dict[str, list[Any]]:
     """두 전문가가 이벤트와 규칙을 읽어 조율자가 인용할 병합 장부를 만든다."""
     return {
         "무엇을 했나": [
@@ -114,14 +119,25 @@ def _evidence_probes() -> dict[str, list[Any]]:
                 "probe": "timeline",
                 "verdict": "마이그레이션과 대시보드 작업을 확인했다",
                 "excerpts": [{"taskId": "t1", "eventId": "event-1", "text": "마이그레이션"}],
-                "exhausted": False,
+                "exhausted": exhausted,
             },
         ],
         "어떤 규칙이 걸렸나": [
             [{"name": "list_rules", "args": {"taskId": "t1"}}],
-            {"probe": "rules", "verdict": "규칙 하나가 적용된다", "excerpts": [], "exhausted": False},
+            {"probe": "rules", "verdict": "규칙 하나가 적용된다", "excerpts": [], "exhausted": exhausted},
         ],
     }
+
+
+class SurveyCallFails(FakeToolLoopChat):
+    """조율자 계획 호출이 재시도 대상이 아닌 오류로 실패하는 대역이다."""
+
+    async def ainvoke(self, _messages: list[object]) -> object:
+        raise AuthenticationError(
+            "bad key",
+            response=httpx.Response(401, request=httpx.Request("POST", "https://api.anthropic.com")),
+            body=None,
+        )
 
 
 async def _run(
@@ -308,15 +324,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
 
 
 async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등하고_잡은_성공한다() -> None:
-    class FailingChat(FakeToolLoopChat):
-        async def ainvoke(self, _messages: list[object]) -> object:
-            raise AuthenticationError(
-                "bad key",
-                response=httpx.Response(401, request=httpx.Request("POST", "https://api.anthropic.com")),
-                body=None,
-            )
-
-    chat = FailingChat([])
+    chat = SurveyCallFails([])
 
     res = await _run(chat)
 
@@ -432,6 +440,50 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in probe_nodes)
     narrate("recipe-scan :: 전문가 하나가 무너져도 그래프가 완주하고 나머지가 합쳐진다", res)
+
+
+_EMPTY_RESULT_REASON = agent_cases("recipe-scan")["executionBudget"]["emptyResultReason"]
+_EMPTY_RESULT_MARKER = "empty result: "
+
+
+def test_빈_결과_사유의_어휘와_기본값을_계약에서_읽는다() -> None:
+    # 어휘가 계약과 갈리면 두 축이 같은 실행에 다른 사유를 적는다.
+    assert list(empty_result_reasons()) == _EMPTY_RESULT_REASON["values"]
+    assert default_empty_result_reason() == _EMPTY_RESULT_REASON["default"]
+
+
+def _reason_chat(declared: dict[str, Any]) -> FakeToolLoopChat:
+    """빈 결과 사유 케이스 하나가 요구하는 실행 모양을 대역 대본으로 만든다."""
+    if declared.get("surveyCallFails"):
+        return SurveyCallFails([])
+    if not declared.get("surveyProbes"):
+        return FakeToolLoopChat([], plan=DispatchPlan())
+    probes = _evidence_probes(exhausted=bool(declared.get("probeExhausted")))
+    if declared.get("repairExhausted"):
+        # 수리를 써도 같은 거짓 인용을 되풀이해 검증이 두 번 걸린다.
+        invalid = _recipe(governing_rules=["invented-rule"])
+        return FakeToolLoopChat(
+            [{"recipes": [invalid]}, {"recipes": [invalid]}], plan=_EVIDENCE_PLAN, worker_turns=probes
+        )
+    return FakeToolLoopChat([{"recipes": []}], plan=_EVIDENCE_PLAN, worker_turns=probes)
+
+
+@pytest.mark.parametrize("case", _EMPTY_RESULT_REASON["cases"], ids=lambda case: str(case["name"]))
+async def test_빈_결과로_끝난_실행이_계약이_정한_사유를_궤적에_남긴다(case: dict[str, Any]) -> None:
+    expect = case["expect"]
+
+    res = await _run(_reason_chat(case["input"]))
+
+    assert res.error is None and expect["executionOutcome"] == "success"
+    assert res.data is not None and res.data["recipes"] == []
+    reasons = [
+        step.content.split(_EMPTY_RESULT_MARKER, 1)[1]
+        for step in res.steps
+        if _EMPTY_RESULT_MARKER in step.content
+    ]
+    assert reasons == [expect["emptyResultReason"]]
+    for event_kind in expect.get("orchestrationEvents", []):
+        assert any(step.eventKind == event_kind for step in res.steps)
 
 
 def test_산출이_계약이_적은_칸을_빠짐없이_싣는다() -> None:

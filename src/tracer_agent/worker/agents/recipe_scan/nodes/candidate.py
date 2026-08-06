@@ -29,6 +29,7 @@ from ...runtime.telemetry.execution_metrics import (
     record_validation_failure,
 )
 from ...runtime.validation_nodes import ValidationNode
+from ...shared.empty_result import DEGRADED
 from ..deps import AGENT_NAME, RecipeDeps
 from ..policy import validate_recipe_candidates
 from ..prompts import build_user_prompt
@@ -172,7 +173,8 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
             deps.usage.record_orchestration_event(
                 "node.failed", f"{self.name} exhausted its reserved budget", node_name=self.name
             )
-            return {"candidates": [], "repair_attempted": True}
+            # 수리가 끊겨 후보를 잃은 실행은 저장할 패턴이 없던 실행이 아니라 생성이 실패한 실행이다.
+            return {"candidates": [], "repair_attempted": True, "empty_result_reason": DEGRADED}
         return {
             "candidates": synthesis.draft.recipes,
             "messages": synthesis.messages,

@@ -164,10 +164,17 @@ async def test_종단_노드가_이_실행의_근거_장부를_결과에_싣는�
         ruleIds={"rule-1"},
         recipeRevs={"recipe-1": 3},
     )
-    state: Any = {"candidates": [], "provenance": catalog}
+    state: Any = {
+        "candidates": [],
+        "provenance": catalog,
+        "reports": [],
+        "validation_errors": [],
+        "empty_result_reason": None,
+    }
+    trace = ExecutionTrace()
 
-    finalized = finalize_result(state)
-    empty = empty_result(state)
+    finalized = finalize_result(trace)(state)
+    empty = empty_result(trace)(state)
 
     wired = ProvenanceWire(
         eventIdsByTask={"task-1": ["event-1", "event-2"]},
@@ -178,6 +185,11 @@ async def test_종단_노드가_이_실행의_근거_장부를_결과에_싣는�
     # 워커가 소유권 밖의 인용까지 같은 기준으로 거르려면 빈 결과에도 장부가 실려야 한다.
     assert finalized["result"] == RecipeScanResult(provenance=wired)
     assert empty["result"] == RecipeScanResult(provenance=wired)
+    # 후보 없이 닫힌 두 종단은 왜 비었는지를 궤적에 남긴다.
+    assert [step.content for step in trace.steps] == [
+        "finalize -> empty result: no-pattern",
+        "empty -> empty result: no-pattern",
+    ]
 
 
 async def test_0턴_리스를_받은_전문가는_모델을_부르지_않는다() -> None:

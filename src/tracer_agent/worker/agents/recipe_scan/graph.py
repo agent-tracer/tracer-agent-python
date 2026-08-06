@@ -16,6 +16,7 @@ from ..runtime.llm.budget import lease_shares
 from ..runtime.routes import EMPTY
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import add_validation_tail, new_graph, observed
+from ..shared.empty_result import DEGRADED
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.survey import SurveyNode
@@ -47,7 +48,8 @@ async def _survey_error_handler(
     error: NodeError,  # noqa: ARG001 (langgraph는 이 이름으로만 주입한다)
 ) -> Command[str]:
     """조율자 계획이 재시도 끝에도 실패하면 빈 계획으로 하향해 결론 없는 성공으로 끝낸다."""
-    return Command(update={"plan": None}, goto=EMPTY)
+    # 낮춘 실행을 저장할 패턴이 없던 실행과 원장에서 구분하도록 실패한 사유를 함께 적는다.
+    return Command(update={"plan": None, "empty_result_reason": DEGRADED}, goto=EMPTY)
 
 
 def _remaining(state: RecipeScanState) -> tuple[int, float]:

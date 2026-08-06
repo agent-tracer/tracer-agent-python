@@ -51,10 +51,13 @@ def validate_recipe_candidate(
 ) -> list[str]:
     """recipe 후보가 수집한 출처만 인용하는지 검증한다."""
     errors: list[str] = []
-    slices = {item.taskId: item for item in candidate.contributing_slices}
-    if anchor_task_id not in slices:
+    # 같은 태스크를 여러 slice로 나눠 적을 수 있으므로 태스크 하나의 근거는 그 slice들의 합집합이다.
+    events_by_slice_task: dict[str, set[str]] = {}
+    for item in candidate.contributing_slices:
+        events_by_slice_task.setdefault(item.taskId, set()).update(item.eventIds)
+    if anchor_task_id not in events_by_slice_task:
         errors.append(f"contributing_slices must include anchor task {anchor_task_id}.")
-    elif not slices[anchor_task_id].eventIds:
+    elif not events_by_slice_task[anchor_task_id]:
         errors.append("The anchor contributing slice must cite at least one anchor event ID.")
     all_event_ids = set().union(*provenance.eventIdsByTask.values()) if provenance.eventIdsByTask else set()
     cited_event_ids: set[str] = set()
@@ -80,11 +83,23 @@ def validate_recipe_candidate(
         unknown = sorted(set(pitfall.evidence) - all_event_ids)
         if unknown:
             errors.append(f"Pitfall {index + 1} cites unsupported event IDs: {', '.join(unknown)}.")
+    for index, recovery in enumerate(candidate.recovery):
+        unknown = sorted(set(recovery.evidence) - all_event_ids)
+        if unknown:
+            errors.append(f"Recovery {index + 1} cites unsupported event IDs: {', '.join(unknown)}.")
     unknown_rules = sorted(set(candidate.governing_rules) - provenance.ruleIds)
     if unknown_rules:
         errors.append(f"Unsupported governing rule IDs: {', '.join(unknown_rules)}.")
-    if candidate.revises_recipe_id and candidate.revises_recipe_id not in provenance.recipeRevs:
+    # 빈 문자열은 모델이 이미 거절하므로 여기서 가리는 것은 개정 대상을 적지 않은 후보뿐이다.
+    if candidate.revises_recipe_id is not None and candidate.revises_recipe_id not in provenance.recipeRevs:
         errors.append(f"Unsupported revises_recipe_id: {candidate.revises_recipe_id}.")
+    for index, step in enumerate(candidate.steps):
+        # 모든 단계가 이벤트로 관측되지는 않으므로 근거를 적지 않은 단계는 건너뛴다.
+        if not step.evidence:
+            continue
+        unknown = sorted(set(step.evidence) - all_event_ids)
+        if unknown:
+            errors.append(f"Step {index + 1} cites unsupported event IDs: {', '.join(unknown)}.")
     return errors
 
 
