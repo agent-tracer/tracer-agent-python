@@ -103,7 +103,11 @@ async def issue_job_execution_envelope(
     if api_key is None:
         return error_envelope(*JOB_KEY_MISSING)
 
-    data = job_envelope(api_key=api_key, catalog=CATALOG[kind])
+    data = job_envelope(
+        api_key=api_key,
+        catalog=CATALOG[kind],
+        chosen_model=await credentials.chosen_model(payload.userId),
+    )
     return JSONResponse(status_code=200, content={"ok": True, "data": data})
 
 

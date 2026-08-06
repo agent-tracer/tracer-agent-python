@@ -6,6 +6,7 @@ from typing import Any
 
 from tracer_agent.shared.agents.shared import scope_token
 
+from ..settings.catalog import knows_model
 from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
@@ -50,13 +51,23 @@ def chat_envelope(
     }
 
 
-def job_envelope(*, api_key: str, catalog: ExecutionCatalog) -> dict[str, Any]:
-    """잡 한 시도가 쓸 카탈로그 값과 자격을 봉투로 낸다."""
+def job_envelope(
+    *, api_key: str, catalog: ExecutionCatalog, chosen_model: str | None = None
+) -> dict[str, Any]:
+    """잡 한 시도가 쓸 카탈로그 값과 자격을 봉투로 내며 고른 모델만 기본 모델을 덮는다."""
     return {
-        "model": catalog.default_model,
+        "model": _model(catalog, chosen_model),
         "fallbackModel": catalog.fallback_model,
         "apiKey": api_key,
         "modelRates": wire_model_rates(),
         "limits": wire_limits(catalog),
         "deadlineMs": catalog.deadline_ms,
     }
+
+
+# 예산과 턴과 마감은 잡이 하는 일의 크기에서 나오므로 모델을 바꿔도 종류가 그대로 갖는다.
+def _model(catalog: ExecutionCatalog, chosen: str | None) -> str:
+    """설정이 고른 모델이며 카탈로그가 모르는 값이면 그 종류의 기본 모델을 쓴다."""
+    if chosen is None or not knows_model(chosen):
+        return catalog.default_model
+    return chosen

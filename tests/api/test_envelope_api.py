@@ -38,15 +38,19 @@ class SingleSql:
 
 
 class FakeCredentials:
-    """설정 원장에 붙지 않고 미리 정한 자격만 내주는 창구 대역이다."""
+    """설정 원장에 붙지 않고 미리 정한 자격과 모델만 내주는 창구 대역이다."""
 
     def __init__(self) -> None:
         self.stored: str | None = API_KEY
+        self.model: str | None = None
         self.asked: list[str] = []
 
     async def api_key(self, user_id: str) -> str | None:
         self.asked.append(user_id)
         return self.stored
+
+    async def chosen_model(self, _user_id: str) -> str | None:
+        return self.model
 
 
 @pytest.fixture
@@ -209,3 +213,35 @@ def test_사용자가_없는_본문은_400을_낸다(client: TestClient) -> None
 
     assert res.status_code == 400
     assert res.json()["error"]["code"] == "validation_error"
+
+
+def test_잡_봉투는_설정이_고른_모델로_기본_모델을_덮는다(
+    client: TestClient, credentials: FakeCredentials
+) -> None:
+    credentials.model = "claude-sonnet-5"
+
+    data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
+
+    assert data["model"] == "claude-sonnet-5"
+
+
+def test_설정이_모델을_덮어도_한도와_대체_모델은_종류가_갖는다(
+    client: TestClient, credentials: FakeCredentials
+) -> None:
+    credentials.model = "claude-sonnet-5"
+
+    data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
+
+    assert data["fallbackModel"] == "claude-haiku-4-5"
+    assert data["limits"]["budgetUsd"] == 0.2
+    assert data["deadlineMs"] == 300_000
+
+
+def test_카탈로그가_모르는_모델_설정은_종류의_기본_모델로_본다(
+    client: TestClient, credentials: FakeCredentials
+) -> None:
+    credentials.model = "gpt-9"
+
+    data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
+
+    assert data["model"] == "claude-haiku-4-5"

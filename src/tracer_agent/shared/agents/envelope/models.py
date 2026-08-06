@@ -9,12 +9,19 @@ from pydantic import BaseModel, ConfigDict, Field
 # 사용자 설정에서 모델 자격을 찾는 키다.
 API_KEY_SETTING = "anthropic.api_key"
 
+# 사용자 설정에서 잡이 쓸 모델을 찾는 키다.
+MODEL_SETTING = "anthropic.model"
+
 
 class ModelCredentialSource(Protocol):
-    """사용자 설정에 저장된 모델 자격을 평문으로 내주는 창구다."""
+    """사용자 설정에 저장된 모델 자격과 고른 모델을 평문으로 내주는 창구다."""
 
     async def api_key(self, user_id: str) -> str | None:
         """그 사용자가 저장해 둔 모델 자격이며 없으면 None이다."""
+        ...
+
+    async def chosen_model(self, user_id: str) -> str | None:
+        """그 사용자가 고른 모델이며 고르지 않았으면 None이다."""
         ...
 
 
