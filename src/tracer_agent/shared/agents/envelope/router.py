@@ -10,8 +10,9 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql
+from ..shared.model_tiering import CHAT_KIND
 from ..shared.wire import SuccessEnvelope, error_envelope, error_responses, read_body, validation_details
-from .catalog import CATALOG, CHAT_KIND, JOB_KINDS
+from .catalog import CATALOG, JOB_KINDS
 from .grants import issue_draft_grant
 from .issue import chat_envelope, job_envelope
 from .models import JobEnvelopeBody, ModelCredentialSource
@@ -104,6 +105,7 @@ async def issue_job_execution_envelope(
         return error_envelope(*JOB_KEY_MISSING)
 
     data = job_envelope(
+        kind=kind,
         api_key=api_key,
         catalog=CATALOG[kind],
         chosen_model=await credentials.chosen_model(payload.userId),

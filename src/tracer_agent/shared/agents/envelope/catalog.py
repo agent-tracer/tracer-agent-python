@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..shared.model_tiering import CHAT_KIND
 from ..shared.models import ExecutionLimitsDTO, ModelRateDTO
-
-CHAT_KIND = "chat"
 
 # 백만 토큰당 USD이며 캐시 쓰기는 입력의 1.25배, 캐시 읽기는 입력의 0.1배다.
 MODEL_RATES: dict[str, ModelRateDTO] = {
@@ -23,8 +22,6 @@ class ExecutionCatalog:
 
     default_model: str
     fallback_model: str | None
-    # 종류마다 허용 모델을 좁게 두는 것이 절감의 첫 자리이며, 예산은 이 목록을 전제로 잡힌다.
-    allowed_models: tuple[str, ...]
     limits: ExecutionLimitsDTO
     deadline_ms: int
 
@@ -33,28 +30,24 @@ CATALOG: dict[str, ExecutionCatalog] = {
     CHAT_KIND: ExecutionCatalog(
         default_model="claude-sonnet-4-6",
         fallback_model=None,
-        allowed_models=("claude-sonnet-4-6", "claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"),
         limits=ExecutionLimitsDTO(budgetUsd=1.2, maxTurns=14, maxOutputTokens=4_000),
         deadline_ms=600_000,
     ),
     "title.suggestion": ExecutionCatalog(
         default_model="claude-haiku-4-5",
         fallback_model="claude-haiku-4-5",
-        allowed_models=("claude-haiku-4-5", "claude-sonnet-4-6", "claude-sonnet-5"),
         limits=ExecutionLimitsDTO(budgetUsd=0.2, maxTurns=12, maxOutputTokens=4_000),
         deadline_ms=300_000,
     ),
     "recipe.scan": ExecutionCatalog(
         default_model="claude-sonnet-4-6",
         fallback_model="claude-haiku-4-5",
-        allowed_models=("claude-sonnet-4-6", "claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"),
         limits=ExecutionLimitsDTO(budgetUsd=2.0, maxTurns=15, maxOutputTokens=16_000),
         deadline_ms=720_000,
     ),
     "task.cleanup": ExecutionCatalog(
         default_model="claude-haiku-4-5",
         fallback_model="claude-haiku-4-5",
-        allowed_models=("claude-haiku-4-5", "claude-sonnet-4-6", "claude-sonnet-5"),
         limits=ExecutionLimitsDTO(budgetUsd=0.5, maxTurns=16, maxOutputTokens=16_000),
         deadline_ms=600_000,
     ),

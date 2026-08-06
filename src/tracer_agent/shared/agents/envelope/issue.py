@@ -6,6 +6,7 @@ from typing import Any
 
 from tracer_agent.shared.agents.shared import scope_token
 
+from ..shared.model_tiering import allowed_models
 from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
@@ -51,11 +52,11 @@ def chat_envelope(
 
 
 def job_envelope(
-    *, api_key: str, catalog: ExecutionCatalog, chosen_model: str | None = None
+    *, kind: str, api_key: str, catalog: ExecutionCatalog, chosen_model: str | None = None
 ) -> dict[str, Any]:
     """잡 한 시도가 쓸 카탈로그 값과 자격을 봉투로 내며 고른 모델만 기본 모델을 덮는다."""
     return {
-        "model": _model(catalog, chosen_model),
+        "model": _model(kind, catalog, chosen_model),
         "fallbackModel": catalog.fallback_model,
         "apiKey": api_key,
         "modelRates": wire_model_rates(),
@@ -65,8 +66,8 @@ def job_envelope(
 
 
 # 예산은 허용 목록을 전제로 잡히므로 목록 밖 모델을 실으면 상한에 닿아 끝난다.
-def _model(catalog: ExecutionCatalog, chosen: str | None) -> str:
+def _model(kind: str, catalog: ExecutionCatalog, chosen: str | None) -> str:
     """설정이 고른 모델이며 그 종류가 허용하지 않은 값이면 기본 모델을 쓴다."""
-    if chosen is None or chosen not in catalog.allowed_models:
+    if chosen is None or chosen not in allowed_models(kind):
         return catalog.default_model
     return chosen

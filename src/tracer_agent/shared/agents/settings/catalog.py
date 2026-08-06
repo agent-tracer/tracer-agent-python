@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..envelope.catalog import CATALOG
+from ..shared.model_tiering import offered_models
 from .execution import model_kinds
 from .models import ModelOption
 
@@ -15,21 +15,9 @@ MODEL_OPTIONS: tuple[ModelOption, ...] = (
 )
 
 
-# 설정이 하나뿐이므로 어느 한 종류라도 허용하지 않는 모델은 골라도 그 종류에 걸리지 않는다.
-def _offered_ids() -> frozenset[str]:
-    """설정이 실리는 종류가 모두 함께 허용하는 모델의 이름이다."""
-    kinds = [kind for kind in model_kinds() if kind in CATALOG]
-    if not kinds:
-        return frozenset(option.id for option in MODEL_OPTIONS)
-    shared = set(CATALOG[kinds[0]].allowed_models)
-    for kind in kinds[1:]:
-        shared &= set(CATALOG[kind].allowed_models)
-    return frozenset(shared)
-
-
 def model_options() -> tuple[ModelOption, ...]:
     """고를 수 있는 모델을 이름 오름차순으로 낸다."""
-    offered = _offered_ids()
+    offered = offered_models(model_kinds())
     chosen = [option for option in MODEL_OPTIONS if option.id in offered]
     return tuple(sorted(chosen, key=lambda option: option.id))
 

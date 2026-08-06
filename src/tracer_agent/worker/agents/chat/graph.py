@@ -6,7 +6,8 @@ from langgraph.graph import END, START
 from langgraph.types import RetryPolicy, TimeoutPolicy
 
 from tracer_agent.shared.agents.chat.models import ChatState
-from tracer_agent.shared.agents.envelope.catalog import CATALOG, CHAT_KIND
+from tracer_agent.shared.agents.envelope.catalog import CATALOG
+from tracer_agent.shared.agents.shared.model_tiering import CHAT_KIND
 
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import new_graph, observed
