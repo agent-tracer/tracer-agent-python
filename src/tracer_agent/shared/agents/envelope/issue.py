@@ -6,7 +6,6 @@ from typing import Any
 
 from tracer_agent.shared.agents.shared import scope_token
 
-from ..settings.catalog import knows_model
 from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
@@ -65,9 +64,9 @@ def job_envelope(
     }
 
 
-# 예산과 턴과 마감은 잡이 하는 일의 크기에서 나오므로 모델을 바꿔도 종류가 그대로 갖는다.
+# 예산은 허용 목록을 전제로 잡히므로 목록 밖 모델을 실으면 상한에 닿아 끝난다.
 def _model(catalog: ExecutionCatalog, chosen: str | None) -> str:
-    """설정이 고른 모델이며 카탈로그가 모르는 값이면 그 종류의 기본 모델을 쓴다."""
-    if chosen is None or not knows_model(chosen):
+    """설정이 고른 모델이며 그 종류가 허용하지 않은 값이면 기본 모델을 쓴다."""
+    if chosen is None or chosen not in catalog.allowed_models:
         return catalog.default_model
     return chosen

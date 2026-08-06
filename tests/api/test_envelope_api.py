@@ -245,3 +245,21 @@ def test_카탈로그가_모르는_모델_설정은_종류의_기본_모델로_�
     data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
 
     assert data["model"] == "claude-haiku-4-5"
+
+
+def test_그_종류가_허용하지_않은_모델_설정은_기본_모델로_본다(
+    client: TestClient, credentials: FakeCredentials
+) -> None:
+    # 예산은 허용 목록을 전제로 잡히므로 목록 밖 모델을 실으면 상한에 닿아 끝난다.
+    credentials.model = "claude-opus-5"
+
+    data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
+
+    assert data["model"] == "claude-haiku-4-5"
+
+
+def test_턴_상한은_폭주만_끊도록_넉넉하고_비용은_달러가_조인다(client: TestClient) -> None:
+    data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]
+
+    assert data["limits"]["maxTurns"] >= 10
+    assert data["limits"]["budgetUsd"] == 0.2

@@ -28,3 +28,8 @@ def finalize_directive(*, structured_output: bool) -> str:
     """예산이 다한 실행에 그 실행의 최종 산출 형태에 맞는 마무리 지시를 고른다."""
     directive = _pacing()["landingDirective"]
     return str(directive["structured"] if structured_output else directive["freeText"])
+
+
+def landing_reserve_calls() -> int:
+    """도구를 닫은 뒤에도 마무리 호출 하나가 남으므로 그 몫을 미리 뗀다."""
+    return int(_pacing()["landingReserve"]["calls"])

@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage
 
 from ..errors import BudgetExceeded
 from ..pricing import ModelRates
+from .pacing import landing_reserve_calls
 from .trajectory import extract_token_usage, message_identity
 
 _lease_ids = count(1)
@@ -299,9 +300,11 @@ class SharedToolLoopBudget:
 
     @property
     def landing(self) -> bool:
+        reserve = landing_reserve_calls()
         return (
-            self._spent + self._peak >= self._max
-            or self._execution.spent + self._execution.peak_call_cost_usd >= self._execution.max_cost_usd
+            self._spent + self._peak * reserve >= self._max
+            or self._execution.spent + self._execution.peak_call_cost_usd * reserve
+            >= self._execution.max_cost_usd
         )
 
     def land(self) -> None:
