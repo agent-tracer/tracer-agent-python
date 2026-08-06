@@ -33,7 +33,7 @@ def test_자격_키만_민감한_것으로_센다() -> None:
 
 
 def test_카탈로그_밖의_키는_쓸_수_없다() -> None:
-    assert is_setting_key("ruleGen.maxRulesPerTask")
+    assert not is_setting_key("ruleGen.maxRulesPerTask")
     assert not is_setting_key("anthropic.apiKey")
 
 

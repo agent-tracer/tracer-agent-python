@@ -12,7 +12,6 @@ from ..shared.instant import iso
 SettingKey = Literal[
     "anthropic.api_key",
     "anthropic.model",
-    "ruleGen.maxRulesPerTask",
     "taskCleanup.maxSuggestions",
     "claude.outputLanguage",
 ]
