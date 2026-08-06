@@ -55,6 +55,14 @@ def test_고를_수_있는_모델을_이름_오름차순으로_낸다() -> None:
     assert "claude-sonnet-5" in ids
 
 
+def test_어느_잡도_허용하지_않는_모델은_고를_수_없다() -> None:
+    # 설정이 하나뿐이라 어느 한 종류라도 막는 모델을 내면 고른 값이 그 종류에 걸리지 않는다.
+    ids = [option.id for option in model_options()]
+
+    assert "claude-opus-5" not in ids
+    assert knows_model("claude-opus-5") is False
+
+
 def test_단가를_아는_모델만_고를_수_있다() -> None:
     assert knows_model("claude-haiku-4-5")
     assert not knows_model("claude-unknown")

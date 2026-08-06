@@ -66,3 +66,9 @@ def normalize_max_suggestions(raw: str | None, cap: int) -> int:
     except (TypeError, ValueError):
         return default_max_suggestions()
     return min(max(parsed, 1), cap)
+
+
+def model_kinds() -> tuple[str, ...]:
+    """설정이 고른 모델이 실리는 잡 종류다."""
+    declared: Mapping[str, Any] = json.loads(SETTINGS_EXECUTION_PATH.read_text(encoding="utf-8"))
+    return tuple(str(kind) for kind in declared["envelope"]["model"]["kinds"])
