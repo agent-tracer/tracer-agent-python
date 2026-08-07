@@ -31,7 +31,7 @@ from ...runtime.node import GraphNode
 from ...runtime.pricing import ModelRates
 from ..checkpointer import seed_checkpoint
 from ..context import replay_messages
-from ..drafts import DraftPublisher
+from ..drafts import DraftSink
 from ..langchain_agent import build_chat_agent
 from ..memory import ChatMemoryClient
 from ..prompts import build_context_prompt
@@ -63,7 +63,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         fallback_chat: BaseChatModel | None,
         *,
         agent_name: str,
-        drafts: DraftPublisher | None = None,
+        drafts: DraftSink,
         system_prompt: str,
         language_directives: Mapping[str, str],
     ) -> None:
@@ -80,11 +80,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
 
     async def run(self, state: ChatState) -> ConverseUpdate:
         prepared = await self._prepare(state)
-        messages = (
-            await self._invoke(prepared)
-            if self._drafts is None
-            else await self._invoke_with_drafts(prepared, self._drafts)
-        )
+        messages = await self._stream(prepared)
         return {
             "messages": messages,
             "model_cost_usd": prepared.budget.delta,
@@ -92,14 +88,8 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             "proposals": prepared.proposals,
         }
 
-    async def _invoke(self, prepared: _PreparedTurn) -> list[BaseMessage]:
-        raw = await prepared.agent.ainvoke(
-            {"messages": prepared.messages_in}, context=prepared.context, config=prepared.config
-        )
-        return _messages_of(raw.get("messages")) if isinstance(raw, dict) else []
-
-    async def _invoke_with_drafts(self, prepared: _PreparedTurn, drafts: DraftPublisher) -> list[BaseMessage]:
-        """접수만 하고 끊긴 실행이라 진행 중인 답변을 창구로 되돌려 보내며 수행한다."""
+    async def _stream(self, prepared: _PreparedTurn) -> list[BaseMessage]:
+        """토큰을 받는 대로 수행하고 창구가 있으면 진행 중인 답변을 그리로 되돌려 보낸다."""
         collected: list[BaseMessage] = []
         # 한 도구 호출이 여러 조각에 걸쳐 오므로 이미 알린 호출을 여기서 기억한다.
         announced: set[str] = set()
@@ -114,16 +104,16 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
                 message = chunk[0]
                 if isinstance(message, AIMessage):
                     self._usage.mark_first_token()
-                    await drafts.push(step_content_text(message.content))
+                    await self._drafts.push(step_content_text(message.content))
                     for name in _fresh_tool_names(message, announced):
-                        await drafts.push_tool(name)
+                        await self._drafts.push_tool(name)
             elif mode == "updates" and isinstance(chunk, dict):
                 appended = _appended_messages(chunk)
                 # 도구 결과가 돌아왔으면 모델이 다시 생각하는 구간이라 표시를 옮긴다.
                 if any(isinstance(message, ToolMessage) for message in appended):
-                    await drafts.mark_phase("thinking")
+                    await self._drafts.mark_phase("thinking")
                 collected.extend(appended)
-        await drafts.flush()
+        await self._drafts.flush()
         return collected
 
     async def _prepare(self, state: ChatState) -> _PreparedTurn:

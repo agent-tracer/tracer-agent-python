@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from itertools import count
 from typing import Any
@@ -179,7 +180,8 @@ async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() ->
 
     # 간격 안에 들어온 조각은 묶이고, 창구는 매번 그때까지의 전문을 받는다.
     assert [body["text"] for body in posted] == ["정리", "정리했다"]
-    assert [body["draftSeq"] for body in posted] == [1, 2]
+    # 순번은 보낸 횟수가 아니라 받은 조각을 센다.
+    assert [body["draftSeq"] for body in posted] == [2, 3]
     assert [body["phase"] for body in posted] == ["responding", "responding"]
 
 
@@ -199,6 +201,7 @@ async def test_글자를_내지_않는_구간에도_무엇을_하는_중인지_�
         await publisher.push_tool("search_tasks")
         await publisher.mark_phase("thinking")
         await publisher.push("찾았다")
+        await publisher.flush()
 
     # 도구 구간과 그 뒤의 사고 구간이 글자 없이도 화면에 닿는다.
     assert [body["phase"] for body in posted] == ["tool", "thinking", "responding"]
@@ -280,3 +283,28 @@ async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선�
     타입들 = [message.type for message in 보낸것]
     첫_비시스템_위치 = next(index for index, 타입 in enumerate(타입들) if 타입 != "system")
     assert "system" not in 타입들[첫_비시스템_위치:], f"system 메시지가 human·ai 뒤에 왔다: {타입들}"
+
+
+async def test_창구가_느려도_토큰_소비를_막지_않는다() -> None:
+    released = asyncio.Event()
+    posted: list[dict[str, Any]] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        posted.append(json.loads(request.content))
+        await released.wait()
+        return httpx.Response(200, json={"stored": True})
+
+    ticks = count(0.0, 1.0)
+    callback = DraftCallback.model_validate(
+        {"url": "http://tracer-api.test/drafts", "token": "grant", "attempt": 1}
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        publisher = DraftPublisher(client, callback, lambda: next(ticks))
+        await publisher.push("첫")
+        # 창구가 응답하지 않아도 다음 조각을 계속 받는다.
+        await publisher.push("둘")
+        await publisher.push("셋")
+        released.set()
+        await publisher.flush()
+
+    assert [body["text"] for body in posted][-1] == "첫둘셋"

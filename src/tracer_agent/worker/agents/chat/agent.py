@@ -17,7 +17,7 @@ from ..runtime.routes import FINALIZE
 from ..runtime.telemetry.disclosure import TraceSafeMetadata
 from ..runtime.validation_graph import ValidationGraphContext
 from ..shared.prompt_source_port import AgentPrompt
-from .drafts import DraftPublisher
+from .drafts import DraftPublisher, DraftSink, NullDraftPublisher
 from .graph import CHAT_GRAPH, CHAT_NODE_NAMES
 from .nodes.converse import ConverseNode
 from .nodes.load_context import LoadContextNode
@@ -39,7 +39,7 @@ def _build_node(
     *,
     streaming: bool,
     checkpoints: GraphCheckpointProvider | None = None,
-    drafts: DraftPublisher | None = None,
+    drafts: DraftSink,
     prompt: AgentPrompt,
     chats: ChatPair | None = None,
 ) -> ConverseNode:
@@ -67,13 +67,15 @@ async def run_chat(
     chats: ChatPair | None = None,
 ) -> dict[str, Any]:
     """chat 노드를 실행 의존성과 결합해 대화 그래프를 수행한다."""
-    # 창구가 있으면 진행 중인 답변을 보내야 하므로 토큰이 흐르는 모델로 조립한다.
-    drafts = None if req.draftCallback is None else DraftPublisher(http_client, req.draftCallback)
+    # 대화는 토큰을 이어 받는 것이 본체이므로 창구 유무와 무관하게 스트리밍 모델로 조립한다.
+    drafts: DraftSink = (
+        NullDraftPublisher() if req.draftCallback is None else DraftPublisher(http_client, req.draftCallback)
+    )
     node = _build_node(
         req,
         http_client,
         usage,
-        streaming=drafts is not None,
+        streaming=True,
         checkpoints=checkpoints,
         drafts=drafts,
         prompt=prompt,
