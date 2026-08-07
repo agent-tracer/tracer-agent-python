@@ -121,6 +121,95 @@ Fallback은 같은 모델 재시도가 소진된 뒤에만 호출한다. 예산 
 
 관련 구현은 [graph.py](graph.py), [nodes/converse.py](nodes/converse.py), [langchain_agent.py](langchain_agent.py), [tools/registry.py](tools/registry.py), [prompts.py](prompts.py)에 있다.
 
+## 진행 표시와 실시간 전달
+
+사용자가 보는 것은 최종 답변이 아니라 답변이 만들어지는 과정이다. 이 절은 공급자의 신호가
+화면에 닿기까지 무엇을 거치는지 적는다.
+
+대화는 토큰을 이어 받는 것이 본체이므로 단발 호출 경로를 두지 않는다. `astream`으로만 수행하며,
+창구를 받지 못한 실행에서는 `NullDraftPublisher`가 그 자리를 대신해 흐름이 한 갈래로 남는다.
+
+### 싱크가 받는 신호와 구간
+
+`DraftPublisher`는 그래프가 주는 신호를 받아 누적 답변과 `phase` 한 칸으로 옮긴다. `phase`의
+값과 뜻은 계약이 소유하며 이 문서가 목록을 복제하지 않는다.
+
+```
+계약   contract/conformance/cases/chat.query.json
+executionPhase
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> starting
+    starting --> responding: AIMessage 조각
+    responding --> tool: 새 도구 이름
+    tool --> thinking: ToolMessage 도착
+    thinking --> responding: AIMessage 조각
+    responding --> [*]: 종결
+    tool --> [*]: 종결
+```
+
+답변이 흐르는 동안에는 `mark_phase("thinking")`이 와도 되돌리지 않는다. 이 예외는 두 구현체가
+같이 갖는다.
+
+도구가 실행되는 동안에는 그래프가 아무것도 내지 않는다. 그래서 서버는 그 구간의 경과를 갱신할 수
+없고, 경과는 화면이 `updatedAt`부터 국소적으로 센다.
+
+### 원장에 닿는 리듬
+
+TypeScript 워커는 원장에 직접 쓰지만 이 구현은 실행 창구를 지난다. 그래프 코드가 원장을 알지 않고
+전송 경계만 알기 때문이며, 이 차이는 계약의 `divergence.json`이 갖는다.
+
+```mermaid
+sequenceDiagram
+    participant G as chat graph
+    participant P as DraftPublisher
+    participant S as agent-api /drafts
+    participant D as agent-db
+    participant K as Kafka chat.execution.updates
+    participant A as agent-api SSE
+
+    G->>P: 첫 조각
+    P-)S: POST 를 뒤로 미루고 곧바로 돌아온다
+    Note over P: 이후 150ms 동안 받은 것은 묶는다
+    G->>P: 조각 여럿
+    P-)S: POST 한 번
+    S->>D: checkpoint_running
+    S->>A: 이 프로세스의 연결에 곧바로 알린다
+    S->>K: 다른 replica 에만
+    K-->>A: 다른 replica
+```
+
+- 첫 조각은 스로틀을 기다리지 않고 곧바로 보낸다.
+- 전송은 뒤로 미루고 순서만 지키므로 모델이 토큰을 소비하는 루프를 막지 않는다. 창구가 종결을
+  알리면 그 사실을 들고 있다가 다음 조각에서 실행을 접는다.
+- 순번은 보낸 횟수가 아니라 받은 조각을 센다. 늦게 도착한 프레임을 화면이 가릴 때 이 값을 본다.
+- 시도를 여는 `_begin_attempt`는 초안을 비우므로 그 직후에도 알린다. 알리지 않으면 화면이 이전
+  시도의 글을 재전송 주기까지 그대로 든다.
+- 접수가 스스로 만든 갱신은 브로커를 거치지 않고 이 프로세스의 연결에 먼저 닿는다. 초안이 창구를
+  지나는 이 구현에서는 그 지름길이 초안 경로에도 걸린다.
+
+### 프레임이 나가는 규칙
+
+`frames`는 신호나 주기로 깨어 정본을 다시 읽고 프레임을 낸다. 정본이 그대로면 프레임을 거른다.
+
+**주기 재전송은 이 거르기의 예외다.** 게이트웨이가 유휴로 판단해 연결을 끊지 않도록 정본이 같아도
+반드시 내보낸다. 재전송 주기는 계약이 갖는다.
+
+```mermaid
+flowchart TD
+    SIG[버스 신호 또는 프로세스 내 통지] --> READ[정본 재조회]
+    TICK[주기 재전송] --> READ
+    READ --> SAME{직전 프레임과 같나}
+    SAME -->|다르다| SEND[프레임 전송]
+    SAME -->|같고 주기 재전송| SEND
+    SAME -->|같고 신호| DROP[내지 않는다]
+    SEND --> TERM{종결 상태인가}
+    TERM -->|그렇다| CLOSE[연결을 닫는다]
+    TERM -->|아니다| SIG
+```
+
 ## Temporal 워크플로
 
 `chatThreadWorkflow`가 스레드 하나를 소유하고 `chatExecutionWorkflow`가 턴 하나를 소유한다.
