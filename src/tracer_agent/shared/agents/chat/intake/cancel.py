@@ -22,6 +22,14 @@ class UpdateSignal(Protocol):
         ...
 
 
+class LocalWake(Protocol):
+    """이 프로세스에 열려 있는 연결에만 곧바로 알리는 창구다."""
+
+    def notify(self, execution_id: str) -> None:
+        """이 실행을 보는 연결에 알린다."""
+        ...
+
+
 class ChatTurnCancellation:
     """진행 중인 턴을 취소로 닫고, 닫혔을 때에만 워크플로와 다른 replica에 알린다."""
 
@@ -30,18 +38,24 @@ class ChatTurnCancellation:
         sql: LedgerSql,
         dispatch: ExecutionDispatch,
         updates: UpdateSignal | None = None,
+        watch: LocalWake | None = None,
     ) -> None:
         self._sql = sql
         self._executions = ChatExecutionLedger(sql)
         self._threads = ChatIntakeLedger(sql)
         self._dispatch = dispatch
         self._updates = updates
+        self._watch = watch
 
     async def cancel(self, user_id: str, thread_id: str, execution_id: str, now: datetime) -> SqlRow:
         """실행 하나를 취소로 닫고 취소가 반영된 행을 낸다."""
         await self._require_owner(user_id, thread_id, execution_id)
-        if await self._executions.cancel_active(execution_id, now) and self._updates is not None:
-            await self._updates.publish(execution_id, {"executionId": execution_id})
+        if await self._executions.cancel_active(execution_id, now):
+            # 이 프로세스의 연결에는 브로커를 거치지 않고 곧바로 알린다.
+            if self._watch is not None:
+                self._watch.notify(execution_id)
+            if self._updates is not None:
+                await self._updates.publish(execution_id, {"executionId": execution_id})
         await self._dispatch.cancel(execution_id)
         canceled = await self._executions.find_by_id(execution_id)
         if canceled is None:

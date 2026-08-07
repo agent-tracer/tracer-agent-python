@@ -51,9 +51,16 @@ class RecordingDispatch:
 class SilentWatch:
     """알림 신호가 오지 않는 구독 창구를 대신한다."""
 
+    def __init__(self) -> None:
+        self.notified: list[str] = []
+
     def subscribe(self, _execution_id: str, _listener: Any) -> Any:
         """아무 신호도 주지 않고 그만 듣는 방법만 낸다."""
         return lambda: None
+
+    def notify(self, execution_id: str) -> None:
+        """이 프로세스가 스스로 알린 실행을 기억한다."""
+        self.notified.append(execution_id)
 
     async def close(self) -> None:
         """닫을 것이 없다."""

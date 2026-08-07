@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, read_body, validation_details
-from ..dependencies import Dispatch, Updates
+from ..dependencies import Dispatch, Updates, Watch
 from .cancel import ChatTurnCancellation
 from .models import PostMessagePayload, execution_dto, message_dto
 from .turn import ChatIntakeRejected, ChatTurnIntake
@@ -73,11 +73,12 @@ async def cancel_chat_turn(
     user_id: UserId,
     dispatch: Dispatch,
     updates: Updates,
+    watch: Watch,
 ) -> JSONResponse:
     """진행 중인 턴 하나를 끊고 결과나 사유를 계약이 정한 봉투로 낸다."""
     try:
         async with source.connect() as sql:
-            canceled = await ChatTurnCancellation(sql, dispatch, updates).cancel(
+            canceled = await ChatTurnCancellation(sql, dispatch, updates, watch).cancel(
                 user_id,
                 thread_id,
                 execution_id,

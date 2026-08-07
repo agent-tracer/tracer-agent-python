@@ -44,6 +44,10 @@ class WakingWatch:
         assert self._listener is not None
         self._listener()
 
+    def notify(self, _execution_id: str) -> None:
+        """이 프로세스가 스스로 알리는 자리이며 시험은 wake 를 직접 쓴다."""
+        self.wake()
+
     def _release(self) -> None:
         self.released = True
 

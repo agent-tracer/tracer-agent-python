@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...runtime.ledger import SqlRow
 from ...shared.wire import SuccessEnvelope, error_responses, ok
-from ..dependencies import Dispatch, ToolExecutor, Updates
+from ..dependencies import Dispatch, ToolExecutor, Updates, Watch
 from ..intake.cancel import UpdateSignal
 from ..intake.dispatch import ExecutionDispatch
 from ..intake.follow_up import follow_up_client_request_id, follow_up_input_hash
@@ -28,6 +28,7 @@ from .models import DecideToolBody, ProposeToolBody
 from .threads import CHAT_THREAD_PATH
 from .tool_calls import CONFIRMABLE_TOOLS, ChatToolArgsInvalid, plan_chat_tool_call
 from .tool_client import ChatToolExecutor, ChatToolFailed
+from .updates import ChatExecutionUpdates
 
 CHAT_CONFIRMATIONS_PATH = f"{CHAT_THREAD_PATH}/confirmations"
 CHAT_CONFIRMATION_PATH = f"{CHAT_CONFIRMATIONS_PATH}/{{confirmation_id}}"
@@ -46,7 +47,12 @@ router = APIRouter()
     responses=error_responses(400, 404),
 )
 async def propose_chat_tool(
-    thread_id: str, request: Request, source: ExecutionSql, user_id: UserId, updates: Updates
+    thread_id: str,
+    request: Request,
+    source: ExecutionSql,
+    user_id: UserId,
+    updates: Updates,
+    watch: Watch,
 ) -> JSONResponse:
     """확인이 필요한 도구 호출 하나를 실행하지 않고 대기 행에 세운다."""
     body = await read_payload(request, ProposeToolBody)
@@ -70,7 +76,7 @@ async def propose_chat_tool(
             pending = await ledger.insert_pending_tool(
                 generate_ulid(now), thread_id, body.toolName, args, now
             )
-            await _announce(updates, ledger, thread_id)
+            await _announce(updates, watch, ledger, thread_id)
     except ChatIntakeRejected as rejected:
         return rejection(rejected)
     return ok(
@@ -97,6 +103,7 @@ async def decide_chat_tool(
     source: ExecutionSql,
     user_id: UserId,
     updates: Updates,
+    watch: Watch,
     executor: ToolExecutor,
     dispatch: Dispatch,
 ) -> JSONResponse:
@@ -112,6 +119,7 @@ async def decide_chat_tool(
                 executor,
                 dispatch,
                 updates,
+                watch,
                 user_id,
                 thread_id,
                 confirmation_id,
@@ -131,6 +139,7 @@ async def _resolve(
     executor: ChatToolExecutor,
     dispatch: ExecutionDispatch,
     updates: UpdateSignal | None,
+    watch: ChatExecutionUpdates | None,
     user_id: str,
     thread_id: str,
     confirmation_id: str,
@@ -157,7 +166,7 @@ async def _resolve(
         # 거절로 이미 답한 자리라 이어 말할 턴을 세우지 않는다.
         else await _follow_up(ledger, intake, dispatch, user_id, thread_id, confirmation_id, anchor, now)
     )
-    await _announce(updates, ledger, thread_id)
+    await _announce(updates, watch, ledger, thread_id)
     return ok(
         {
             "confirmationId": confirmation_id,
@@ -209,12 +218,20 @@ async def _pending(ledger: ChatSurfaceLedger, thread_id: str, confirmation_id: s
     return pending
 
 
-async def _announce(updates: UpdateSignal | None, ledger: ChatSurfaceLedger, thread_id: str) -> None:
+async def _announce(
+    updates: UpdateSignal | None,
+    watch: ChatExecutionUpdates | None,
+    ledger: ChatSurfaceLedger,
+    thread_id: str,
+) -> None:
     """확인 대기는 스레드 것이므로 지금 열려 있는 실행 채널에 실어 다른 연결이 그것을 본다."""
-    if updates is None:
-        return
     active = await ledger.latest_active_execution(thread_id)
-    if active is not None:
+    if active is None:
+        return
+    # 이 프로세스의 연결에는 브로커를 거치지 않고 곧바로 알린다.
+    if watch is not None:
+        watch.notify(active)
+    if updates is not None:
         await updates.publish(active, {"executionId": active})
 
 

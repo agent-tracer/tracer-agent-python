@@ -24,6 +24,10 @@ class ChatExecutionUpdates(Protocol):
         """이 실행의 갱신을 듣기 시작하고 그만 듣는 방법을 낸다."""
         ...
 
+    def notify(self, execution_id: str) -> None:
+        """이 프로세스에 열려 있는 연결에만 곧바로 알린다."""
+        ...
+
 
 class ConsumerFactory(Protocol):
     """브로커 주소와 토픽을 받아 소비자 하나를 만든다."""
@@ -90,10 +94,14 @@ class UpdateSubscriber:
             self._consumer = consumer
             self._task = asyncio.ensure_future(self._listen(consumer))
 
+    def notify(self, execution_id: str) -> None:
+        """이 프로세스가 스스로 만든 갱신은 브로커를 거치지 않고 곧바로 연결에 닿는다."""
+        for listener in tuple(self._listeners.get(execution_id, ())):
+            listener()
+
     async def _listen(self, consumer: Any) -> None:
         async for record in consumer:
-            for listener in tuple(self._listeners.get(_execution_id(record), ())):
-                listener()
+            self.notify(_execution_id(record))
 
 
 def _execution_id(record: Any) -> str:
