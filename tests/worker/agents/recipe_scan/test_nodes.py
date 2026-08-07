@@ -70,7 +70,7 @@ def _request(**overrides: Any) -> RecipeScanRequest:
     return RecipeScanRequest.model_validate(values)
 
 
-async def test_전문가_실행_예외는_실패_보고로_강등된다() -> None:
+async def test_전문가_실행_예외는_실패_보고로_낮춰진다() -> None:
     class BoomChat(FakeToolLoopChat):
         async def ainvoke(self, _messages: list[object]) -> object:
             raise RuntimeError("agent blew up")
@@ -98,7 +98,7 @@ async def test_전문가_실행_예외는_실패_보고로_강등된다() -> Non
     assert result["model_turns_used"] == 4
 
 
-async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강등되고_다른_전문가의_보고는_남는다() -> None:
+async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_낮춰지고_다른_전문가의_보고는_남는다() -> None:
     class SlowChat(FakeToolLoopChat):
         async def ainvoke(self, messages: list[object]) -> object:
             await asyncio.sleep(0.2)
@@ -130,7 +130,7 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_강�
     assert fast_result["reports"][0].exhausted is False
 
 
-async def test_취소는_강등되지_않고_전파된다() -> None:
+async def test_취소는_낮춰지지_않고_전파된다() -> None:
     entered = asyncio.Event()
 
     class HangingChat(FakeToolLoopChat):

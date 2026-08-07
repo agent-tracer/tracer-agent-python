@@ -281,7 +281,7 @@ _REDISPATCH_QUESTION = "다른 태스크에도 있나"
 _REDISPATCH = [{"probe": "repetition", "depth": "normal", "question": _REDISPATCH_QUESTION}]
 
 
-async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_부르고_완주한다() -> None:
+async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_부르고_끝까지_실행한다() -> None:
     chat = FakeToolLoopChat(
         [{"recipes": [], "redispatch": _REDISPATCH}, {"recipes": [_recipe()]}],
         plan=_EVIDENCE_PLAN,
@@ -301,7 +301,7 @@ async def test_조율자가_재파견을_요청하면_전문가를_한_번_더_�
     # 초기 두 전문가에 재파견 하나를 더해 전문가 노드는 세 번 실행된다.
     probes = [step for step in res.steps if step.nodeName == "probe" and step.eventKind == "node.completed"]
     assert len(probes) == 3
-    narrate("recipe-scan :: 조율자가 재파견을 요청하면 전문가를 한 번 더 부르고 완주한다", res)
+    narrate("recipe-scan :: 조율자가 재파견을 요청하면 전문가를 한 번 더 부르고 끝까지_실행한다", res)
 
 
 async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝낸다() -> None:
@@ -323,7 +323,7 @@ async def test_재파견_상한을_넘긴_두_번째_요청은_무시하고_끝�
     narrate("recipe-scan :: 재파견 상한을 넘긴 두 번째 요청은 무시하고 끝낸다", res)
 
 
-async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등하고_잡은_성공한다() -> None:
+async def test_조율자_모델_호출이_실패하면_빈_계획으로_낮추고_잡은_성공한다() -> None:
     chat = SurveyCallFails([])
 
     res = await _run(chat)
@@ -333,10 +333,10 @@ async def test_조율자_모델_호출이_무너지면_빈_계획으로_강등�
     # 계획 단계가 첫 모델 호출이므로 실패도 거기서 궤적에 남는다.
     events = [step.eventKind for step in res.steps if step.nodeName == "survey"]
     assert events == ["node.started", "node.failed"]
-    narrate("recipe-scan :: 조율자 모델 호출이 무너지면 빈 계획으로 강등하고 잡은 성공한다", res)
+    narrate("recipe-scan :: 조율자 모델 호출이 실패하면 빈 계획으로 낮추고 잡은 성공한다", res)
 
 
-async def test_예산_초과는_조율자를_재시도하지_않고_바로_강등한다() -> None:
+async def test_예산_초과는_조율자를_재시도하지_않고_바로_낮춘다() -> None:
     class BudgetBlownChat(FakeToolLoopChat):
         def __init__(self) -> None:
             super().__init__([])
@@ -353,10 +353,10 @@ async def test_예산_초과는_조율자를_재시도하지_않고_바로_강�
     # 재시도가 걸렸다면 호출 횟수가 한 번을 넘는다.
     assert chat.calls == 1
     assert res.error is None and res.data is not None and res.data["recipes"] == []
-    narrate("recipe-scan :: 예산 초과는 조율자를 재시도하지 않고 바로 강등한다", res)
+    narrate("recipe-scan :: 예산 초과는 조율자를 재시도하지 않고 바로 낮춘다", res)
 
 
-async def test_출력_절단은_조율자를_재시도하지_않고_바로_강등한다() -> None:
+async def test_출력_절단은_조율자를_재시도하지_않고_바로_낮춘다() -> None:
     class TruncatedChat(FakeToolLoopChat):
         def __init__(self) -> None:
             super().__init__([])
@@ -372,7 +372,7 @@ async def test_출력_절단은_조율자를_재시도하지_않고_바로_강�
 
     assert chat.calls == 1
     assert res.error is None and res.data is not None and res.data["recipes"] == []
-    narrate("recipe-scan :: 출력 절단은 조율자를 재시도하지 않고 바로 강등한다", res)
+    narrate("recipe-scan :: 출력 절단은 조율자를 재시도하지 않고 바로 낮춘다", res)
 
 
 async def test_조율자가_세운_계획이_조사_지시문에_반영된다() -> None:
@@ -391,7 +391,7 @@ async def test_조율자가_세운_계획이_조사_지시문에_반영된다() 
     narrate("recipe-scan :: 조율자가 세운 계획이 조사 지시문에 반영된다", res)
 
 
-async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈다() -> None:
+async def test_계획한_전문가들이_각자_도구만_가지고_병렬로_실행한다() -> None:
     plan = DispatchPlan(
         probes=[
             {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
@@ -411,10 +411,10 @@ async def test_계획한_전문가들이_각자_도구만_쥐고_병렬로_돈�
     # 두 전문가가 모두 실행되었음이 궤적에 남는다.
     probe_nodes = [step for step in res.steps if step.nodeName == "probe"]
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
-    narrate("recipe-scan :: 계획한 전문가들이 각자 도구만 쥐고 병렬로 돈다", res)
+    narrate("recipe-scan :: 계획한 전문가들이 각자 도구만 가지고 병렬로 실행한다", res)
 
 
-async def test_전문가_하나가_무너져도_그래프가_완주하고_나머지가_합쳐진다() -> None:
+async def test_전문가_하나가_실패해도_그래프가_끝까지_실행하고_나머지가_합쳐진다() -> None:
     class OneProbeFails(FakeToolLoopChat):
         async def ainvoke(self, messages: list[object]) -> object:
             names = {getattr(tool, "name", "") for tool in self.bound_tools}
@@ -439,7 +439,7 @@ async def test_전문가_하나가_무너져도_그래프가_완주하고_나머
     # 두 분기 모두 노드로는 끝까지 실행되고 실패로 기록된 분기는 없다.
     assert sum(1 for step in probe_nodes if step.eventKind == "node.completed") == 2
     assert not any(step.eventKind == "node.failed" for step in probe_nodes)
-    narrate("recipe-scan :: 전문가 하나가 무너져도 그래프가 완주하고 나머지가 합쳐진다", res)
+    narrate("recipe-scan :: 전문가 하나가 실패해도 그래프가 끝까지_실행하고 나머지가 합쳐진다", res)
 
 
 _EMPTY_RESULT_REASON = agent_cases("recipe-scan")["executionBudget"]["emptyResultReason"]

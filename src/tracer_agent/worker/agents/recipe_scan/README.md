@@ -53,7 +53,7 @@ sequenceDiagram
     end
 ```
 
-예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `lease_shares`로 전문가가 고른 depth의 몫에 따라 배분한다. `survey` 실패는 빈 계획으로 강등되어 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
+예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `lease_shares`로 전문가가 고른 depth의 몫에 따라 배분한다. `survey` 실패는 빈 계획으로 낮춰져 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
 
 ## 노드와 이동
 
@@ -174,7 +174,7 @@ stateDiagram-v2
 **자격은 생성 액티비티 밖으로 나가지 않는다.** 준비는 도메인 문맥만 모으고 그 산출이 워크플로
 이력에 남는다. 이 시도가 쓸 봉투는 생성이 실행 직전에 받으며 종결은 자격을 뺀 정산 값만 받는다.
 
-**생성이 다시 시도돼도 끝난 노드를 다시 태우지 않는다.** 그래프가 잡 하나를 열쇠로 삼는
+**생성이 다시 시도돼도 끝난 노드를 다시 실행하지 않는다.** 그래프가 잡 하나를 열쇠로 삼는
 LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다. 그 상태는 계약이 소유하지 않는
 `agent_langgraph` 스키마에 있으며 `divergence.json`의 `job.workflow.shape`가 그 자리를 갖는다.
 
