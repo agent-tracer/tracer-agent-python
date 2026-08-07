@@ -25,6 +25,14 @@ class ChatStreamRules:
     headers: Mapping[str, str]
 
 
+@dataclass(frozen=True)
+class ChatDraftRules:
+    """실행기가 받은 조각을 원장에 적는 리듬이며 두 구현체가 같은 값을 읽는다."""
+
+    interval_s: float
+    edge: str
+
+
 @lru_cache(maxsize=1)
 def chat_stream_rules() -> ChatStreamRules:
     """계약의 밀리초 주기를 초로 바꾸고 응답 헤더를 함께 낸다."""
@@ -32,4 +40,14 @@ def chat_stream_rules() -> ChatStreamRules:
     return ChatStreamRules(
         resend_interval_s=float(declared["resendIntervalMs"]) / _MILLIS_PER_SECOND,
         headers=MappingProxyType({str(name): str(value) for name, value in declared["headers"].items()}),
+    )
+
+
+@lru_cache(maxsize=1)
+def chat_draft_rules() -> ChatDraftRules:
+    """계약의 밀리초 간격을 초로 바꾸고 어느 엣지에서 적는지를 함께 낸다."""
+    declared = json.loads(CHAT_QUERY_CASE_PATH.read_text(encoding="utf-8"))["stream"]["draft"]
+    return ChatDraftRules(
+        interval_s=float(declared["intervalMs"]) / _MILLIS_PER_SECOND,
+        edge=str(declared["edge"]),
     )

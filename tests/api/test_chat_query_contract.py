@@ -28,7 +28,7 @@ from tracer_agent.shared.agents.chat.models import (
     CHAT_STOP_REASONS,
     TERMINAL_CHAT_EXECUTION_STATUSES,
 )
-from tracer_agent.shared.agents.chat.surface.contract import chat_stream_rules
+from tracer_agent.shared.agents.chat.surface.contract import chat_draft_rules, chat_stream_rules
 from tracer_agent.shared.agents.chat.surface.stream import SNAPSHOT_EVENT
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.models import AgentStepRole, OrchestrationEventKind
@@ -317,6 +317,13 @@ class Test스트림:
     def test_주기_다시_읽기가_케이스가_적은_간격이다(self) -> None:
         milliseconds = chat_stream_rules().resend_interval_s * 1000
         assert milliseconds == CASE["stream"]["resendIntervalMs"]
+
+    def test_초안_간격이_케이스가_적은_간격이다(self) -> None:
+        milliseconds = chat_draft_rules().interval_s * 1000
+        assert milliseconds == CASE["stream"]["draft"]["intervalMs"]
+
+    def test_초안을_적는_엣지가_케이스가_적은_엣지다(self) -> None:
+        assert chat_draft_rules().edge == CASE["stream"]["draft"]["edge"]
 
     def test_사건_이름이_케이스가_적은_이름이다(self) -> None:
         assert CASE["stream"]["event"] == SNAPSHOT_EVENT

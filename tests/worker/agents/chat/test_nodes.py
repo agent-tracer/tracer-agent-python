@@ -160,14 +160,15 @@ def test_한_도구_호출은_조각이_여러_번_와도_한_줄만_남긴다()
     assert _fresh_tool_names(another, announced) == ["get_task"]
 
 
-async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() -> None:
+async def test_첫_조각은_곧바로_보내고_그_뒤로만_묶는다() -> None:
     posted: list[dict[str, Any]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
         posted.append(json.loads(request.content))
         return httpx.Response(200, json={"stored": True})
 
-    ticks = iter([0.0, 0.16, 0.16, 0.20, 0.30])
+    # 시계가 0에서 시작해도 첫 조각이 나가야 앞쪽 엣지다.
+    ticks = iter([0.0, 0.01, 0.02, 0.20, 0.30])
     callback = DraftCallback.model_validate(
         {"url": "http://tracer-api.test/drafts", "token": "grant", "attempt": 1}
     )
@@ -178,10 +179,10 @@ async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() ->
         await publisher.push("했다")
         await publisher.flush()
 
-    # 간격 안에 들어온 조각은 묶이고, 창구는 매번 그때까지의 전문을 받는다.
-    assert [body["text"] for body in posted] == ["정리", "정리했다"]
+    # 첫 조각은 곧바로, 간격 안에 들어온 나머지는 묶여서 나간다.
+    assert [body["text"] for body in posted] == ["정", "정리했다"]
     # 순번은 보낸 횟수가 아니라 받은 조각을 센다.
-    assert [body["draftSeq"] for body in posted] == [2, 3]
+    assert [body["draftSeq"] for body in posted] == [1, 3]
     assert [body["phase"] for body in posted] == ["responding", "responding"]
 
 

@@ -12,12 +12,11 @@ from typing import Any, Protocol
 import httpx
 
 from tracer_agent.shared.agents.chat.models import ChatExecutionPhase, DraftCallback
+from tracer_agent.shared.agents.chat.surface.contract import chat_draft_rules
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
 _log = logging.getLogger(__name__)
 
-# 서버가 정본에 저장하는 간격이며, 이보다 잦게 보내면 같은 스냅샷을 여러 번 쓰게 된다.
-DRAFT_INTERVAL_S = 0.15
 DRAFT_TIMEOUT_S = 5.0
 
 
@@ -81,6 +80,7 @@ class DraftPublisher:
         self._text = ""
         self._seq = 0
         self._sent_at = 0.0
+        self._opened = False
         self._pending = False
         self._closed = False
         self._phase: ChatExecutionPhase = "starting"
@@ -95,7 +95,9 @@ class DraftPublisher:
         self._seq += 1
         self._phase = "responding"
         self._pending = True
-        if self._elapsed() - self._sent_at >= DRAFT_INTERVAL_S:
+        # 첫 조각은 간격을 기다리지 않고 곧바로 보내며 그 뒤로만 묶는다.
+        if not self._opened or self._elapsed() - self._sent_at >= chat_draft_rules().interval_s:
+            self._opened = True
             self._enqueue()
 
     async def push_tool(self, tool_name: str) -> None:
