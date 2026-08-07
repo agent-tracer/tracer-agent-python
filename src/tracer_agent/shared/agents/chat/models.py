@@ -20,6 +20,10 @@ CHAT_EXECUTION_STATUSES: tuple[str, ...] = get_args(ChatExecutionStatus)
 # 더 전진하지 않는 실행의 상태이며 이 자리에 닿으면 열린 연결도 통지도 끝난다.
 TERMINAL_CHAT_EXECUTION_STATUSES: tuple[str, ...] = ("completed", "failed", "canceled")
 
+# 초안이 자라지 않는 구간에도 화면이 살아 있음을 보이도록 실행이 무엇을 하는 중인지를 든다.
+ChatExecutionPhase = Literal["starting", "thinking", "responding", "tool", "done"]
+CHAT_EXECUTION_PHASES: tuple[str, ...] = get_args(ChatExecutionPhase)
+
 # 모델이 응답을 멈춘 이유이며 실행 수명을 나타내는 status와 다른 축이다.
 ChatStopReason = Literal[
     "completed", "deadline", "stalled", "budget_landed", "turn_limit", "canceled", "failed"

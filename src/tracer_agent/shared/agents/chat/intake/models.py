@@ -56,6 +56,7 @@ def execution_dto(row: SqlRow) -> dict[str, Any]:
         "threadId": row["thread_id"],
         "replayAnchorMessageId": row["replay_anchor_message_id"],
         "status": row["status"],
+        "phase": row["phase"],
         "requestedBackend": row["requested_backend"],
         "draftText": row["draft_text"],
         "draftSeq": row["draft_seq"],

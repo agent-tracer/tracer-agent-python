@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ...shared.json_view import JsonObject
 from ...shared.models import TrimmedStr
+from ..models import ChatExecutionPhase
 
 
 class ThreadTitleBody(BaseModel):
@@ -52,3 +53,4 @@ class DraftCheckpointBody(BaseModel):
     attempt: int = Field(ge=1)
     draftSeq: int = Field(ge=1)
     text: str = Field(max_length=200_000)
+    phase: ChatExecutionPhase

@@ -33,14 +33,14 @@ SELECT id FROM chat_executions
 
 _RECOVER_STALE_RUNNING = """
 UPDATE chat_executions
-   SET status = 'queued', started_at = NULL, updated_at = $1
+   SET status = 'queued', phase = 'starting', started_at = NULL, updated_at = $1
  WHERE status = 'running' AND updated_at < $2 AND requested_backend = $3
 RETURNING id
 """
 
 _RECOVER_STALE_RUNNING_IN_THREAD = """
 UPDATE chat_executions
-   SET status = 'queued', started_at = NULL, updated_at = $1
+   SET status = 'queued', phase = 'starting', started_at = NULL, updated_at = $1
  WHERE status = 'running' AND updated_at < $2 AND requested_backend = $3 AND thread_id = $4
 RETURNING id
 """
@@ -58,6 +58,7 @@ UPDATE chat_executions
        draft_token_hash = COALESCE(draft_token_hash, $3),
        draft_text = '',
        draft_seq = 0,
+       phase = 'starting',
        updated_at = $4
  WHERE id = $1 AND status = 'running' AND attempt <= $2
 RETURNING id
@@ -65,7 +66,7 @@ RETURNING id
 
 _CHECKPOINT_RUNNING = """
 UPDATE chat_executions
-   SET draft_text = $3, draft_seq = $4, updated_at = $5
+   SET draft_text = $3, draft_seq = $4, phase = $5, updated_at = $6
  WHERE id = $1 AND status = 'running' AND attempt = $2 AND draft_seq < $4
 RETURNING id
 """
@@ -73,6 +74,7 @@ RETURNING id
 _COMPLETE_RUNNING = """
 UPDATE chat_executions
    SET status = 'completed',
+       phase = 'done',
        assistant_message_id = $2,
        model_used = $3,
        cost_usd = $4,
@@ -97,6 +99,7 @@ RETURNING id
 _RECORD_CANCELED_OUTCOME = """
 UPDATE chat_executions
    SET status = 'canceled',
+       phase = 'done',
        assistant_message_id = $2,
        model_used = $3,
        cost_usd = $4,
@@ -119,7 +122,7 @@ RETURNING id
 
 _FAIL_ACTIVE = """
 UPDATE chat_executions
-   SET status = 'failed', error = $2, completed_at = $3, updated_at = $3
+   SET status = 'failed', phase = 'done', error = $2, completed_at = $3, updated_at = $3
  WHERE id = $1 AND (
        status = 'queued'
        OR (status = 'running' AND (EXISTS (
@@ -137,7 +140,7 @@ RETURNING id
 
 _CANCEL_ACTIVE = """
 UPDATE chat_executions
-   SET status = 'canceled', completed_at = $2, updated_at = $2
+   SET status = 'canceled', phase = 'done', completed_at = $2, updated_at = $2
  WHERE id = $1 AND (
        status = 'queued'
        OR (status = 'running' AND (EXISTS (
@@ -214,10 +217,18 @@ class ChatExecutionLedger:
         return len(rows) == 1
 
     async def checkpoint_running(
-        self, execution_id: str, attempt: int, draft_text: str, draft_seq: int, now: datetime
+        self,
+        execution_id: str,
+        attempt: int,
+        draft_text: str,
+        draft_seq: int,
+        phase: str,
+        now: datetime,
     ) -> bool:
         """진행 중인 답변 스냅샷을 앞선 순번일 때만 덮어쓴다."""
-        rows = await self._sql.fetch(_CHECKPOINT_RUNNING, execution_id, attempt, draft_text, draft_seq, now)
+        rows = await self._sql.fetch(
+            _CHECKPOINT_RUNNING, execution_id, attempt, draft_text, draft_seq, phase, now
+        )
         return len(rows) == 1
 
     async def complete_running(

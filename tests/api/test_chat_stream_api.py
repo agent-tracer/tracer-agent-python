@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from datetime import timedelta
@@ -138,3 +139,20 @@ class Test끊김과_취소와_재생:
         await stream.aclose()
 
         assert watch.released
+
+    async def test_정본이_그대로면_신호가_와도_프레임을_내지_않는다(self, store: SqliteLedgerSql) -> None:
+        seed_thread(store)
+        seed_execution(store, "e1", status="running")
+        watch = WakingWatch()
+        running = ChatExecutionSnapshot(execution={"id": "e1", "status": "running"}, confirmations=[])
+
+        stream = frames(watch, SingleSql(store), "local", "t1", "e1", running)
+        await anext(stream)
+        watch.wake()
+        await anext(stream)
+        watch.wake()
+
+        # 정본이 그대로면 신호가 와도 낼 것이 없어 다음 프레임은 주기 재전송까지 오지 않는다.
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(anext(stream), 0.2)
+        await stream.aclose()

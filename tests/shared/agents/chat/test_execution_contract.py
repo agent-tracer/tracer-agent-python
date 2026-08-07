@@ -81,7 +81,7 @@ async def invoke(ledger: ChatExecutionLedger, operation: str, call: Mapping[str,
         return await ledger.begin_attempt(identifier, call["attempt"], call["draftTokenHash"], now)
     if operation == "checkpointRunning":
         return await ledger.checkpoint_running(
-            identifier, call["attempt"], call["draftText"], call["draftSeq"], now
+            identifier, call["attempt"], call["draftText"], call["draftSeq"], "responding", now
         )
     if operation == "completeRunning":
         return await ledger.complete_running(identifier, call["assistantMessageId"], spend(), now)

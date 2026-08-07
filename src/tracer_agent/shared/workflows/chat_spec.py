@@ -46,8 +46,8 @@ HEARTBEAT_INTERVAL_S = 10.0
 FINALIZE_TIMEOUT_S = 120.0
 FAIL_TIMEOUT_S = 60.0
 
-# 신호가 끊긴 스레드는 이만큼 조용하면 다음 턴을 새 워크플로가 연다.
-THREAD_IDLE_S = 5.0
+# 대화 간격보다 짧으면 매 턴이 차가운 워크플로 시작 비용을 내므로 이만큼 기다린다.
+THREAD_IDLE_S = 120.0
 # 이력이 무한정 자라지 않도록 이만큼 실행한 스레드는 남은 대기 줄과 함께 새 실행으로 넘어간다.
 THREAD_MAX_CHILDREN = 100
 

@@ -79,12 +79,18 @@ async def frames(
     signal = asyncio.Event()
     unsubscribe = _listen(watch, execution_id, signal)
     snapshot = first
+    last = ""
     try:
         while True:
-            yield snapshot.frame()
+            frame = snapshot.frame()
+            # 정본이 그대로면 거르되 주기 재전송은 게이트웨이 유휴 타임아웃을 막으므로 남긴다.
+            if frame != last or snapshot.is_terminal():
+                last = frame
+                yield frame
             if snapshot.is_terminal():
                 return
-            await _await_change(signal)
+            if not await _await_change(signal):
+                last = ""
             snapshot = await _snapshot(source, user_id, thread_id, execution_id)
     except ChatIntakeRejected:
         # 조회하던 실행이 사라졌으면 더 실을 것이 없으므로 연결을 닫는다.
@@ -99,12 +105,14 @@ def _listen(watch: ChatExecutionUpdates | None, execution_id: str, signal: async
     return watch.subscribe(execution_id, signal.set)
 
 
-async def _await_change(signal: asyncio.Event) -> None:
+async def _await_change(signal: asyncio.Event) -> bool:
+    """신호를 받아 깨었으면 참을, 주기가 지나 깨었으면 거짓을 낸다."""
     try:
         await asyncio.wait_for(signal.wait(), chat_stream_rules().resend_interval_s)
     except TimeoutError:
-        return
+        return False
     signal.clear()
+    return True
 
 
 async def _snapshot(

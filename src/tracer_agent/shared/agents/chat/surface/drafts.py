@@ -44,7 +44,12 @@ async def checkpoint_chat_draft(
             return error_envelope(*TOKEN_REJECTED)
         # 재시도가 붙인 시도 번호를 실행기가 알 길이 없으므로 살아 있는 시도는 원장이 정한다.
         stored = await ledger.checkpoint_running(
-            execution_id, int(execution["attempt"]), body.text, body.draftSeq, datetime.now(UTC)
+            execution_id,
+            int(execution["attempt"]),
+            body.text,
+            body.draftSeq,
+            body.phase,
+            datetime.now(UTC),
         )
 
     if stored:

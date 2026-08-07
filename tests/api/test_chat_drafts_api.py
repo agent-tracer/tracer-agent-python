@@ -23,7 +23,13 @@ class Test누적_답변:
 
         res = client.post(
             "/api/agent/chat/executions/e1/drafts",
-            json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 3, "text": "쌓이는 답변"},
+            json={
+                "token": DRAFT_TOKEN,
+                "attempt": 1,
+                "draftSeq": 3,
+                "text": "쌓이는 답변",
+                "phase": "responding",
+            },
         )
 
         assert res.status_code == 200
@@ -41,7 +47,13 @@ class Test누적_답변:
 
         res = client.post(
             "/api/agent/chat/executions/e1/drafts",
-            json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 4, "text": "뒤처진 답변"},
+            json={
+                "token": DRAFT_TOKEN,
+                "attempt": 1,
+                "draftSeq": 4,
+                "text": "뒤처진 답변",
+                "phase": "responding",
+            },
         )
 
         assert res.json()["data"]["stored"] is False
@@ -53,7 +65,13 @@ class Test누적_답변:
 
         res = client.post(
             "/api/agent/chat/executions/e1/drafts",
-            json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 1, "text": "늦은 답변"},
+            json={
+                "token": DRAFT_TOKEN,
+                "attempt": 1,
+                "draftSeq": 1,
+                "text": "늦은 답변",
+                "phase": "responding",
+            },
         )
 
         assert res.json()["data"] == {"stored": False, "terminal": True}
@@ -64,7 +82,7 @@ class Test누적_답변:
 
         res = client.post(
             "/api/agent/chat/executions/e1/drafts",
-            json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변"},
+            json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변", "phase": "responding"},
         )
 
         assert res.status_code == 403
@@ -73,7 +91,7 @@ class Test누적_답변:
     def test_없는_실행의_통지는_404다(self, client: TestClient) -> None:
         res = client.post(
             "/api/agent/chat/executions/no-such/drafts",
-            json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변"},
+            json={"token": "grant", "attempt": 1, "draftSeq": 1, "text": "답변", "phase": "responding"},
         )
 
         assert res.status_code == 404

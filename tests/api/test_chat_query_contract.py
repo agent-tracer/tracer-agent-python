@@ -176,7 +176,7 @@ class Test창구의_칸:
         self.window = ("GET", "/api/agent/chat/threads/{threadId}/executions")
         data = self._data(client.get(f"{THREADS}/t1/executions"))
         self._assert_shape(data, WINDOWS[self.window]["data"])
-        assert len(data["items"][0]) == len(_shape_fields("execution")) == 17
+        assert len(data["items"][0]) == len(_shape_fields("execution")) == 18
 
     def test_되읽기가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
         self.window = ("GET", "/api/agent/chat/threads/{threadId}/executions/{executionId}/replay")
@@ -206,7 +206,13 @@ class Test창구의_칸:
         data = self._data(
             client.post(
                 "/api/agent/chat/executions/e1/drafts",
-                json={"token": DRAFT_TOKEN, "attempt": 1, "draftSeq": 1, "text": "쌓이는 답변"},
+                json={
+                    "token": DRAFT_TOKEN,
+                    "attempt": 1,
+                    "draftSeq": 1,
+                    "text": "쌓이는 답변",
+                    "phase": "responding",
+                },
             )
         )
         self._assert_shape(data, WINDOWS[self.window]["data"])
@@ -397,7 +403,7 @@ class Test거절:
 
         res = client.post(
             "/api/agent/chat/executions/e1/drafts",
-            json={"token": "다른 토큰", "attempt": 1, "draftSeq": 1, "text": "답변"},
+            json={"token": "다른 토큰", "attempt": 1, "draftSeq": 1, "text": "답변", "phase": "responding"},
         )
 
         assert res.status_code == rejection["status"]

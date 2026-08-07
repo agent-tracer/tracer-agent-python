@@ -47,6 +47,7 @@ CREATE TABLE chat_executions (
     client_request_id TEXT NOT NULL,
     input_hash TEXT NOT NULL,
     status TEXT NOT NULL,
+    phase TEXT NOT NULL DEFAULT 'starting',
     requested_backend TEXT,
     model TEXT,
     language TEXT,
