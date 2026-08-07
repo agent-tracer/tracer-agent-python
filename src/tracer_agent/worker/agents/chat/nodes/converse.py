@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
@@ -118,7 +118,11 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
                     for name in _fresh_tool_names(message, announced):
                         await drafts.push_tool(name)
             elif mode == "updates" and isinstance(chunk, dict):
-                collected.extend(_appended_messages(chunk))
+                appended = _appended_messages(chunk)
+                # 도구 결과가 돌아왔으면 모델이 다시 생각하는 구간이라 표시를 옮긴다.
+                if any(isinstance(message, ToolMessage) for message in appended):
+                    await drafts.mark_phase("thinking")
+                collected.extend(appended)
         await drafts.flush()
         return collected
 

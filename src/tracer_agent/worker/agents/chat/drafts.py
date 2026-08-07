@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import httpx
 
-from tracer_agent.shared.agents.chat.models import DraftCallback
+from tracer_agent.shared.agents.chat.models import ChatExecutionPhase, DraftCallback
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
 
 _log = logging.getLogger(__name__)
@@ -43,19 +43,34 @@ class DraftPublisher:
         self._seq = 0
         self._sent_at = 0.0
         self._pending = False
+        self._phase: ChatExecutionPhase = "starting"
 
     async def push(self, text: str) -> None:
         """어시스턴트 조각을 누적하고 간격이 지났으면 지금까지의 전문을 보낸다."""
         if not text:
             return
         self._text += text
+        self._phase = "responding"
         self._pending = True
         if self._elapsed() - self._sent_at >= DRAFT_INTERVAL_S:
             await self._send()
 
     async def push_tool(self, tool_name: str) -> None:
         """도구가 실행되는 동안에도 진행이 보이도록 호출을 누적분에 남긴다."""
-        await self.push(tool_marker(tool_name))
+        self._text += tool_marker(tool_name)
+        self._phase = "tool"
+        self._pending = True
+        await self._send()
+
+    async def mark_phase(self, phase: ChatExecutionPhase) -> None:
+        """글자를 내지 않는 구간에도 무엇을 하는 중인지를 옮겨 화면이 멈추지 않게 한다."""
+        if phase == self._phase:
+            return
+        if phase == "thinking" and self._phase == "responding":
+            return
+        self._phase = phase
+        self._pending = True
+        await self._send()
 
     async def flush(self) -> None:
         """아직 보내지 않은 누적분이 남아 있으면 마지막으로 보낸다."""
@@ -70,6 +85,7 @@ class DraftPublisher:
             "token": self._callback.token,
             "attempt": self._callback.attempt,
             "draftSeq": self._seq,
+            "phase": self._phase,
             # 누적 전문을 가리므로 자격이 조각 경계에 걸쳐 있어도 온전한 모양으로 걸린다.
             "text": redact_text(self._text, stage=RedactionStage.OUTPUT),
         }

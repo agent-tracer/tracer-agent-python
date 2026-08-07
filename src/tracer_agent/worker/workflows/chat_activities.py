@@ -187,6 +187,8 @@ class ChatExecutionActivities:
             )
         if not opened:
             raise RuntimeError("chat execution attempt is stale")
+        # 이 쓰기가 초안을 비우므로 알리지 않으면 화면이 이전 시도의 글을 재전송 주기까지 그대로 둔다.
+        await self._publish(prepared.execution_id)
 
     async def _publish(self, execution_id: str) -> None:
         if self._wakeup is not None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from itertools import count
 from typing import Any
 
 import httpx
@@ -179,6 +180,48 @@ async def test_창구_전송은_간격이_지난_뒤에만_묶어_보낸다() ->
     # 간격 안에 들어온 조각은 묶이고, 창구는 매번 그때까지의 전문을 받는다.
     assert [body["text"] for body in posted] == ["정리", "정리했다"]
     assert [body["draftSeq"] for body in posted] == [1, 2]
+    assert [body["phase"] for body in posted] == ["responding", "responding"]
+
+
+async def test_글자를_내지_않는_구간에도_무엇을_하는_중인지_보낸다() -> None:
+    posted: list[dict[str, Any]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"stored": True})
+
+    ticks = count(0.0, 1.0)
+    callback = DraftCallback.model_validate(
+        {"url": "http://tracer-api.test/drafts", "token": "grant", "attempt": 1}
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        publisher = DraftPublisher(client, callback, lambda: next(ticks))
+        await publisher.push_tool("search_tasks")
+        await publisher.mark_phase("thinking")
+        await publisher.push("찾았다")
+
+    # 도구 구간과 그 뒤의 사고 구간이 글자 없이도 화면에 닿는다.
+    assert [body["phase"] for body in posted] == ["tool", "thinking", "responding"]
+
+
+async def test_답변이_흐르는_동안에는_사고로_되돌리지_않는다() -> None:
+    posted: list[dict[str, Any]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"stored": True})
+
+    ticks = count(0.0, 1.0)
+    callback = DraftCallback.model_validate(
+        {"url": "http://tracer-api.test/drafts", "token": "grant", "attempt": 1}
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        publisher = DraftPublisher(client, callback, lambda: next(ticks))
+        await publisher.push("답")
+        await publisher.flush()
+        await publisher.mark_phase("thinking")
+
+    assert [body["phase"] for body in posted] == ["responding"]
 
 
 async def _system_content(turns: list[Any], **overrides: Any) -> tuple[FakeToolLoopChat, list[Any]]:

@@ -12,6 +12,7 @@ import pytest
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES
 from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
@@ -273,3 +274,47 @@ async def test_계약을_벗어난_봉투는_다시_태우지_않는다(activiti
         await ActivityEnvironment().run(activities.generate, prepared)
 
     assert raised.value.non_retryable is True
+
+
+# 봉투 검증을 통과해 시도를 여는 자리까지 닿게 하는 최소 조각이다.
+ENVELOPE_FIELDS: dict[str, Any] = {
+    "model": "claude-haiku-4-5",
+    "apiKey": "sk-test",
+    "modelRates": WIRE_MODEL_RATES,
+    "limits": WIRE_LIMITS,
+    "messages": [{"role": "user", "content": "안녕"}],
+    "agentApiBaseUrl": "http://agent-api.test",
+}
+
+
+class RecordingWakeup:
+    """열린 연결을 깨우라고 나간 통지를 그대로 모은다."""
+
+    def __init__(self) -> None:
+        self.published: list[str] = []
+
+    async def publish(self, key: str, _payload: dict[str, Any]) -> None:
+        """무엇을 깨우라고 했는지 기억한다."""
+        self.published.append(key)
+
+
+async def test_시도를_열어_초안을_비우면_곧바로_알린다(store: SqliteLedgerSql) -> None:
+    store.seed("chat_executions", [execution_row(status="running", draft_text="이전 시도의 글")])
+    wakeup = RecordingWakeup()
+    activities = ChatExecutionActivities(
+        SingleSqlSource(store),
+        httpx.AsyncClient(),
+        GraphCheckpointProvider("postgresql://unused"),
+        StubEnvelopes(ENVELOPE_FIELDS),
+        CHAT_PROMPT,
+        wakeup,
+    )
+
+    with pytest.raises(Exception):  # noqa: B017
+        await ActivityEnvironment().run(
+            activities.generate, PreparedChatExecution("e1", "t1", "u1", "ko", "claude-haiku-4-5")
+        )
+
+    # 이 쓰기가 초안을 비우므로 알리지 않으면 화면이 이전 시도의 글을 재전송 주기까지 그대로 든다.
+    assert wakeup.published[0] == "e1"
+    assert store.rows("chat_executions")[0]["draft_text"] == ""
