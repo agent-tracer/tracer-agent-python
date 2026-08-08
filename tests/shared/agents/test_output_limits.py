@@ -57,6 +57,26 @@ class _Walker:
                 self.walk(variant, path, depth + 1)
 
 
+def _visited(document: dict[str, Any], schema: Any = None, depth: int = 0) -> int:
+    """같은 자리를 지나되 경로도 열쇠도 만들지 않고 걸린 상한의 수만 센다."""
+    node = document if schema is None else schema
+    if depth > _MAX_DEPTH or not isinstance(node, dict):
+        return 0
+    reference = node.get("$ref")
+    if isinstance(reference, str):
+        target = (document.get("$defs") or {}).get(reference.rsplit("/", 1)[-1])
+        return _visited(document, target, depth + 1)
+    counted = sum(1 for key in LIMIT_KEYS if isinstance(node.get(key), int))
+    for value in (node.get("properties") or {}).values():
+        counted += _visited(document, value, depth + 1)
+    if "items" in node:
+        counted += _visited(document, node["items"], depth + 1)
+    for key in TRANSPARENT:
+        for variant in node.get(key) or ():
+            counted += _visited(document, variant, depth + 1)
+    return counted
+
+
 def _declared(document: dict[str, Any]) -> dict[Place, set[int]]:
     # not 아래는 무엇을 거절하는지를 적은 자리라 칸에 걸린 상한이 아니므로 지나지 않는다.
     walker = _Walker(document)
@@ -74,3 +94,11 @@ def test_산출_모델의_상한이_계약이_적은_값과_같다(agent_id: str
     missing = {place: values for place, values in declared.items() if built.get(place) != values}
 
     assert not missing, f"{agent_id}: {sorted(missing)}"
+
+
+@pytest.mark.parametrize("agent_id", [agent for agent, _ in DRAFTS])
+def test_계약이_적은_상한을_하나도_빠뜨리지_않고_본다(agent_id: str) -> None:
+    # 자리를 열쇠로 묶는 순회기가 서로 다른 칸을 한 자리로 삼키면 이 수가 갈린다.
+    schema = agent_output(agent_id)["schema"]
+
+    assert sum(len(values) for values in _declared(schema).values()) == _visited(schema)
