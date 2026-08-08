@@ -19,9 +19,6 @@ type LedgerConnection = asyncpg.Connection[asyncpg.Record] | PoolConnectionProxy
 
 type SqlRow = dict[str, Any]
 
-MIN_POOL_SIZE = 1
-MAX_POOL_SIZE = 8
-
 # 드라이버의 기본 획득은 무한 대기이므로 이 여유가 마른 풀을 영구 정지가 아니라 거절로 드러낸다.
 DEFAULT_ACQUIRE_TIMEOUT_S = 5.0
 
@@ -38,8 +35,10 @@ async def _decode_json(connection: Any) -> None:
 class LedgerPoolProvider:
     """원장 연결 풀을 처음 필요한 순간에 열고 그 뒤로는 같은 풀을 내준다."""
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, *, min_size: int, max_size: int) -> None:
         self._dsn = dsn
+        self._min_size = min_size
+        self._max_size = max_size
         self._pool: LedgerPool | None = None
         self._lock = asyncio.Lock()
 
@@ -49,7 +48,7 @@ class LedgerPoolProvider:
             pool = self._pool
             if pool is None:
                 pool = await asyncpg.create_pool(
-                    self._dsn, min_size=MIN_POOL_SIZE, max_size=MAX_POOL_SIZE, init=_decode_json
+                    self._dsn, min_size=self._min_size, max_size=self._max_size, init=_decode_json
                 )
                 if pool is None:
                     raise RuntimeError("원장 연결 풀을 열지 못했다")
