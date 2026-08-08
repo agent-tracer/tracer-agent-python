@@ -20,7 +20,7 @@ from tracer_agent.shared.agents.task_cleanup.models import CleanupCandidate, Tas
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionRequest
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod
@@ -194,12 +194,14 @@ async def _run_recipe_scan(
     )
     ledger = _ledger(case)
     return await execute(
-        "recipe-scan",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="recipe-scan",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: recipe_mod.RECIPE_SCAN_JOB.run(req, ledger, usage, RECIPE_SCAN_PROMPT, None, chats),
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 
@@ -217,12 +219,14 @@ async def _run_task_cleanup(
     )
     ledger = _ledger(case)
     return await execute(
-        "task-cleanup",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="task-cleanup",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: cleanup_mod.TASK_CLEANUP_JOB.run(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 
@@ -240,14 +244,16 @@ async def _run_title_suggestion(
     )
     ledger = _ledger(case)
     return await execute(
-        "title-suggestion",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="title-suggestion",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: title_mod.TITLE_SUGGESTION_JOB.run(
             req, ledger, usage, TITLE_SUGGESTION_PROMPT, None, chats
         ),
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 
