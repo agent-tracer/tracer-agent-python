@@ -63,6 +63,20 @@ def recall_tool_name() -> str:
     return names[0]
 
 
+def tool_required_by_action(name: str) -> Mapping[str, tuple[str, ...]]:
+    """그 도구의 action 마다 있어야 하는 인자를 계약이 적은 순서로 낸다."""
+    declared = chat_tool_declarations()[name].get("requiredByAction")
+    if not isinstance(declared, Mapping):
+        return {}
+    return {str(action): tuple(str(arg) for arg in args) for action, args in declared.items()}
+
+
+def chat_argument_rejection() -> Mapping[str, Any]:
+    """action 이 요구하는 인자가 빠진 호출의 거절 어휘이며 두 구현체가 같은 칸을 읽는다."""
+    declared: Mapping[str, Any] = _chat_tool_contract()["argumentRejection"]
+    return declared
+
+
 def chat_tool_bindings() -> Mapping[str, Any]:
     """도구가 부르는 자리의 선언이며 action 을 받는 도구는 그 action 마다 자리를 갖는다."""
     declared: Mapping[str, Any] = _chat_tool_contract()["bindings"]

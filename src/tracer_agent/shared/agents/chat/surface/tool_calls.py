@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from ...shared.json_view import JsonObject, JsonValue
 from ..tools.bindings import TOOL_ACTION_BINDINGS
-from ..tools.surface import CONFIRM_SURFACE, tool_names_on
+from ..tools.surface import CONFIRM_SURFACE, tool_names_on, tool_required_by_action
 
 
 class ChatToolArgsInvalid(ValueError):
@@ -20,6 +20,20 @@ class ChatToolCall:
 
     args: JsonObject
     describe: Callable[[JsonValue], str]
+
+
+def missing_action_arguments(tool_name: str, args: JsonObject) -> tuple[str, ...]:
+    """그 action 에 있어야 하는데 빠졌거나 빈 인자를 계약이 적은 순서로 낸다."""
+    required = tool_required_by_action(tool_name).get(str(args.get("action", "")), ())
+    return tuple(name for name in required if _blank(args.get(name)))
+
+
+def _blank(value: JsonValue) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    return isinstance(value, list) and not value
 
 
 def plan_chat_tool_call(tool_name: str, args: JsonObject) -> ChatToolCall:

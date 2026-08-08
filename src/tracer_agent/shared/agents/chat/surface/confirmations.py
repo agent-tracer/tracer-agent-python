@@ -17,12 +17,17 @@ from ..intake.ids import generate_ulid
 from ..rejections import ChatRejected
 from ..tools.surface import chat_tool_note
 from .access import owned_thread
-from .envelope import CREATED_STATUS, invalid_request, read_payload, rejection
+from .envelope import CREATED_STATUS, argument_rejection, invalid_request, read_payload, rejection
 from .ledger import ChatSurfaceLedger
 from .models import DecideToolBody, ProposeToolBody
 from .resolution import ChatConfirmationResolution, ResolvedConfirmation, ThreadUpdateAnnouncer
 from .threads import CHAT_THREAD_PATH
-from .tool_calls import CONFIRMABLE_TOOLS, ChatToolArgsInvalid, plan_chat_tool_call
+from .tool_calls import (
+    CONFIRMABLE_TOOLS,
+    ChatToolArgsInvalid,
+    missing_action_arguments,
+    plan_chat_tool_call,
+)
 from .tool_client import ChatToolFailed
 from .views import execution_dto
 
@@ -59,6 +64,10 @@ async def propose_chat_tool(
     if body.toolName not in CONFIRMABLE_TOOLS:
         return invalid_request()
     args = dict(body.args)
+    # 세운 뒤에 거절하면 사용자가 성공할 수 없는 일을 승인하고 그 턴의 값을 치른다.
+    missing = missing_action_arguments(body.toolName, args)
+    if missing:
+        return argument_rejection(str(args.get("action", "")), missing)
     try:
         plan_chat_tool_call(body.toolName, args)
     except ChatToolArgsInvalid:
