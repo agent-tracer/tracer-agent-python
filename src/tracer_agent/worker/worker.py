@@ -99,7 +99,11 @@ async def chat_resources(settings: Settings) -> AsyncIterator[ChatWorkerResource
     """chat 액티비티가 쓸 바깥 연결을 열고 끝나면 닫는다."""
     http_client = httpx.AsyncClient(timeout=CHAT_HTTP_TIMEOUT_S)
     opened = ChatWorkerResources(
-        ledger=LedgerPoolProvider(settings.agent_dsn()),
+        ledger=LedgerPoolProvider(
+            settings.agent_dsn(),
+            min_size=settings.agent_db_pool_min_size,
+            max_size=settings.agent_db_pool_max_size,
+        ),
         http_client=http_client,
         checkpoints=GraphCheckpointProvider(settings.checkpoint_dsn()),
         wakeup=UpdatePublisher(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC),
@@ -116,7 +120,11 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
     http_client = httpx.AsyncClient(timeout=JOB_HTTP_TIMEOUT_S)
     opened = JobWorkerResources(
         http_client=http_client,
-        execution=LedgerPoolProvider(settings.agent_dsn()),
+        execution=LedgerPoolProvider(
+            settings.agent_dsn(),
+            min_size=settings.agent_db_pool_min_size,
+            max_size=settings.agent_db_pool_max_size,
+        ),
         notifications=UpdatePublisher(settings.kafka_brokers, NOTIFICATIONS_TOPIC),
         checkpoints=GraphCheckpointProvider(settings.checkpoint_dsn()),
     )
