@@ -8,9 +8,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
-from ...shared.wire import error_envelope, read_body, validation_details
-from ..intake.router import INVALID_REQUEST
-from ..intake.turn import ChatIntakeRejected
+from ...shared.wire import INVALID_REQUEST, error_envelope, read_body, validation_details
+from ..rejections import ChatRejected
 
 CREATED_STATUS = 201
 
@@ -22,7 +21,7 @@ __all__ = [
 ]
 
 
-def rejection(rejected: ChatIntakeRejected) -> JSONResponse:
+def rejection(rejected: ChatRejected) -> JSONResponse:
     """거절 사유를 계약이 정한 오류 봉투로 적는다."""
     return error_envelope(rejected.status, rejected.code, rejected.message)
 

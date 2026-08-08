@@ -8,8 +8,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
-from ...shared.wire import SuccessEnvelope, error_responses, ok
+from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, ok
 from ..intake.ids import generate_ulid
+from ..memory_policy import memory_rejection
 from .envelope import read_payload
 from .ledger import ChatSurfaceLedger
 from .models import RememberFactBody
@@ -19,6 +20,9 @@ CHAT_MEMORIES_PATH = "/api/agent/chat/memories"
 CHAT_MEMORY_PATH = f"{CHAT_MEMORIES_PATH}/{{key}}"
 
 REMEMBERED = "remembered"
+
+# 저장된 문장은 다음 턴의 문맥으로 되돌아오므로 실을 수 없는 내용은 계약이 정한 거절로 낸다.
+MEMORY_REJECTED = (400, "validation_error", "Invalid request")
 
 router = APIRouter()
 
@@ -39,6 +43,9 @@ async def remember_chat_fact(
     body = await read_payload(request, RememberFactBody)
     if isinstance(body, JSONResponse):
         return body
+    refused = memory_rejection(body.content)
+    if refused is not None:
+        return error_envelope(*MEMORY_REJECTED, details=[{"loc": ["content"], "type": refused}])
     now = datetime.now(UTC)
     async with source.connect() as sql:
         await ChatSurfaceLedger(sql).upsert_memory(generate_ulid(now), user_id, key, body.content, now)

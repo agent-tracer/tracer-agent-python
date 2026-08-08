@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import timedelta
 
 import pytest
@@ -17,8 +18,10 @@ from tests.support.chat_surface import (
     seed_pending_tool,
     seed_thread,
 )
-from tracer_agent.shared.agents.chat.surface.stream import ChatExecutionSnapshot, frames
+from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger
+from tracer_agent.shared.agents.chat.surface.stream import frames, watch_chat_execution
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 THREADS = "/api/agent/chat/threads"
 
@@ -50,6 +53,32 @@ class WakingWatch:
 
     def _release(self) -> None:
         self.released = True
+
+
+class OrderedSource:
+    """정본을 읽은 순간을 구독한 순간과 같은 줄에 적는다."""
+
+    def __init__(self, inner: SingleSql, events: list[str]) -> None:
+        self._inner = inner
+        self._events = events
+
+    def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
+        """정본을 읽는다는 사실을 적고 원장을 그대로 빌려 준다."""
+        self._events.append("read")
+        return self._inner.connect()
+
+
+class OrderedWatch(WakingWatch):
+    """구독한 순간을 정본을 읽은 순간과 같은 줄에 적는다."""
+
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self._events = events
+
+    def subscribe(self, execution_id: str, listener: Callable[[], None]) -> Callable[[], None]:
+        """구독한다는 사실을 적고 알림을 맡아 둔다."""
+        self._events.append("subscribe")
+        return super().subscribe(execution_id, listener)
 
 
 class Test실행_스냅샷_스트림:
@@ -119,12 +148,12 @@ class Test끊김과_취소와_재생:
 
     async def test_도는_실행이_종결로_바뀌면_그_스냅샷을_내고_닫는다(self, store: SqliteLedgerSql) -> None:
         seed_thread(store)
-        seed_execution(store, "e1", status="canceled")
+        seed_execution(store, "e1", status="running")
         watch = WakingWatch()
-        running = ChatExecutionSnapshot(execution={"id": "e1", "status": "running"}, confirmations=[])
 
-        stream = frames(watch, SingleSql(store), "local", "t1", "e1", running)
+        stream = frames(watch, SingleSql(store), "local", "t1", "e1")
         assert '"status": "running"' in await anext(stream)
+        await ChatExecutionLedger(store).cancel_active("e1", NOW)
         watch.wake()
         assert '"status": "canceled"' in await anext(stream)
 
@@ -132,13 +161,27 @@ class Test끊김과_취소와_재생:
             await anext(stream)
         assert watch.released
 
+    async def test_첫_프레임은_구독을_놓은_뒤에_읽은_정본이다(self, store: SqliteLedgerSql) -> None:
+        seed_thread(store)
+        seed_execution(store, "e1", status="completed")
+        events: list[str] = []
+        watch = OrderedWatch(events)
+
+        response = await watch_chat_execution(
+            "t1", "e1", OrderedSource(SingleSql(store), events), "local", watch
+        )
+        sent = [chunk async for chunk in response.body_iterator]
+
+        assert len(sent) == 1
+        # 구독보다 먼저 읽은 정본을 첫 프레임으로 쓰면 그 사이에 온 갱신을 재전송 주기까지 놓친다.
+        assert events == ["read", "subscribe", "read"]
+
     async def test_연결이_끊기면_구독을_놓는다(self, store: SqliteLedgerSql) -> None:
         seed_thread(store)
         seed_execution(store, "e1", status="running")
         watch = WakingWatch()
-        running = ChatExecutionSnapshot(execution={"id": "e1", "status": "running"}, confirmations=[])
 
-        stream = frames(watch, SingleSql(store), "local", "t1", "e1", running)
+        stream = frames(watch, SingleSql(store), "local", "t1", "e1")
         await anext(stream)
         await stream.aclose()
 
@@ -148,11 +191,8 @@ class Test끊김과_취소와_재생:
         seed_thread(store)
         seed_execution(store, "e1", status="running")
         watch = WakingWatch()
-        running = ChatExecutionSnapshot(execution={"id": "e1", "status": "running"}, confirmations=[])
 
-        stream = frames(watch, SingleSql(store), "local", "t1", "e1", running)
-        await anext(stream)
-        watch.wake()
+        stream = frames(watch, SingleSql(store), "local", "t1", "e1")
         await anext(stream)
         watch.wake()
 

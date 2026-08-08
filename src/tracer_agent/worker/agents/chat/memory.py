@@ -14,7 +14,7 @@ from tracer_agent.shared.agents.chat.tools.surface import (
 )
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 
-from .reader import scoped_headers, unwrap_envelope
+from .reader import scoped_headers, unwrapped_body
 
 RECALL_TOOL = recall_tool_name()
 
@@ -60,6 +60,4 @@ class ChatMemoryClient:
             response = await self._client.request(binding.method, url, headers=headers)
         if response.status_code >= 400:
             return ChatMemoryResult(ok=False, status_code=response.status_code, text=response.text)
-        return ChatMemoryResult(
-            ok=True, status_code=response.status_code, text=unwrap_envelope(response.text)
-        )
+        return ChatMemoryResult(ok=True, status_code=response.status_code, text=unwrapped_body(response.text))

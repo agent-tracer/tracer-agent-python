@@ -1,4 +1,4 @@
-"""chat 도구 루프가 답변과 확인 대기 행과 기억 적재를 내는지 검증한다(페이크 모델, 네트워크 없음)."""
+"""대화 한 턴이 답변과 확인 대기 행과 기억 되읽기를 내는지 검증한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from tests.support.prompts import CHAT_PROMPT, CONTRACT_VERSION
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.chat import agent as chat_mod
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _READ_API = "http://tracer-api.test"
@@ -48,12 +48,14 @@ async def _run(
     transport = httpx.MockTransport((memory or FakeChatMemoryApi()).handle)
     async with httpx.AsyncClient(transport=transport) as client:
         return await execute(
-            "chat",
-            req.model,
-            req.deadlineMs,
+            ExecutionRequest(
+                label="chat",
+                model=req.model,
+                deadline_ms=req.deadlineMs,
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            ),
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
-            prompt_version=CONTRACT_VERSION,
-            tool_contract_version=CONTRACT_VERSION,
         )
 
 
@@ -116,17 +118,19 @@ async def _run_replay(
 ) -> tuple[AgentResponse, FakeToolLoopChat]:
     chat = FakeToolLoopChat(turns)
     chats = ChatPair(chat, None)
-    # 봉투에 이력이 없어야 그래프가 서버 재생 API를 문맥의 출처로 삼는다.
+    # 봉투에 이력이 없어야 문맥 적재가 서버 재생 API를 출처로 삼는다.
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[], **overrides)
     transport = httpx.MockTransport(_replay_handler(replay, memory or FakeChatMemoryApi()))
     async with httpx.AsyncClient(transport=transport) as client:
         response = await execute(
-            "chat",
-            req.model,
-            req.deadlineMs,
+            ExecutionRequest(
+                label="chat",
+                model=req.model,
+                deadline_ms=req.deadlineMs,
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            ),
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
-            prompt_version=CONTRACT_VERSION,
-            tool_contract_version=CONTRACT_VERSION,
         )
     return response, chat
 
@@ -215,12 +219,14 @@ async def test_되읽기와_확인과_기억은_에이전트_주소로_도구의
     req = _request(readApiBaseUrl=_READ_API, agentApiBaseUrl=_AGENT_API, messages=[])
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         await execute(
-            "chat",
-            req.model,
-            req.deadlineMs,
+            ExecutionRequest(
+                label="chat",
+                model=req.model,
+                deadline_ms=req.deadlineMs,
+                prompt_version=CONTRACT_VERSION,
+                tool_contract_version=CONTRACT_VERSION,
+            ),
             lambda usage: chat_mod.run_chat(req, client, usage, CHAT_PROMPT, None, chats),
-            prompt_version=CONTRACT_VERSION,
-            tool_contract_version=CONTRACT_VERSION,
         )
 
     hosts = dict(reversed([(path, host) for host, path in seen]))

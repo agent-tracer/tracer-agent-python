@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...shared.wire import SuccessEnvelope, error_responses, ok
-from ..intake.turn import ChatIntakeRejected
+from ..rejections import ChatRejected
 from .access import owned_execution, owned_thread
 from .envelope import rejection
 from .ledger import PENDING, ChatSurfaceLedger
@@ -34,7 +34,7 @@ async def list_chat_executions(thread_id: str, source: ExecutionSql, user_id: Us
             await owned_thread(ledger, user_id, thread_id)
             executions = await ledger.list_executions(thread_id)
             pending = await ledger.list_pending_tools(thread_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     return ok(
         {
@@ -54,7 +54,7 @@ async def list_chat_execution_steps(
             ledger = ChatSurfaceLedger(sql)
             await owned_execution(ledger, user_id, thread_id, execution_id)
             steps = await ledger.list_steps(execution_id, user_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     return ok({"items": [step_dto(row) for row in steps]})
 
@@ -72,14 +72,14 @@ async def get_chat_replay(
             # 승인이 적재한 도구 결과 줄은 어느 실행에도 매이지 않으므로 실행으로 거르지 않는다.
             messages = await ledger.list_messages(thread_id)
             memories = await ledger.list_memories(user_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
 
     summary = None if thread["summary"] is None else str(thread["summary"])
     try:
         replayed = build_chat_replay(messages, str(execution["replay_anchor_message_id"]), summary)
     except ChatReplayMessageMissing:
-        return rejection(ChatIntakeRejected(*REPLAY_UNBUILDABLE))
+        return rejection(ChatRejected(*REPLAY_UNBUILDABLE))
     return ok(
         {
             "messages": replayed,

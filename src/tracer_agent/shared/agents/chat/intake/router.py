@@ -9,17 +9,25 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ...runtime.dependencies import ExecutionSql, UserId
-from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, read_body, validation_details
+from ...shared.wire import (
+    INVALID_REQUEST,
+    SuccessEnvelope,
+    error_envelope,
+    error_responses,
+    read_body,
+    validation_details,
+)
 from ..dependencies import Dispatch, Updates, Watch
+from ..rejections import ChatRejected
+from ..surface.views import execution_dto, message_dto
 from .cancel import ChatTurnCancellation
-from .models import PostMessagePayload, execution_dto, message_dto
-from .turn import ChatIntakeRejected, ChatTurnIntake
+from .models import PostMessagePayload
+from .turn import ChatTurnIntake
 
 CHAT_THREADS_PATH = "/api/agent/chat/threads"
 CHAT_MESSAGES_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/messages"
 CHAT_CANCEL_PATH = f"{CHAT_THREADS_PATH}/{{thread_id}}/executions/{{execution_id}}/cancel"
 ACCEPTED_STATUS = 202
-INVALID_REQUEST = (400, "validation_error", "Invalid request")
 
 router = APIRouter()
 
@@ -50,7 +58,7 @@ async def enqueue_chat_turn(
                 payload,
                 datetime.now(UTC),
             )
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return error_envelope(rejected.status, rejected.code, rejected.message)
 
     return JSONResponse(
@@ -84,7 +92,7 @@ async def cancel_chat_turn(
                 execution_id,
                 datetime.now(UTC),
             )
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return error_envelope(rejected.status, rejected.code, rejected.message)
 
     return JSONResponse(status_code=200, content={"ok": True, "data": {"execution": execution_dto(canceled)}})

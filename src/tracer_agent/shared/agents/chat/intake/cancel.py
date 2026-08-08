@@ -7,11 +7,9 @@ from typing import Protocol
 
 from ...runtime.ledger import LedgerSql, SqlRow
 from ..execution_ledger import ChatExecutionLedger
+from ..rejections import EXECUTION_NOT_FOUND, THREAD_NOT_FOUND, ChatRejected
 from .dispatch import ExecutionDispatch
 from .ledger import ChatIntakeLedger
-from .turn import THREAD_NOT_FOUND, ChatIntakeRejected
-
-EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
 
 
 class UpdateSignal(Protocol):
@@ -51,7 +49,6 @@ class ChatTurnCancellation:
         """실행 하나를 취소로 닫고 취소가 반영된 행을 낸다."""
         await self._require_owner(user_id, thread_id, execution_id)
         if await self._executions.cancel_active(execution_id, now):
-            # 이 프로세스의 연결에는 브로커를 거치지 않고 곧바로 알린다.
             if self._watch is not None:
                 self._watch.notify(execution_id)
             if self._updates is not None:
@@ -59,13 +56,13 @@ class ChatTurnCancellation:
         await self._dispatch.cancel(execution_id)
         canceled = await self._executions.find_by_id(execution_id)
         if canceled is None:
-            raise ChatIntakeRejected(*EXECUTION_NOT_FOUND)
+            raise ChatRejected(*EXECUTION_NOT_FOUND)
         return canceled
 
     async def _require_owner(self, user_id: str, thread_id: str, execution_id: str) -> None:
         owner = await self._threads.thread_owner(thread_id)
         if owner is None or owner != user_id:
-            raise ChatIntakeRejected(*THREAD_NOT_FOUND)
+            raise ChatRejected(*THREAD_NOT_FOUND)
         execution = await self._executions.find_by_id(execution_id)
         if execution is None or execution["thread_id"] != thread_id or execution["user_id"] != user_id:
-            raise ChatIntakeRejected(*EXECUTION_NOT_FOUND)
+            raise ChatRejected(*EXECUTION_NOT_FOUND)

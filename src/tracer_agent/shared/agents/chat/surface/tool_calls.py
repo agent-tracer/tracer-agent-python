@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from ...shared.json_view import JsonObject, JsonValue
+from ..tools.bindings import TOOL_ACTION_BINDINGS
+from ..tools.surface import CONFIRM_SURFACE, tool_names_on
 
 
 class ChatToolArgsInvalid(ValueError):
@@ -200,20 +202,26 @@ def _one_id(key: str, sentence: str) -> Callable[[JsonObject], ChatToolCall]:
     return plan
 
 
-def _by_action(
-    plans: dict[str, Callable[[JsonObject], ChatToolCall]],
-) -> Callable[[JsonObject], ChatToolCall]:
+@dataclass(frozen=True)
+class _ActionPlans:
     """action 이 고른 계획을 실행하고 자리를 고르는 쪽이 읽도록 action 을 인자에 남긴다."""
 
-    def plan(args: JsonObject) -> ChatToolCall:
+    plans: Mapping[str, Callable[[JsonObject], ChatToolCall]]
+
+    def __call__(self, args: JsonObject) -> ChatToolCall:
         action = _req(args, "action")
-        chosen = plans.get(action)
+        chosen = self.plans.get(action)
         if chosen is None:
             raise ChatToolArgsInvalid(f"{action} is not an action of this tool")
         call = chosen(args)
         return ChatToolCall(args={**call.args, "action": action}, describe=call.describe)
 
-    return plan
+
+def _by_action(
+    plans: dict[str, Callable[[JsonObject], ChatToolCall]],
+) -> Callable[[JsonObject], ChatToolCall]:
+    """action 마다의 계획을 한 도구의 계획으로 묶는다."""
+    return _ActionPlans(plans)
 
 
 def _remember_fact(args: JsonObject) -> ChatToolCall:
@@ -276,4 +284,38 @@ _PLANS: dict[str, Callable[[JsonObject], ChatToolCall]] = {
     ),
 }
 
-CONFIRMABLE_TOOLS: frozenset[str] = frozenset(_PLANS)
+
+def confirmable_tools() -> frozenset[str]:
+    """확인 게이트가 여는 도구는 계약의 표면 한 칸이 정하고 계획표가 그것을 빠짐없이 덮어야 한다."""
+    declared = frozenset(tool_names_on(CONFIRM_SURFACE))
+    planned = frozenset(_PLANS)
+    if declared != planned:
+        missing = ", ".join(sorted(declared - planned)) or "-"
+        extra = ", ".join(sorted(planned - declared)) or "-"
+        raise ValueError(f"confirm surface and tool plans disagree: missing={missing} extra={extra}")
+    _assert_actions_planned()
+    return declared
+
+
+def planned_actions() -> dict[str, frozenset[str]]:
+    """action 으로 자리를 구분하는 도구마다 계획이 갖는 action 이다."""
+    return dict(_PLANNED_ACTIONS)
+
+
+def _assert_actions_planned() -> None:
+    """action 으로 자리를 구분하는 도구는 계약이 선언한 action 을 모두 계획으로 갖는다."""
+    for name, actions in TOOL_ACTION_BINDINGS.items():
+        planned = _PLANNED_ACTIONS.get(name)
+        if planned is None:
+            raise ValueError(f"{name} binds actions but has no plan")
+        unplanned = frozenset(actions) - planned
+        if unplanned:
+            raise ValueError(f"{name} has no plan for actions: {', '.join(sorted(unplanned))}")
+
+
+# action 으로 자리를 구분하는 도구가 계획으로 갖는 action 이다.
+_PLANNED_ACTIONS: dict[str, frozenset[str]] = {
+    name: frozenset(plan.plans) for name, plan in _PLANS.items() if isinstance(plan, _ActionPlans)
+}
+
+CONFIRMABLE_TOOLS: frozenset[str] = confirmable_tools()

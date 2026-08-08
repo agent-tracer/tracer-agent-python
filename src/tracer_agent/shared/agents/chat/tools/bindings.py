@@ -56,11 +56,6 @@ TOOL_ACTION_BINDINGS: dict[str, dict[str, ToolBinding]] = {
 }
 
 
-def takes_action(tool_name: str) -> bool:
-    """이 도구가 action 으로 자리를 구분하는지 알린다."""
-    return tool_name in TOOL_ACTION_BINDINGS
-
-
 def binding_for(tool_name: str, args: Mapping[str, object]) -> ToolBinding:
     """도구 이름과 인자에 맞는 자리를 내며 계약에 없는 이름이나 action 이면 거절한다."""
     actions = TOOL_ACTION_BINDINGS.get(tool_name)
@@ -76,10 +71,6 @@ def binding_for(tool_name: str, args: Mapping[str, object]) -> ToolBinding:
     if chosen is None:
         raise KeyError(f"{tool_name} has no {action} action")
     return chosen
-
-
-# 대응하는 REST API가 아직 없어 실행 프로세스 안에서 처리되는 도구는 이제 없다.
-LOCAL_TOOL_NAMES: tuple[str, ...] = ()
 
 
 def fill_path(binding: ToolBinding, args: Mapping[str, object]) -> str:

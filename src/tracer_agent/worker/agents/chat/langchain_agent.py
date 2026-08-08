@@ -10,10 +10,9 @@ from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.store.base import BaseStore
 
 from ..runtime.llm.middleware_stack import AgentMiddlewareStack
-from ..runtime.llm.standard_agent import StandardAgentContext
+from .tools import ChatToolContext
 
 
 def chat_stack(
@@ -41,16 +40,15 @@ def build_chat_agent(
     max_turns: int,
     fallback_chat: BaseChatModel | None = None,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
-    store: BaseStore | None = None,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """도구 실행과 자유 텍스트 응답을 갖춘 chat 대화 agent를 스레드·사용자 기억과 함께 컴파일한다."""
+    """도구 실행과 자유 텍스트 응답을 갖춘 chat 대화 agent를 이 턴의 단기기억과 함께 컴파일한다."""
     return create_agent(
         chat,
         tools=list(tools),
         system_prompt=SystemMessage(content=system_prompt),
         middleware=chat_stack(transient_errors, max_turns=max_turns, fallback_chat=fallback_chat).build(),
-        context_schema=StandardAgentContext,
+        # 요청별 진입점은 이 컨텍스트가 실어 나르므로 컴파일한 판이 특정 실행에 매이지 않는다.
+        context_schema=ChatToolContext,
         checkpointer=checkpointer,
-        store=store,
         name="chat-conversation",
     )

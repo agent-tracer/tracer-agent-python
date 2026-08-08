@@ -14,25 +14,25 @@ from .surface.updates import ChatExecutionUpdates
 
 def get_execution_dispatch(request: Request) -> ExecutionDispatch:
     """대기 실행을 시작하고 진행 중인 실행을 끊는 신호 창구를 낸다."""
-    dispatch: ExecutionDispatch = request.app.state.execution_dispatch
+    dispatch: ExecutionDispatch = request.app.state.services.execution_dispatch
     return dispatch
 
 
 def get_execution_updates(request: Request) -> UpdateSignal | None:
     """갱신 사실을 다른 replica 로 전송하는 창구를 내며 배선이 없으면 비운다."""
-    updates: UpdateSignal | None = getattr(request.app.state, "execution_updates", None)
+    updates: UpdateSignal | None = request.app.state.services.execution_updates
     return updates
 
 
 def get_execution_watch(request: Request) -> ChatExecutionUpdates | None:
     """다른 replica 가 보낸 갱신을 듣는 창구를 내며 배선이 없으면 비운다."""
-    watch: ChatExecutionUpdates | None = getattr(request.app.state, "execution_watch", None)
+    watch: ChatExecutionUpdates | None = request.app.state.services.execution_watch
     return watch
 
 
 def get_chat_tool_executor(request: Request) -> ChatToolExecutor:
     """승인된 쓰기 도구를 실제로 부르는 창구를 낸다."""
-    executor: ChatToolExecutor = request.app.state.chat_tool_executor
+    executor: ChatToolExecutor = request.app.state.services.chat_tool_executor
     return executor
 
 

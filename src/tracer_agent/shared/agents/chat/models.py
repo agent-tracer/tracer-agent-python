@@ -163,7 +163,6 @@ class ChatState(BudgetSnapshotState):
     facts: list[ChatFact]
     # 문맥 적재가 되살린 이 턴의 재생 이력이며 대화가 이것으로 시작한다.
     history: list[ChatHistoryMessage]
-    # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
     # 대화가 세운 확인 대기 행이며 종결이 결과에 인용한다.
     proposals: list[ProposedWrite]

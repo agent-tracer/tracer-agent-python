@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ...runtime.ledger import LedgerSql, SqlRow, UniqueViolation
+from ..rejections import THREAD_NOT_FOUND, ChatLedgerInvariantError, ChatRejected
 from .dispatch import ExecutionDispatch
 from .ids import generate_ulid
 from .ledger import QUEUED, ChatIntakeLedger
 from .models import PostMessagePayload
 
-THREAD_NOT_FOUND = (404, "not_found", "Thread not found")
 ACTIVE_TURN_CONFLICT = (
     409,
     "chat.execution-active-conflict",
@@ -22,16 +22,6 @@ IDEMPOTENCY_CONFLICT = (
     "chat.execution-idempotency-conflict",
     "Client request id was already used with different chat input",
 )
-
-
-class ChatIntakeRejected(Exception):
-    """접수를 받아들일 수 없어 계약이 정한 상태와 코드로 돌려보낸다."""
-
-    def __init__(self, status: int, code: str, message: str) -> None:
-        super().__init__(message)
-        self.status = status
-        self.code = code
-        self.message = message
 
 
 @dataclass(frozen=True)
@@ -74,14 +64,14 @@ class ChatTurnIntake:
     ) -> AcceptedChatTurn:
         owner = await self._ledger.thread_owner(thread_id)
         if owner is None or owner != user_id:
-            raise ChatIntakeRejected(*THREAD_NOT_FOUND)
+            raise ChatRejected(*THREAD_NOT_FOUND)
 
         existing = await self._ledger.find_by_idempotency(user_id, thread_id, payload.clientRequestId)
         if existing is not None:
             return await self._existing(existing, input_hash)
 
         if await self._ledger.has_active_turn(thread_id):
-            raise ChatIntakeRejected(*ACTIVE_TURN_CONFLICT)
+            raise ChatRejected(*ACTIVE_TURN_CONFLICT)
 
         message = await self._ledger.insert_user_message(generate_ulid(now), thread_id, payload.content, now)
         execution = await self._ledger.insert_queued_execution(
@@ -102,13 +92,13 @@ class ChatTurnIntake:
     ) -> AcceptedChatTurn:
         existing = await self._ledger.find_by_idempotency(user_id, thread_id, client_request_id)
         if existing is None:
-            raise ChatIntakeRejected(*IDEMPOTENCY_CONFLICT)
+            raise ChatRejected(*IDEMPOTENCY_CONFLICT)
         return await self._existing(existing, input_hash)
 
     async def _existing(self, execution: SqlRow, input_hash: str) -> AcceptedChatTurn:
         if execution["input_hash"] != input_hash:
-            raise ChatIntakeRejected(*IDEMPOTENCY_CONFLICT)
+            raise ChatRejected(*IDEMPOTENCY_CONFLICT)
         message = await self._ledger.find_message(str(execution["replay_anchor_message_id"]))
         if message is None:
-            raise RuntimeError("접수된 실행이 인용하는 사용자 메시지가 없다")
+            raise ChatLedgerInvariantError("접수된 실행이 인용하는 사용자 메시지가 없다")
         return AcceptedChatTurn(message=message, execution=execution)

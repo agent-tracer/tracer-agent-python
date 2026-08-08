@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.chat.intake.dispatch import UnwiredExecutionDispatch
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
@@ -56,8 +57,9 @@ def store() -> Iterator[SqliteLedgerSql]:
 @pytest.fixture
 def client(store: SqliteLedgerSql) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
-        test_client.app.state.execution_sql = SingleSql(store)
-        test_client.app.state.execution_dispatch = UnwiredExecutionDispatch()
+        test_client.app.state.services = fake_services(
+            execution_sql=SingleSql(store), execution_dispatch=UnwiredExecutionDispatch()
+        )
         yield test_client
 
 

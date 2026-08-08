@@ -11,6 +11,7 @@ import httpx
 from tracer_agent.shared.agents.chat.tools.bindings import binding_for, fill_path
 from tracer_agent.shared.agents.chat.tools.surface import READ_SURFACES, tool_surface
 from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.shared.wire import MalformedEnvelope, unwrap_envelope
 
 # 창구가 요청자를 식별하는 헤더이며 실행 범위 토큰이 있으면 서버가 이 값을 토큰의 것으로 덮는다.
 USER_HEADER = "x-monitor-user"
@@ -23,6 +24,13 @@ class ChatReadResult:
     ok: bool
     status_code: int
     text: str
+    # 이 실행에 진입점이 아예 없을 때만 사유를 싣고, 창구가 거절한 실패의 사유는 상태가 만든다.
+    unavailable: str | None = None
+
+    @property
+    def reason(self) -> str:
+        """되읽지 못한 도구가 모델에게 대는 사유다."""
+        return self.unavailable or f"the read API answered {self.status_code}"
 
 
 def scoped_headers(user_id: str, scope_token: str | None) -> dict[str, str]:
@@ -34,15 +42,17 @@ def scoped_headers(user_id: str, scope_token: str | None) -> dict[str, str]:
     return headers
 
 
-def unwrap_envelope(raw: str) -> str:
+def unwrapped_body(raw: str) -> str:
     """성공 봉투를 벗겨 모델이 두 구현체에서 같은 필드를 보게 한다."""
     try:
         payload = json.loads(raw)
     except ValueError:
         return raw
-    if isinstance(payload, dict) and payload.get("ok") is True and "data" in payload:
-        return json.dumps(payload["data"], ensure_ascii=False)
-    return raw
+    try:
+        return json.dumps(unwrap_envelope(payload), ensure_ascii=False)
+    except MalformedEnvelope:
+        # 봉투를 쓰지 않는 상류의 본문도 모델에게는 그대로 보인다.
+        return raw
 
 
 class ChatReadClient:
@@ -77,4 +87,4 @@ class ChatReadClient:
         )
         if response.status_code >= 400:
             return ChatReadResult(ok=False, status_code=response.status_code, text=response.text)
-        return ChatReadResult(ok=True, status_code=response.status_code, text=unwrap_envelope(response.text))
+        return ChatReadResult(ok=True, status_code=response.status_code, text=unwrapped_body(response.text))

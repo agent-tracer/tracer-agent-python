@@ -1,4 +1,4 @@
-"""chat 대화 노드를 그래프 밖에서 실행해 draft 배달과 최종 result 계약을 검증한다."""
+"""대화 단계가 진행 중인 답변을 창구로 되돌려 보내는 리듬을 검증한다(페이크 모델, 네트워크 없음)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage
 
 from tests.support.chat_api import chat_confirmation_response
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
@@ -17,8 +17,7 @@ from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest, DraftCallback
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
-from tracer_agent.worker.agents.chat.nodes.converse import _fresh_tool_names
-from tracer_agent.worker.agents.chat.nodes.settle import final_text
+from tracer_agent.worker.agents.chat.steps.converse import _fresh_tool_names
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
@@ -79,12 +78,27 @@ async def test_서버가_종결을_알리면_실행을_더_끌지_않는다() ->
     chats = ChatPair(chat, None)
 
     def handle(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"stored": False, "terminal": True})
+        return httpx.Response(200, json={"ok": True, "data": {"stored": False, "terminal": True}})
 
     req = _request()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         with pytest.raises(ChatExecutionClosed):
             await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
+
+
+async def test_봉투를_쓰지_않은_응답은_종결로_읽지_않는다() -> None:
+    chat = FakeToolLoopChat(["한참 답하는 중"])
+    chats = ChatPair(chat, None)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/confirmations"):
+            return chat_confirmation_response(request)
+        return httpx.Response(200, json={"terminal": True})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        result = await chat_mod.run_chat(_request(), client, ExecutionTrace(), CHAT_PROMPT, None, chats)
+
+    assert result["assistantText"] != ""
 
 
 async def test_창구가_없으면_draft를_보내지_않는다() -> None:
@@ -111,32 +125,6 @@ async def test_접수된_실행의_결과가_제안_쓰기를_실행_없이_담�
         }
     ]
     assert result["assistantText"] != ""
-
-
-def test_최종_답변은_도구_호출이_없는_마지막_어시스턴트_텍스트다() -> None:
-    messages = [
-        AIMessage(
-            content="확인해볼게요",
-            tool_calls=[{"id": "call-1", "name": "search_tasks", "args": {}, "type": "tool_call"}],
-        ),
-        ToolMessage(content="검색 결과", tool_call_id="call-1"),
-        AIMessage(content="최종 답변"),
-    ]
-
-    assert final_text(messages) == "최종 답변"
-
-
-def test_도구를_더_부르려다_끊긴_턴은_마지막으로_쓴_본문을_낸다() -> None:
-    # 상한이나 예산으로 루프가 끊기면 마무리한 답이 없으므로 그때까지 쓴 본문이라도 사용자에게 간다.
-    messages = [
-        AIMessage(
-            content="지금까지 찾은 것은 배포 실패 셋입니다",
-            tool_calls=[{"id": "call-1", "name": "search_tasks", "args": {}, "type": "tool_call"}],
-        ),
-        ToolMessage(content="검색 결과", tool_call_id="call-1"),
-    ]
-
-    assert final_text(messages) == "지금까지 찾은 것은 배포 실패 셋입니다"
 
 
 def test_한_도구_호출은_조각이_여러_번_와도_한_줄만_남긴다() -> None:

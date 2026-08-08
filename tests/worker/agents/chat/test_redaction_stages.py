@@ -11,13 +11,19 @@ import pytest
 
 from tests.support.chat_api import chat_confirmation_response
 from tests.support.contract import shared_contract
-from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
+from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat, mk_rates
 from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
+from tracer_agent.worker.agents.chat.backends import (
+    ChatTurnBackends,
+    UnwiredChatMemory,
+    UnwiredWriteClient,
+)
 from tracer_agent.worker.agents.chat.reader import ChatReadClient
-from tracer_agent.worker.agents.chat.tools import build_chat_registry
+from tracer_agent.worker.agents.chat.tools import ChatToolContext, chat_tool_registry
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.agents.runtime.llm.budget import single_loop_budget
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 
 _MARKER = str(shared_contract("redaction.json")["marker"])
@@ -26,21 +32,39 @@ _BASE_URL = "http://tracer-api.test"
 
 
 def _read_tool(body: dict[str, Any]) -> Any:
+    """되읽기 도구 하나를 그 도구가 실려 받을 컨텍스트와 함께 세운다."""
+
     def handle(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"ok": True, "data": body})
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(handle))
     client = ChatReadClient(http, _BASE_URL, "user-1", "scope-token")
-    registry = build_chat_registry(client, [], {}, agent_name="chat")
-    tool = next(item for item in registry.langchain_tools() if item.name == "get_task")
-    return tool, http
+    context = ChatToolContext(
+        agent_name="chat",
+        trace=ExecutionTrace(),
+        budget=single_loop_budget("chat", "claude-haiku-4-5", 2.0, mk_rates(), 0.0),
+        max_model_turns=8,
+        tool_owner="chat",
+        backends=ChatTurnBackends(
+            read=client,
+            agent_read=client,
+            write=UnwiredWriteClient(),
+            memory=UnwiredChatMemory(),
+        ),
+        proposals=[],
+    )
+
+    async def read() -> str:
+        return await chat_tool_registry({}).invoke("get_task", {"taskId": "task-1"}, context)
+
+    return read, http
 
 
 async def test_되읽은_것에_담긴_자격은_모델이_받는_문자열에_없다() -> None:
     tool, http = _read_tool({"taskId": "task-1", "note": f"Authorization: Bearer {_CREDENTIAL}"})
 
     async with http:
-        text = await tool.coroutine(taskId="task-1")
+        text = await tool()
 
     assert _CREDENTIAL not in text
     assert json.loads(text) == {"taskId": "task-1", "note": f"Authorization: {_MARKER}"}
@@ -50,7 +74,7 @@ async def test_key가_평범해도_값이_자격이면_가려진다() -> None:
     tool, http = _read_tool({"summary": _CREDENTIAL})
 
     async with http:
-        text = await tool.coroutine(taskId="task-1")
+        text = await tool()
 
     assert json.loads(text) == {"summary": _MARKER}
 
@@ -60,7 +84,7 @@ async def test_추적을_끈_실행에서도_되읽은_것이_가려진다(monke
     tool, http = _read_tool({"note": _CREDENTIAL})
 
     async with http:
-        text = await tool.coroutine(taskId="task-1")
+        text = await tool()
 
     assert _CREDENTIAL not in text
 
@@ -69,7 +93,7 @@ async def test_자격을_말하기만_한_결과는_그대로_모델에게_간�
     tool, http = _read_tool({"note": "The bearer of this token is the worker."})
 
     async with http:
-        text = await tool.coroutine(taskId="task-1")
+        text = await tool()
 
     assert json.loads(text) == {"note": "The bearer of this token is the worker."}
 

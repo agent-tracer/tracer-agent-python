@@ -14,6 +14,7 @@ import httpx
 from tracer_agent.shared.agents.chat.models import ChatExecutionPhase, DraftCallback
 from tracer_agent.shared.agents.chat.surface.contract import chat_draft_rules
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
+from tracer_agent.shared.agents.shared.wire import MalformedEnvelope, unwrap_envelope
 
 _log = logging.getLogger(__name__)
 
@@ -95,7 +96,6 @@ class DraftPublisher:
         self._seq += 1
         self._phase = "responding"
         self._pending = True
-        # 첫 조각은 간격을 기다리지 않고 곧바로 보내며 그 뒤로만 묶는다.
         if not self._opened or self._elapsed() - self._sent_at >= chat_draft_rules().interval_s:
             self._opened = True
             self._enqueue()
@@ -170,8 +170,13 @@ class DraftPublisher:
 
 
 def _terminal(response: httpx.Response) -> bool:
+    """실행이 이미 끝났다는 사실은 계약이 정한 성공 봉투 안에서만 읽는다."""
     try:
-        body = response.json()
+        payload = response.json()
     except ValueError:
         return False
-    return isinstance(body, dict) and body.get("terminal") is True
+    try:
+        data = unwrap_envelope(payload)
+    except MalformedEnvelope:
+        return False
+    return isinstance(data, dict) and data.get("terminal") is True

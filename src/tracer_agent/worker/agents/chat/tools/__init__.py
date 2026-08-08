@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from tracer_agent.shared.agents.chat.tools.surface import chat_tool_declarations, tool_surface
 
-from .registry import TOOL_FAILED, ChatToolRegistry, build_chat_registry
+from .context import ChatToolContext
+from .registry import TOOL_FAILED, ChatTools, build_chat_registry, chat_tool_registry
 from .specs import (
     AGENT_READ_TOOL_NAMES,
     ARGS_MODELS,
@@ -21,9 +22,11 @@ __all__ = [
     "READ_TOOL_NAMES",
     "TOOL_FAILED",
     "WRITE_TOOL_NAMES",
-    "ChatToolRegistry",
+    "ChatToolContext",
+    "ChatTools",
     "build_chat_registry",
     "chat_tool_declarations",
+    "chat_tool_registry",
     "tool_arg_names",
     "tool_surface",
 ]

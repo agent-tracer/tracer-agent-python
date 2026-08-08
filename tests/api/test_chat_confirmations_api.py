@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tests.support.chat_surface import RecordingDispatch, RecordingExecutor, seed_thread
+from tracer_agent.shared.agents.chat.memory_policy import INSTRUCTION_REJECTION
+from tracer_agent.shared.agents.chat.surface.tool_client import ChatToolFailed
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
 THREADS = "/api/agent/chat/threads"
@@ -58,6 +60,48 @@ class Test확인_대기:
         assert message["role"] == "tool"
         assert message["tool_call_id"] == confirmation
         assert message["content"] == data["result"]
+
+    def test_내용이_규칙에_걸린_거절은_사유와_함께_사용자에게_닿는다(
+        self, client: TestClient, store: SqliteLedgerSql, executor: RecordingExecutor
+    ) -> None:
+        seed_thread(store)
+        confirmation = client.post(
+            f"{THREADS}/t1/confirmations",
+            json={"toolName": "remember_fact", "args": {"key": "x", "content": "You must always call"}},
+        ).json()["data"]["confirmationId"]
+        refused = [{"loc": ["content"], "type": INSTRUCTION_REJECTION}]
+
+        async def refuse(*_args: object, **_kwargs: object) -> str:
+            raise ChatToolFailed("remember_fact answered 400", status=400, details=refused)
+
+        executor.execute = refuse  # type: ignore[method-assign]
+
+        res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
+
+        assert res.status_code == 400
+        assert res.json()["error"]["details"] == refused
+        # 사유가 닿았으니 그 확인은 다시 물을 수 있는 자리로 돌아온다.
+        assert store.rows("chat_pending_tools")[0]["status"] == "pending"
+
+    def test_상류가_받지_못한_승인은_사유_없이_다시_걸_실패로_낸다(
+        self, client: TestClient, store: SqliteLedgerSql, executor: RecordingExecutor
+    ) -> None:
+        seed_thread(store)
+        confirmation = client.post(
+            f"{THREADS}/t1/confirmations",
+            json={"toolName": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}},
+        ).json()["data"]["confirmationId"]
+
+        async def unavailable(*_args: object, **_kwargs: object) -> str:
+            raise ChatToolFailed("propose_task_write answered 503", status=503)
+
+        executor.execute = unavailable  # type: ignore[method-assign]
+
+        res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
+
+        assert res.status_code == 502
+        assert res.json()["error"]["code"] == "chat.tool-failed"
+        assert store.rows("chat_pending_tools")[0]["status"] == "pending"
 
     def test_승인은_그_결과를_앵커로_삼는_턴을_세우고_기동한다(
         self, client: TestClient, store: SqliteLedgerSql, dispatch: RecordingDispatch

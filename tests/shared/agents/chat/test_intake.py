@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from tracer_agent.shared.agents.chat.intake.models import PostMessagePayload
-from tracer_agent.shared.agents.chat.intake.turn import ChatIntakeRejected, ChatTurnIntake
+from tracer_agent.shared.agents.chat.intake.turn import ChatRejected, ChatTurnIntake
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import UniqueViolation
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
@@ -105,7 +105,7 @@ async def test_접수가_사용자_메시지와_대기_실행을_함께_세운�
 async def test_남의_스레드는_없는_것으로_돌려보낸다(
     store: SqliteLedgerSql, dispatch: RecordingDispatch
 ) -> None:
-    with pytest.raises(ChatIntakeRejected) as rejected:
+    with pytest.raises(ChatRejected) as rejected:
         await ChatTurnIntake(store, dispatch).enqueue("u2", "t1", payload(), NOW)
 
     assert (rejected.value.status, rejected.value.code) == (404, "not_found")
@@ -115,7 +115,7 @@ async def test_남의_스레드는_없는_것으로_돌려보낸다(
 async def test_없는_스레드도_같은_사유로_돌려보낸다(
     store: SqliteLedgerSql, dispatch: RecordingDispatch
 ) -> None:
-    with pytest.raises(ChatIntakeRejected) as rejected:
+    with pytest.raises(ChatRejected) as rejected:
         await ChatTurnIntake(store, dispatch).enqueue("u1", "없는스레드", payload(), NOW)
 
     assert (rejected.value.status, rejected.value.code) == (404, "not_found")
@@ -141,7 +141,7 @@ async def test_같은_요청_식별자로_다른_입력을_보내면_거절한�
     intake = ChatTurnIntake(store, dispatch)
     await intake.enqueue("u1", "t1", payload(), NOW)
 
-    with pytest.raises(ChatIntakeRejected) as rejected:
+    with pytest.raises(ChatRejected) as rejected:
         await intake.enqueue("u1", "t1", payload(content="다른 말"), NOW)
 
     assert (rejected.value.status, rejected.value.code) == (
@@ -193,7 +193,7 @@ async def test_진행_중인_턴이_있으면_접수하지_않는다(
     intake = ChatTurnIntake(store, dispatch)
     await intake.enqueue("u1", "t1", payload(), NOW)
 
-    with pytest.raises(ChatIntakeRejected) as rejected:
+    with pytest.raises(ChatRejected) as rejected:
         await intake.enqueue("u1", "t1", payload(clientRequestId="r2"), NOW)
 
     assert (rejected.value.status, rejected.value.code) == (409, "chat.execution-active-conflict")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from ...runtime.ledger import SqlRow
 from ...shared.instant import opt_iso
 from ...shared.json_view import JsonObject
-from ..intake.models import execution_dto, message_dto
+from ...shared.step_view import step_row_view
 
 __all__ = [
     "confirmation_dto",
@@ -15,20 +15,6 @@ __all__ = [
     "step_dto",
     "thread_dto",
 ]
-
-# 값이 없으면 궤적 한 줄에 싣지 않는 자리이며 열 이름과 wire 이름을 함께 든다.
-_OPTIONAL_STEP_FIELDS: tuple[tuple[str, str], ...] = (
-    ("tool_name", "toolName"),
-    ("tool_call_id", "toolCallId"),
-    ("input_tokens", "inputTokens"),
-    ("output_tokens", "outputTokens"),
-    ("cache_read_tokens", "cacheReadTokens"),
-    ("cache_creation_tokens", "cacheCreationTokens"),
-    ("stop_reason", "stopReason"),
-    ("node_name", "nodeName"),
-    ("event_kind", "eventKind"),
-    ("duration_ms", "durationMs"),
-)
 
 
 def thread_dto(row: SqlRow) -> JsonObject:
@@ -46,18 +32,44 @@ def thread_dto(row: SqlRow) -> JsonObject:
 
 def step_dto(row: SqlRow) -> JsonObject:
     """궤적 한 줄을 값이 있는 자리만 실은 표현으로 바꾼다."""
-    step: JsonObject = {
-        "seq": row["seq"],
-        "attempt": row["attempt"],
+    return step_row_view(row)
+
+
+def message_dto(row: SqlRow) -> JsonObject:
+    """저장된 사용자 메시지 행을 계약이 정한 와이어 표현으로 바꾼다."""
+    return {
+        "id": row["id"],
+        "threadId": row["thread_id"],
         "role": row["role"],
         "content": row["content"],
-        "truncated": bool(row["truncated"]),
-        "toolCalls": row["tool_calls"] or [],
+        "toolCalls": row["tool_calls"],
+        "toolCallId": row["tool_call_id"],
+        "createdAt": opt_iso(row["created_at"]),
     }
-    for column, name in _OPTIONAL_STEP_FIELDS:
-        if row[column] is not None:
-            step[name] = row[column]
-    return step
+
+
+def execution_dto(row: SqlRow) -> JsonObject:
+    """저장된 실행 행을 계약이 정한 와이어 표현으로 바꾼다."""
+    return {
+        "id": row["id"],
+        "threadId": row["thread_id"],
+        "replayAnchorMessageId": row["replay_anchor_message_id"],
+        "status": row["status"],
+        "phase": row["phase"],
+        "requestedBackend": row["requested_backend"],
+        "draftText": row["draft_text"],
+        "draftSeq": row["draft_seq"],
+        "assistantMessageId": row["assistant_message_id"],
+        "modelUsed": row["model_used"],
+        "costUsd": row["cost_usd"],
+        "numTurns": row["num_turns"],
+        "stopReason": row["stop_reason"],
+        "error": row["error"],
+        "createdAt": opt_iso(row["created_at"]),
+        "updatedAt": opt_iso(row["updated_at"]),
+        "startedAt": opt_iso(row["started_at"]),
+        "completedAt": opt_iso(row["completed_at"]),
+    }
 
 
 def confirmation_dto(row: SqlRow) -> JsonObject:

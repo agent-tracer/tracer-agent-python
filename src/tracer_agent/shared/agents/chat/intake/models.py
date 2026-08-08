@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ...runtime.ledger import SqlRow
-from ...shared.instant import opt_iso
 from ...shared.models import Language, TrimmedStr
 
 ModelName = Annotated[TrimmedStr, Field(min_length=1)]
@@ -34,40 +32,3 @@ class PostMessagePayload(BaseModel):
         }
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(encoded.encode()).hexdigest()
-
-
-def message_dto(row: SqlRow) -> dict[str, Any]:
-    """저장된 사용자 메시지 행을 계약이 정한 와이어 표현으로 바꾼다."""
-    return {
-        "id": row["id"],
-        "threadId": row["thread_id"],
-        "role": row["role"],
-        "content": row["content"],
-        "toolCalls": row["tool_calls"],
-        "toolCallId": row["tool_call_id"],
-        "createdAt": opt_iso(row["created_at"]),
-    }
-
-
-def execution_dto(row: SqlRow) -> dict[str, Any]:
-    """저장된 실행 행을 계약이 정한 와이어 표현으로 바꾼다."""
-    return {
-        "id": row["id"],
-        "threadId": row["thread_id"],
-        "replayAnchorMessageId": row["replay_anchor_message_id"],
-        "status": row["status"],
-        "phase": row["phase"],
-        "requestedBackend": row["requested_backend"],
-        "draftText": row["draft_text"],
-        "draftSeq": row["draft_seq"],
-        "assistantMessageId": row["assistant_message_id"],
-        "modelUsed": row["model_used"],
-        "costUsd": row["cost_usd"],
-        "numTurns": row["num_turns"],
-        "stopReason": row["stop_reason"],
-        "error": row["error"],
-        "createdAt": opt_iso(row["created_at"]),
-        "updatedAt": opt_iso(row["updated_at"]),
-        "startedAt": opt_iso(row["started_at"]),
-        "completedAt": opt_iso(row["completed_at"]),
-    }

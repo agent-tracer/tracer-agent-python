@@ -10,7 +10,7 @@ import httpx
 from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, tool_surface
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 
-from .reader import scoped_headers, unwrap_envelope
+from .reader import scoped_headers, unwrapped_body
 
 # 승인 대기 행을 세우는 창구이며 도구가 부를 API 자체는 승인된 뒤에 서버가 부른다.
 CONFIRMATIONS_PATH = "/api/agent/chat/threads/{threadId}/confirmations"
@@ -24,6 +24,13 @@ class ChatProposalResult:
     status_code: int
     text: str
     confirmation_id: str
+    # 이 실행에 창구가 아예 없을 때만 사유를 싣고, 창구가 거절한 실패의 사유는 상태가 만든다.
+    unavailable: str | None = None
+
+    @property
+    def reason(self) -> str:
+        """대기 행을 세우지 못한 도구가 모델에게 대는 사유다."""
+        return self.unavailable or f"the confirmation API answered {self.status_code}"
 
 
 class ChatWriteClient:
@@ -57,7 +64,7 @@ class ChatWriteClient:
             return ChatProposalResult(
                 ok=False, status_code=response.status_code, text=response.text, confirmation_id=""
             )
-        text = unwrap_envelope(response.text)
+        text = unwrapped_body(response.text)
         return ChatProposalResult(
             ok=True,
             status_code=response.status_code,

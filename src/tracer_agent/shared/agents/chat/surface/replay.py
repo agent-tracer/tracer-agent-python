@@ -99,7 +99,6 @@ def _replay_message(row: SqlRow, paired: set[str]) -> list[dict[str, Any]]:
     calls = [call for call in _tool_calls(row) if str(call["id"]) in paired]
     if calls:
         return [{"role": ASSISTANT, "content": content, "toolCalls": calls}]
-    # 부르지 않은 것이나 다름없는 호출만 남은 빈 메시지는 재생할 것이 없다.
     return [{"role": ASSISTANT, "content": content}] if content else []
 
 

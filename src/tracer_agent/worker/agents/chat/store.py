@@ -26,13 +26,11 @@ from .memory import ChatMemoryClient, ChatMemoryResult
 # 장기기억은 스레드를 가로지르고 사용자 범위는 생성 시점에 묶이므로 네임스페이스가 사용자를 담지 않는다.
 MEMORY_NAMESPACE: tuple[str, ...] = ("chat_memory",)
 
-# 기억 API가 사실 목록을 싣는 필드다.
 FACTS_FIELD = "facts"
 
 # 기억 API 행에서 사실 하나를 여는 열쇠 필드이며 나머지 필드는 그대로 값에 실린다.
 KEY_FIELD = "key"
 
-# 기억 API에 적재할 내용을 싣는 값 필드다.
 CONTENT_FIELD = "content"
 
 # 기억 API가 적재를 알리는 상태 필드와 값이며 두 백엔드가 같은 문자열을 모델에게 보인다.
@@ -89,7 +87,7 @@ class ChatMemoryStore(BaseStore):
         if not _covered(op.namespace_prefix):
             return []
         matched = [row for row in rows if _passes(row, op.filter) and _mentions(row, op.query)]
-        return [_search_item(row) for row in matched[op.offset : op.offset + op.limit]]
+        return [SearchItem(**_row_view(row)) for row in matched[op.offset : op.offset + op.limit]]
 
     @staticmethod
     def _get(op: GetOp, rows: list[dict[str, Any]]) -> Item | None:
@@ -97,7 +95,7 @@ class ChatMemoryStore(BaseStore):
             return None
         for row in rows:
             if str(row[KEY_FIELD]) == op.key:
-                return _item(row)
+                return Item(**_row_view(row))
         return None
 
     async def _rows(self) -> list[dict[str, Any]]:
@@ -112,24 +110,15 @@ def _unwrapped(result: ChatMemoryResult) -> str:
     return result.text
 
 
-def _search_item(row: dict[str, Any]) -> SearchItem:
-    return SearchItem(
-        namespace=MEMORY_NAMESPACE,
-        key=str(row[KEY_FIELD]),
-        value=_value(row),
-        created_at=_at(row),
-        updated_at=_at(row),
-    )
-
-
-def _item(row: dict[str, Any]) -> Item:
-    return Item(
-        namespace=MEMORY_NAMESPACE,
-        key=str(row[KEY_FIELD]),
-        value=_value(row),
-        created_at=_at(row),
-        updated_at=_at(row),
-    )
+def _row_view(row: dict[str, Any]) -> dict[str, Any]:
+    """기억 API 행 하나를 저장소 항목 두 종류가 함께 쓰는 인자로 바꾼다."""
+    return {
+        "namespace": MEMORY_NAMESPACE,
+        "key": str(row[KEY_FIELD]),
+        "value": _value(row),
+        "created_at": _at(row),
+        "updated_at": _at(row),
+    }
 
 
 def _covered(namespace_prefix: tuple[str, ...]) -> bool:

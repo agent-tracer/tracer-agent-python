@@ -1,17 +1,21 @@
-"""chat 도구 표면과 예산을 계약으로 검증한다."""
+"""chat 도구 표면과 모델이 보는 스키마를 계약으로 검증한다."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
 from tests.support.contract import agent_tools, conformance_case
+from tracer_agent.shared.agents.envelope.tools import chat_tool_descriptions
 from tracer_agent.worker.agents.chat.tools import (
     AGENT_READ_TOOL_NAMES,
+    ARGS_MODELS,
     MEMORY_TOOL_NAMES,
     READ_TOOL_NAMES,
     TOOL_FAILED,
     WRITE_TOOL_NAMES,
-    build_chat_registry,
+    chat_tool_registry,
     tool_arg_names,
 )
 
@@ -20,8 +24,8 @@ def _contract() -> Any:
     return agent_tools("chat")
 
 
-def _langchain_tools() -> dict[str, Any]:
-    registry = build_chat_registry(None, [], {}, agent_name="chat")
+def _langchain_tools(descriptions: dict[str, str] | None = None) -> dict[str, Any]:
+    registry = chat_tool_registry(chat_tool_descriptions() if descriptions is None else descriptions)
     return {tool.name: tool for tool in registry.langchain_tools()}
 
 
@@ -60,20 +64,30 @@ def test_표준_tool이_runtime을_숨기고_계약이_적은_인자만_노출�
         assert "runtime" not in schema["properties"]
 
 
+def test_모델이_보는_스키마는_계약이_만든_인자_모델_그대로다() -> None:
+    # 실행 기계로 옮긴 뒤에도 별칭과 설명과 상한이 계약 판 그대로 모델에게 가야 한다.
+    descriptions = chat_tool_descriptions()
+
+    for name, tool in _langchain_tools().items():
+        assert tool.description == descriptions[name]
+        assert tool.args_schema == ARGS_MODELS[name].model_json_schema()
+
+
+def test_계약이_금지한_여분_인자가_모델이_받는_도구_선언에도_적힌다() -> None:
+    for tool in _langchain_tools().values():
+        declared = convert_to_openai_tool(tool)["function"]["parameters"]
+
+        assert declared["additionalProperties"] is False
+
+
+def test_설명을_싣지_않은_봉투는_도구_이름을_설명으로_쓴다() -> None:
+    tools = _langchain_tools({})
+
+    assert {name for name, tool in tools.items() if tool.description != name} == set()
+
+
 def test_도구_실패_문구가_계약과_같다() -> None:
     assert _contract()["failures"]["toolFailed"] == TOOL_FAILED
-
-
-async def test_읽기_진입점이_없는_도구가_계약_문구로_실패를_알린다() -> None:
-    registry = build_chat_registry(None, [], {}, agent_name="chat")
-    tool = next(t for t in registry.langchain_tools() if t.name == "search_tasks")
-
-    text = await tool.coroutine()
-
-    assert "search_tasks" in text
-    assert "{" not in text
-    # chat에는 rationale이 없어 다른 에이전트와 달리 사용자에게 직접 말하라고 시킨다.
-    assert "rationale" not in text
 
 
 def test_인자_설명이_모델이_보는_스키마에_실린다() -> None:

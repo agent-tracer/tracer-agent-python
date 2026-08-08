@@ -57,6 +57,13 @@ SELECT id FROM chat_executions
  LIMIT 1
 """
 
+_SELECT_LATEST_QUEUED = """
+SELECT id FROM chat_executions
+ WHERE thread_id = $1 AND status = 'queued'
+ ORDER BY created_at DESC
+ LIMIT 1
+"""
+
 _SELECT_STEPS = """
 SELECT * FROM chat_execution_steps
  WHERE execution_id = $1 AND user_id = $2
@@ -81,6 +88,11 @@ _RESOLVE_PENDING_TOOL = """
 UPDATE chat_pending_tools SET status = $2, resolved_at = $3
  WHERE id = $1 AND status = 'pending'
 RETURNING *
+"""
+
+_REOPEN_PENDING_TOOL = """
+UPDATE chat_pending_tools SET status = 'pending', resolved_at = NULL
+ WHERE id = $1
 """
 
 _SELECT_MEMORIES = """
@@ -166,6 +178,11 @@ class ChatSurfaceLedger:
         rows = await self._sql.fetch(_SELECT_LATEST_ACTIVE, thread_id)
         return str(rows[0]["id"]) if rows else None
 
+    async def latest_queued_execution(self, thread_id: str) -> str | None:
+        """이 스레드에서 아직 문맥을 읽지 않은 가장 최근 실행의 식별자를 낸다."""
+        rows = await self._sql.fetch(_SELECT_LATEST_QUEUED, thread_id)
+        return str(rows[0]["id"]) if rows else None
+
     async def list_steps(self, execution_id: str, user_id: str) -> list[SqlRow]:
         """실행 하나의 궤적을 시도와 순번의 오름차순으로 낸다."""
         return await self._sql.fetch(_SELECT_STEPS, execution_id, user_id)
@@ -195,6 +212,10 @@ class ChatSurfaceLedger:
         """대기 중인 확인 하나를 승인이나 거절로 닫고 닫힌 행을 낸다."""
         rows = await self._sql.fetch(_RESOLVE_PENDING_TOOL, confirmation_id, status, now)
         return rows[0] if rows else None
+
+    async def reopen_pending_tool(self, confirmation_id: str) -> None:
+        """집었던 확인 하나를 다시 물을 수 있는 자리로 되돌린다."""
+        await self._sql.fetch(_REOPEN_PENDING_TOOL, confirmation_id)
 
     async def list_memories(self, user_id: str) -> list[SqlRow]:
         """이 사용자의 장기기억을 최근 갱신순으로 낸다."""

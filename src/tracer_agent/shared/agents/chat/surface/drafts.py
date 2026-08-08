@@ -14,13 +14,13 @@ from ..dependencies import Updates, Watch
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.cancel import UpdateSignal
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
+from ..rejections import EXECUTION_NOT_FOUND
 from .envelope import read_payload
 from .models import DraftCheckpointBody
 from .updates import ChatExecutionUpdates
 
 CHAT_DRAFTS_PATH = "/api/agent/chat/executions/{execution_id}/drafts"
 
-EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
 TOKEN_REJECTED = (403, "forbidden", "Chat draft callback is not authorized")
 
 router = APIRouter()

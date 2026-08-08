@@ -5,12 +5,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
+
 from tests.support.contract import agent_tools
 from tracer_agent.shared.agents.chat.tools.bindings import (
-    LOCAL_TOOL_NAMES,
     TOOL_ACTION_BINDINGS,
     TOOL_BINDINGS,
     ToolBinding,
+    binding_for,
     fill_path,
 )
 from tracer_agent.shared.agents.chat.tools.surface import CONFIRM_SURFACE, READ_SURFACES, tool_surface
@@ -39,16 +41,14 @@ def test_바인딩_표가_계약과_바이트로_같다() -> None:
     golden = _bindings()
 
     assert set(TOOL_BINDINGS) == set(golden["bindings"])
-    assert list(LOCAL_TOOL_NAMES) == golden["local"]
+    # 실행 프로세스 안에서 처리되는 도구가 없어야 모든 도구가 계약의 자리를 갖는다.
+    assert golden["local"] == []
     for name, binding in TOOL_BINDINGS.items():
         assert _expected(binding) == golden["bindings"][name]
 
 
-def test_바인딩과_로컬_도구를_합치면_도구_표면_전체다() -> None:
-    assert set(TOOL_BINDINGS) | set(TOOL_ACTION_BINDINGS) | set(LOCAL_TOOL_NAMES) == set(
-        chat_tool_declarations()
-    )
-    assert not set(TOOL_BINDINGS) & set(LOCAL_TOOL_NAMES)
+def test_바인딩이_도구_표면_전체를_덮는다() -> None:
+    assert set(TOOL_BINDINGS) | set(TOOL_ACTION_BINDINGS) == set(chat_tool_declarations())
 
 
 def test_되읽는_표면의_도구는_본문을_싣지_않는다() -> None:
@@ -94,3 +94,18 @@ def test_사용자_범위를_사칭하는_인자가_어느_자리에도_없다()
 
 def test_경로_자리를_채울_때_인자_값을_이스케이프한다() -> None:
     assert fill_path(TOOL_BINDINGS["get_timeline"], {"taskId": "a/b"}) == "/api/v1/tasks/a%2Fb/timeline"
+
+
+def test_계약에_없는_도구_이름은_자리를_내지_않는다() -> None:
+    with pytest.raises(KeyError):
+        binding_for("no_such_tool", {})
+
+
+def test_action을_받는_도구에_action이_없으면_거절한다() -> None:
+    with pytest.raises(KeyError):
+        binding_for("propose_task_write", {"taskId": "task-1"})
+
+
+def test_계약에_없는_action은_자리를_내지_않는다() -> None:
+    with pytest.raises(KeyError):
+        binding_for("propose_task_write", {"action": "no_such_action"})

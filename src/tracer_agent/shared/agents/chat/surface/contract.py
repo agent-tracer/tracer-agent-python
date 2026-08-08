@@ -6,13 +6,11 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from types import MappingProxyType
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-CHAT_QUERY_CASE_PATH = (
-    Path(__file__).resolve().parents[6] / "contract" / "conformance" / "cases" / "chat.query.json"
-)
+from ...shared.contract_root import CONTRACT_ROOT
+
+CHAT_QUERY_CASE_PATH = CONTRACT_ROOT / "conformance" / "cases" / "chat.query.json"
 
 _MILLIS_PER_SECOND = 1000.0
 

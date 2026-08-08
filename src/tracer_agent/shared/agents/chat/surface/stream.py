@@ -14,8 +14,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...runtime.ledger import SqlSource
 from ..dependencies import Watch
-from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
+from ..rejections import ChatRejected
 from .access import owned_execution, owned_thread
 from .contract import chat_stream_rules
 from .envelope import rejection
@@ -57,11 +57,12 @@ async def watch_chat_execution(
 ) -> StreamingResponse | JSONResponse:
     """요청이 실어 보낸 Last-Event-ID 와 무관하게 그 순간의 정본부터 이어서 내고 종결에서 닫는다."""
     try:
-        first = await _snapshot(source, user_id, thread_id, execution_id)
-    except ChatIntakeRejected as rejected:
+        # 이 조회는 남의 실행을 열지 않기 위한 것이며 첫 프레임은 구독을 놓은 뒤에 다시 읽는다.
+        await _snapshot(source, user_id, thread_id, execution_id)
+    except ChatRejected as rejected:
         return rejection(rejected)
     return StreamingResponse(
-        frames(watch, source, user_id, thread_id, execution_id, first),
+        frames(watch, source, user_id, thread_id, execution_id),
         media_type=EVENT_STREAM_MEDIA_TYPE,
         headers=dict(chat_stream_rules().headers),
     )
@@ -73,15 +74,15 @@ async def frames(
     user_id: str,
     thread_id: str,
     execution_id: str,
-    first: ChatExecutionSnapshot,
 ) -> AsyncIterator[str]:
     """연결이 살아 있는 동안 정본 스냅샷을 이어 내고 종결이나 끊김에서 구독을 놓는다."""
     signal = asyncio.Event()
     unsubscribe = _listen(watch, execution_id, signal)
-    snapshot = first
     last = ""
     try:
         while True:
+            # 구독보다 먼저 읽은 정본은 그 사이의 갱신을 놓치므로 첫 프레임도 이 자리에서 읽는다.
+            snapshot = await _snapshot(source, user_id, thread_id, execution_id)
             frame = snapshot.frame()
             # 정본이 그대로면 거르되 주기 재전송은 게이트웨이 유휴 타임아웃을 막으므로 남긴다.
             if frame != last or snapshot.is_terminal():
@@ -91,8 +92,7 @@ async def frames(
                 return
             if not await _await_change(signal):
                 last = ""
-            snapshot = await _snapshot(source, user_id, thread_id, execution_id)
-    except ChatIntakeRejected:
+    except ChatRejected:
         # 조회하던 실행이 사라졌으면 더 실을 것이 없으므로 연결을 닫는다.
         return
     finally:

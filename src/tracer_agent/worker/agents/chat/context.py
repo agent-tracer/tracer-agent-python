@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from tracer_agent.shared.agents.chat.models import ChatFact, ChatHistoryMessage, ChatReplay
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 
-from .reader import USER_HEADER, unwrap_envelope
+from .reader import USER_HEADER, unwrapped_body
 
 # 이번 턴이 되돌려 줄 이력을 서버가 계산해 주는 자리이며, 창 자르기도 도구 호출 짝 맞추기도 서버가 한다.
 REPLAY_PATH = "/api/agent/chat/threads/{threadId}/executions/{executionId}/replay"
@@ -42,7 +42,7 @@ class ChatContextReader:
         # 이력을 못 읽은 채로 모델을 부르면 지난 대화를 통째로 잊은 답이 나가므로 실행을 여기서 끊는다.
         if response.status_code >= 400:
             raise ValueError(f"chat replay API answered {response.status_code}")
-        replay = ChatReplay.model_validate(json.loads(unwrap_envelope(response.text)))
+        replay = ChatReplay.model_validate(json.loads(unwrapped_body(response.text)))
         return replay.messages, replay.summary, replay.facts
 
     def _path(self) -> str:

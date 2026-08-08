@@ -10,6 +10,7 @@ from tests.support.chat_surface import (
     NOW,
     RecordingDispatch,
     seed_execution,
+    seed_memory,
     seed_message,
     seed_thread,
 )
@@ -86,6 +87,15 @@ class Test스레드_창구:
         assert store.rows("chat_messages") == []
         assert store.rows("chat_executions") == []
         assert dispatch.canceled == ["e1"]
+
+    def test_스레드를_지워도_사용자_장기기억은_남는다(
+        self, client: TestClient, store: SqliteLedgerSql
+    ) -> None:
+        seed_thread(store)
+        seed_memory(store)
+
+        assert client.delete(f"{THREADS}/t1").status_code == 200
+        assert [row["key"] for row in store.rows("chat_user_memories")] == ["lang"]
 
     def test_메시지_목록은_쌓인_순서대로_계약이_정한_칸으로_낸다(
         self, client: TestClient, store: SqliteLedgerSql

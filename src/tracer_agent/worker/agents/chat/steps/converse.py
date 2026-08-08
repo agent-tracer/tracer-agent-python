@@ -1,4 +1,4 @@
-"""chat의 대화 노드가 도구 루프를 실행해 어시스턴트 답변과 확인 대기 행 인용을 낸다."""
+"""chat의 대화 단계가 도구 루프를 실행해 어시스턴트 답변과 확인 대기 행 인용을 낸다."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -18,64 +16,58 @@ from tracer_agent.shared.agents.chat.models import (
     ChatRequest,
     ChatState,
     ConverseUpdate,
-    ProposedWrite,
 )
 
 from ...runtime.checkpoint import GraphCheckpointProvider
+from ...runtime.durable_graph import execution_config
 from ...runtime.execution.trace import ExecutionTrace
 from ...runtime.llm.budget import SharedToolLoopBudget, single_loop_budget
-from ...runtime.llm.standard_agent import StandardAgentContext
 from ...runtime.llm.structured_agent import recursion_limit_for
 from ...runtime.llm.trajectory import step_content_text
-from ...runtime.node import GraphNode
 from ...runtime.pricing import ModelRates
+from ...runtime.telemetry.disclosure import TraceSafeMetadata
+from ..agent_cache import ChatAgentSource
+from ..backends import ChatTurnBackends
 from ..checkpointer import seed_checkpoint
 from ..context import replay_messages
 from ..drafts import DraftSink
-from ..langchain_agent import build_chat_agent
-from ..memory import ChatMemoryClient
 from ..prompts import build_context_prompt
-from ..reader import ChatReadClient
-from ..store import ChatMemoryStore
-from ..tools import build_chat_registry
-from ..writer import ChatWriteClient
+from ..tools import ChatToolContext
 
-# 읽기 도구는 HTTP만 타므로 연결 계열 오류만 일시적이며 도메인 응답은 재시도하지 않는다.
-TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
-    httpx.TransportError,
-    ConnectionError,
-    TimeoutError,
-)
+CONVERSE_STEP = "converse"
+
+# 도구 루프는 실행 데드라인의 대부분을 쓰되 종결이 실행될 자리를 남긴다.
+CONVERSE_DEADLINE_SHARE = 0.9
 
 
-class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
+class ConverseStep:
     """대화 이력과 도구로 한 턴의 어시스턴트 답변을 만든다."""
-
-    name = "converse"
 
     def __init__(
         self,
         req: ChatRequest,
-        http_client: httpx.AsyncClient,
+        backends: ChatTurnBackends,
         checkpoints: GraphCheckpointProvider | None,
         usage: ExecutionTrace,
-        chat: BaseChatModel,
-        fallback_chat: BaseChatModel | None,
+        agents: ChatAgentSource,
         *,
         agent_name: str,
         drafts: DraftSink,
         system_prompt: str,
+        prompt_version: str,
+        tool_contract_version: str,
         language_directives: Mapping[str, str],
     ) -> None:
         self._req = req
-        self._http_client = http_client
+        self._backends = backends
         self._checkpoints = checkpoints
         self._usage = usage
-        self._chat = chat
-        self._fallback_chat = fallback_chat
+        self._agents = agents
         self._agent_name = agent_name
         self._drafts = drafts
         self._system_prompt = system_prompt
+        self._prompt_version = prompt_version
+        self._tool_contract_version = tool_contract_version
         self._language_directives = language_directives
 
     async def run(self, state: ChatState) -> ConverseUpdate:
@@ -85,7 +77,7 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             "messages": messages,
             "model_cost_usd": prepared.budget.delta,
             "model_turns_used": sum(1 for message in messages if isinstance(message, AIMessage)),
-            "proposals": prepared.proposals,
+            "proposals": prepared.context.proposals,
         }
 
     async def _stream(self, prepared: _PreparedTurn) -> list[BaseMessage]:
@@ -117,26 +109,8 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
         return collected
 
     async def _prepare(self, state: ChatState) -> _PreparedTurn:
-        proposals: list[ProposedWrite] = []
         checkpointer = await self._checkpointer()
-        registry = build_chat_registry(
-            self._read_client(),
-            proposals,
-            self._req.toolDescriptions,
-            agent_name=self._agent_name,
-            write_client=self._write_client(),
-            agent_read_client=self._agent_read_client(),
-        )
-        agent = build_chat_agent(
-            self._chat,
-            self._system_prompt,
-            registry.langchain_tools(),
-            TRANSIENT_ERRORS,
-            fallback_chat=self._fallback_chat,
-            checkpointer=checkpointer,
-            store=self._memory_store(),
-            max_turns=self._req.limits.maxTurns,
-        )
+        agent = self._agents.compiled(self._req, self._system_prompt, checkpointer)
         budget = single_loop_budget(
             self._agent_name,
             self._req.model,
@@ -144,11 +118,14 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             ModelRates(self._req.modelRates),
             state["model_cost_usd"],
         )
-        context = StandardAgentContext(
+        context = ChatToolContext(
             agent_name=self._agent_name,
             trace=self._usage,
             budget=budget,
             max_model_turns=self._req.limits.maxTurns,
+            tool_owner=self._agent_name,
+            backends=self._backends,
+            proposals=[],
         )
         config = self._config()
         # 판이 바뀌기 전에 선 체크포인트에는 이 칸이 없으므로 없으면 실린 이력으로 되돌린다.
@@ -160,14 +137,28 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             bool(history) and history[-1].role == "tool",
         )
         messages_in = await self._seed(agent, checkpointer, config, history, context_prompt)
-        return _PreparedTurn(agent, messages_in, config, context, budget, proposals)
+        return _PreparedTurn(agent, messages_in, config, context, budget)
 
     def _config(self) -> RunnableConfig:
+        """잡과 같은 헬퍼로 이 턴의 실행 설정을 세워 두 에이전트의 공개 수준이 갈리지 않게 한다."""
         # thread_id는 체크포인터가 단기기억을 범위로 잡는 열쇠이며 실행 하나가 그 범위다.
-        return {
-            "recursion_limit": recursion_limit_for(self._req.limits.maxTurns),
-            "configurable": {"thread_id": self._req.executionId},
-        }
+        return execution_config(
+            recursion_limit_for(self._req.limits.maxTurns),
+            TraceSafeMetadata(
+                agent_name=self._agent_name,
+                model_requested=self._req.model,
+                prompt_version=self._prompt_version,
+                tool_contract_version=self._tool_contract_version,
+                job_id=self._req.jobId,
+                execution_id=self._req.executionId,
+                attempt_id=self._attempt_id(),
+            ),
+            self._req.executionId,
+        )
+
+    def _attempt_id(self) -> str | None:
+        callback = self._req.draftCallback
+        return None if callback is None else str(callback.attempt)
 
     async def _seed(
         self,
@@ -198,61 +189,16 @@ class ConverseNode(GraphNode[ChatState, ConverseUpdate]):
             return None
         return await self._checkpoints.saver()
 
-    def _read_client(self) -> ChatReadClient | None:
-        if not self._req.readApiBaseUrl:
-            return None
-        return ChatReadClient(
-            self._http_client,
-            self._req.readApiBaseUrl,
-            self._req.userId,
-            self._req.scopeToken or None,
-        )
-
-    def _agent_read_client(self) -> ChatReadClient | None:
-        # 잡 창구처럼 원장이 에이전트 서비스에 있는 읽기 도구는 추적이 아니라 이 기점을 부른다.
-        if not self._req.agentApiBaseUrl:
-            return None
-        return ChatReadClient(
-            self._http_client,
-            self._req.agentApiBaseUrl,
-            self._req.userId,
-            self._req.scopeToken or None,
-        )
-
-    def _write_client(self) -> ChatWriteClient | None:
-        if not self._req.agentApiBaseUrl:
-            return None
-        return ChatWriteClient(
-            self._http_client,
-            self._req.agentApiBaseUrl,
-            self._req.userId,
-            self._req.threadId,
-            self._req.scopeToken or None,
-        )
-
-    def _memory_store(self) -> ChatMemoryStore | None:
-        if not self._req.agentApiBaseUrl:
-            return None
-        return ChatMemoryStore(
-            ChatMemoryClient(
-                self._http_client,
-                self._req.agentApiBaseUrl,
-                self._req.userId,
-                self._req.scopeToken or None,
-            )
-        )
-
 
 @dataclass
 class _PreparedTurn:
-    """blocking·streaming 실행이 공유하는, 조립이 끝난 한 턴의 실행 재료다."""
+    """조립이 끝난 한 턴의 실행 재료다."""
 
     agent: CompiledStateGraph[Any, Any, Any, Any]
     messages_in: list[BaseMessage]
     config: RunnableConfig
-    context: StandardAgentContext
+    context: ChatToolContext
     budget: SharedToolLoopBudget
-    proposals: list[ProposedWrite]
 
 
 def _fresh_tool_names(message: AIMessage, announced: set[str]) -> list[str]:

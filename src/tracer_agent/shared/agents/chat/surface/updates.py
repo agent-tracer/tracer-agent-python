@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from aiokafka import AIOKafkaConsumer
+from aiokafka.errors import KafkaError
 
 _log = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ class UpdateSubscriber:
             consumer = self._factory(self._brokers, self._topic)
             try:
                 await consumer.start()
-            except Exception as unreachable:
+            except (KafkaError, OSError) as unreachable:
                 # 브로커가 없어도 주기 조회가 정본을 실어 보내므로 연결을 여기서 끊지 않는다.
                 _log.warning("chat execution update subscribe failed: %s", unreachable)
                 return

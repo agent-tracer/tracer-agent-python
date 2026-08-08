@@ -14,8 +14,8 @@ from ..dependencies import Dispatch
 from ..execution_ledger import ChatExecutionLedger
 from ..intake.ids import generate_ulid
 from ..intake.router import CHAT_THREADS_PATH
-from ..intake.turn import ChatIntakeRejected
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
+from ..rejections import ChatRejected
 from .access import owned_thread
 from .envelope import CREATED_STATUS, read_payload, rejection
 from .ledger import ChatSurfaceLedger
@@ -59,7 +59,7 @@ async def get_chat_thread(thread_id: str, source: ExecutionSql, user_id: UserId)
     try:
         async with source.connect() as sql:
             thread = await owned_thread(ChatSurfaceLedger(sql), user_id, thread_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     return ok({"thread": thread_dto(thread)})
 
@@ -77,7 +77,7 @@ async def rename_chat_thread(
             ledger = ChatSurfaceLedger(sql)
             await owned_thread(ledger, user_id, thread_id)
             row = await ledger.rename_thread(thread_id, body.title, datetime.now(UTC))
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     return ok({"thread": thread_dto(row)})
 
@@ -92,9 +92,8 @@ async def delete_chat_thread(
             ledger = ChatSurfaceLedger(sql)
             await owned_thread(ledger, user_id, thread_id)
             active = await _close_active(sql, ledger, thread_id)
-            # 사용자 장기기억은 스레드가 아니라 사용자에 매인 것이라 함께 지우지 않는다.
             await ledger.delete_thread(thread_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     for execution_id in active:
         await dispatch.cancel(execution_id)
@@ -109,7 +108,7 @@ async def list_chat_messages(thread_id: str, source: ExecutionSql, user_id: User
             ledger = ChatSurfaceLedger(sql)
             await owned_thread(ledger, user_id, thread_id)
             rows = await ledger.list_messages(thread_id)
-    except ChatIntakeRejected as rejected:
+    except ChatRejected as rejected:
         return rejection(rejected)
     return ok({"items": [message_dto(row) for row in rows]})
 
