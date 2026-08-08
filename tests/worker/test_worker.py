@@ -12,6 +12,7 @@ from tests.support.fakes import TRACER_API_URL
 from tests.support.prompts import JOB_PROMPTS
 from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.ledger import PooledSql
+from tracer_agent.shared.config import Settings
 from tracer_agent.worker.worker import (
     QUEUE_ARGS,
     WORKER_PROFILES,
@@ -25,6 +26,43 @@ from tracer_agent.worker.worker import (
     short_job_activities,
 )
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities
+
+SWEEP_TIMEOUT_S = 1.5
+
+
+class SweepConnection:
+    """스윕이 보내는 문장에 빈 결과만 내는 연결 대역이다."""
+
+    async def fetch(self, _sql: str, *_args: Any) -> list[Any]:
+        """되돌릴 실행도 다시 얹을 실행도 없다고 낸다."""
+        return []
+
+
+class SweepPool:
+    """스윕이 연결을 빌리며 넘긴 여유를 기억하는 풀 대역이다."""
+
+    def __init__(self) -> None:
+        self.timeouts: list[float | None] = []
+
+    async def acquire(self, timeout: float | None = None) -> SweepConnection:
+        """받은 여유를 적고 빈 결과만 내는 연결을 낸다."""
+        self.timeouts.append(timeout)
+        return SweepConnection()
+
+    async def release(self, _connection: Any) -> None:
+        """반납할 것이 없다."""
+
+
+class SweepResources:
+    """스윕이 쓰는 원장 풀 하나만 실은 워커 자원 대역이다."""
+
+    def __init__(self, pool: SweepPool) -> None:
+        self._pool = pool
+        self.ledger = self
+
+    async def pool(self) -> SweepPool:
+        """세워 둔 풀을 낸다."""
+        return self._pool
 
 
 def _activities() -> AgentJobActivities:
@@ -81,6 +119,14 @@ class TestWorkerProfiles:
             "generate": build_generate_worker,
         }
 
+    async def test_대기_줄_스윕도_배포가_정한_획득_여유로_연결을_빌린다(self) -> None:
+        pool = SweepPool()
+        settings = Settings(agent_db_acquire_timeout_s=SWEEP_TIMEOUT_S)
+
+        await resume_chat_executions(None, SweepResources(pool), settings)  # type: ignore[arg-type]
+
+        assert pool.timeouts == [SWEEP_TIMEOUT_S]
+
     def test_대기_줄을_다시_얹는_큐는_chat_하나다(self) -> None:
         resuming = [
             queue for queue, profile in WORKER_PROFILES.items() if profile.resume is resume_chat_executions
@@ -99,7 +145,7 @@ class TestWorkerProfiles:
             yield "opened"
             opened.append("close")
 
-        async def resume(_client: Any, resource: str) -> None:
+        async def resume(_client: Any, resource: str, _settings: Any) -> None:
             resumed.append(resource)
 
         def build(_client: Any, resource: str, _settings: Any) -> Any:

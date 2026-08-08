@@ -209,14 +209,15 @@ def build_generate_worker(client: Client, opened: JobWorkerResources, settings: 
     )
 
 
-async def resume_chat_executions(client: Client, opened: Any) -> None:
+async def resume_chat_executions(client: Client, opened: Any, settings: Settings) -> None:
     """워커가 서기 전에 접수만 되고 시그널이 닿지 못한 실행을 다시 워크플로에 얹는다."""
     dispatch = TemporalExecutionDispatch(TemporalClientProvider(_ready(client)))
-    swept = await resume_active_executions(PooledSql(opened.ledger), dispatch)
+    source = PooledSql(opened.ledger, settings.agent_db_acquire_timeout_s)
+    swept = await resume_active_executions(source, dispatch)
     _log.info("chat.workflow.resumed recovered=%d resumed=%d", swept.recovered, swept.resumed)
 
 
-async def _nothing_to_resume(_client: Client, _opened: Any) -> None:
+async def _nothing_to_resume(_client: Client, _opened: Any, _settings: Settings) -> None:
     """다시 얹을 대기 줄을 갖지 않는 큐다."""
 
 
@@ -226,12 +227,12 @@ class WorkerProfile:
 
     resources: Callable[[Settings], AbstractAsyncContextManager[Any]]
     build: Callable[[Client, Any, Settings], Worker]
-    resume: Callable[[Client, Any], Awaitable[None]] = _nothing_to_resume
+    resume: Callable[[Client, Any, Settings], Awaitable[None]] = _nothing_to_resume
 
     async def serve(self, settings: Settings, client: Client) -> None:
         """이 큐의 자원을 열어 워커를 세우고 종료 신호가 올 때까지 폴링한다."""
         async with self.resources(settings) as opened:
-            await self.resume(client, opened)
+            await self.resume(client, opened, settings)
             await self.build(client, opened, settings).run()
 
 
