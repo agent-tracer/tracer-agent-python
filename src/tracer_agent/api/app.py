@@ -20,11 +20,18 @@ from ..shared.agents.chat.surface.threads import router as chat_thread_router
 from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
 from ..shared.agents.envelope.router import router as envelope_router
-from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql, SqlSource
+from ..shared.agents.runtime.ledger import (
+    LedgerPoolProvider,
+    LedgerUnavailable,
+    PooledSql,
+    SqlSource,
+)
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
 from ..shared.agents.settings.router import router as settings_router
 from ..shared.agents.settings.secret import SettingCipher
+from ..shared.agents.shared.ledger_availability import ledger_unavailable_rejection
+from ..shared.agents.shared.wire import error_envelope
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
 from ..shared.workflows.dispatch import TemporalClientProvider, TemporalExecutionDispatch
@@ -111,9 +118,18 @@ async def readiness(request: Request) -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "ok"})
 
 
+async def ledger_unavailable(_request: Request, exception: Exception) -> JSONResponse:
+    """원장을 빌리지 못한 요청을 계약이 정한 어휘 하나로 거절한다."""
+    _log.warning("agent api ledger unavailable", exc_info=exception)
+    rejected = ledger_unavailable_rejection()
+    return error_envelope(rejected.status, rejected.code, rejected.message)
+
+
 def create_app() -> FastAPI:
     """독립 수명을 가진 에이전트 HTTP 앱을 만든다."""
     application = FastAPI(title="tracer-agent", lifespan=lifespan)
+    # 고갈은 창구의 성질이 아니라 풀의 성질이므로 창구를 열거하지 않고 한 자리에서 거절을 낸다.
+    application.add_exception_handler(LedgerUnavailable, ledger_unavailable)
     application.get("/health")(health)
     application.get("/health/ready")(readiness)
     application.get(SURFACE_PATH)(get_served_surface)

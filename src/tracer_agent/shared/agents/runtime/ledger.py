@@ -24,7 +24,7 @@ DEFAULT_ACQUIRE_TIMEOUT_S = 5.0
 
 
 class LedgerUnavailable(Exception):
-    """빌릴 연결이 정해진 여유 안에 나지 않아 이 호출이 원장에 닿지 못했다."""
+    """이 호출이 원장 연결을 얻지 못했으며 드라이버의 획득 실패를 아는 자리는 이 축에서 하나다."""
 
 
 # 드라이버는 jsonb를 문자열로 내주므로 연결마다 해석 코덱을 걸어야 목록과 사전으로 읽힌다.
@@ -108,11 +108,11 @@ async def _asyncpg_transaction(connection: LedgerConnection) -> AsyncIterator[No
 async def acquire_sql(
     pool: LedgerPool, timeout_s: float = DEFAULT_ACQUIRE_TIMEOUT_S
 ) -> AsyncIterator[LedgerSql]:
-    """풀에서 연결 하나를 빌려 문장 실행 표면으로 감싼 뒤 반납하며 여유를 넘긴 대기는 거절로 낸다."""
+    """풀에서 연결 하나를 빌려 문장 실행 표면으로 감싼 뒤 반납하며 드라이버의 획득 실패를 거절로 낸다."""
     try:
         connection = await pool.acquire(timeout=timeout_s)
-    except TimeoutError as dry:
-        raise LedgerUnavailable(f"원장 연결을 {timeout_s}초 안에 빌리지 못했다") from dry
+    except (TimeoutError, asyncpg.InterfaceError) as dry:
+        raise LedgerUnavailable(f"원장 연결을 {timeout_s}초 안에 얻지 못했다") from dry
     try:
         yield AsyncpgSql(connection)
     finally:

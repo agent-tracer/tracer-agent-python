@@ -35,14 +35,17 @@ class StubConnection:
 class StubPool:
     """빌려 달라고 받은 여유를 기억하고 준비된 연결이 없으면 드라이버처럼 대기 만료를 내는 풀 대역이다."""
 
-    def __init__(self, connection: StubConnection | None = None) -> None:
+    def __init__(self, connection: StubConnection | None = None, failure: Exception | None = None) -> None:
         self._connection = connection
+        self._failure = failure
         self.timeouts: list[float | None] = []
         self.released: list[Any] = []
 
     async def acquire(self, timeout: float | None = None) -> StubConnection:
-        """받은 여유를 적고 준비된 연결을 내거나 대기 만료를 낸다."""
+        """받은 여유를 적고 준비된 연결을 내거나 드라이버처럼 획득 실패를 낸다."""
         self.timeouts.append(timeout)
+        if self._failure is not None:
+            raise self._failure
         if self._connection is None:
             raise TimeoutError
         return self._connection
@@ -82,6 +85,14 @@ async def test_빌린_연결은_쓰임이_끝나면_배포가_정한_여유와_�
 
     assert pool.timeouts == [1.5]
     assert pool.released == [connection]
+
+
+async def test_닫히는_중인_풀에서_빌리려_해도_같은_거절로_낸다() -> None:
+    pool = StubPool(failure=asyncpg.InterfaceError("pool is closing"))
+
+    with pytest.raises(LedgerUnavailable):
+        async with acquire_sql(pool, 0.25):  # type: ignore[arg-type]
+            pass
 
 
 async def test_유일_제약_위반은_원장_오류로_바뀐다() -> None:
