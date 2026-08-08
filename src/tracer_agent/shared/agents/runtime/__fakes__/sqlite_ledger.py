@@ -1,5 +1,7 @@
 """원장 문장을 브로커 없이 평가하도록 chat 쓰기 테이블을 sqlite로 세운 문장 실행 표면이다."""
 
+# 이 대역이 실물에서 지운 것은 연결 하나뿐인 직렬 실행과 postgres 전용 타입과 관측 INSERT의 평가다.
+
 from __future__ import annotations
 
 import json
@@ -237,6 +239,8 @@ def rewrite(sql: str) -> tuple[str, list[int]]:
 class SqliteLedgerSql(LedgerSql):
     """chat 쓰기 테이블을 메모리에 세우고 원장 문장을 그대로 평가한다."""
 
+    # 연결이 하나뿐이라 동시 트랜잭션과 행 잠금이 없고 CHECK 제약과 열 타입도 세우지 않는다.
+
     def __init__(self) -> None:
         # HTTP 테스트는 앱을 다른 스레드에서 실행하므로 연결을 만든 스레드 밖에서도 쓰게 연다.
         self._connection = sqlite3.connect(":memory:", isolation_level=None, check_same_thread=False)
@@ -245,6 +249,7 @@ class SqliteLedgerSql(LedgerSql):
 
     async def fetch(self, sql: str, *args: Any) -> list[SqlRow]:
         """문장 하나를 실행하고 돌아온 행을 원장 열의 형태로 낸다."""
+        # 관측 INSERT는 jsonb 연산자와 형변환으로 적혀 이 대역이 파이썬으로 대신하므로 평가되지 않는다.
         if "INSERT INTO agent_run_observations" in sql:
             return self._insert_observation(str(args[0]), json.dumps(args[1]), args[2])
         statement, order = rewrite(sql)
