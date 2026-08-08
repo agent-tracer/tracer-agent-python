@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 from tests.support.contract import workflow_contract
 
+from tracer_agent.worker.agents.runtime.llm.retry import MAX_RETRIES
+
 AGENTS_ROOT = Path(__file__).resolve().parents[2] / "src" / "tracer_agent" / "worker" / "agents"
 
 CHAT_DOC = AGENTS_ROOT / "chat" / "README.md"
@@ -20,6 +22,7 @@ JOB_DOCS = (
 
 _ROW = re.compile(r"^\|\s*`(?P<name>\w+)`\s*\|(?P<rest>.+)\|\s*$", re.M)
 _SECONDS = re.compile(r"^(\d+)초$")
+_RETRIES = re.compile(r"최대 (\d+)회 재시도")
 
 _CONTRACT = workflow_contract("queues.yaml")
 _WORKFLOWS = {
@@ -72,3 +75,11 @@ def test_문서의_액티비티_표가_계약이_적은_상한과_시도_수를_
         attempts = _attempts(cells)
         if attempts is not None:
             assert attempts == declared[name]["maximumAttempts"], f"{doc.name}: {name}"
+
+
+@pytest.mark.parametrize("doc", [AGENTS_ROOT / "README.md", CHAT_DOC], ids=lambda doc: doc.parent.name)
+def test_문서가_적은_재시도_횟수가_런타임이_정한_값과_같다(doc: Path) -> None:
+    written = _RETRIES.findall(doc.read_text(encoding="utf-8"))
+
+    assert written, doc.name
+    assert {int(count) for count in written} == {MAX_RETRIES}, doc.name
