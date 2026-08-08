@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from tests.support.contract import conformance_case
+from tests.support.contract import agent_tools, conformance_case
 from tests.support.prompts import RECIPE_SCAN_PROMPT
 from tracer_agent.shared.agents.recipe_scan.models import (
     DispatchPlan,
@@ -108,11 +109,19 @@ def test_수리_지시문은_직전_산출과_검증_오류를_함께_싣는다(
 _PROMPT_PARITY = conformance_case("recipe.prompt")
 
 
+_DECLARED_LIMITS = agent_tools("recipe-scan")["limits"]
+
+
 def _assert_parity(rendered: str, declared: dict[str, Any]) -> None:
     for needle in declared.get("mustContain", []):
         assert needle in rendered, f"{declared['name']}: {needle}"
     for needle in declared.get("mustNotContain", []):
         assert needle not in rendered, f"{declared['name']}: {needle}"
+    # 케이스가 숫자를 복제하지 않도록 상한은 이름으로 적고 값은 계약에서 찾는다.
+    for key in declared.get("mustContainLimits", []):
+        value = _DECLARED_LIMITS[key]
+        # 12 가 1200 안에서 걸리면 싣지 않은 상한도 통과하므로 수 전체로 비교한다.
+        assert re.search(rf"(?<!\d){value}(?!\d)", rendered), f"{declared['name']}: {key}"
 
 
 def test_계약이_적은_계획_프롬프트_케이스를_모두_만족한다() -> None:
@@ -134,3 +143,13 @@ def test_계약이_적은_전문가_프롬프트_케이스를_모두_만족한�
         )
 
         _assert_parity(rendered, declared)
+
+
+def test_전문가_시스템_프롬프트가_보고를_자르는_상한을_싣는다() -> None:
+    for declared in _PROMPT_PARITY["probeSystem"]["cases"]:
+        _assert_parity(PROBE_SYSTEM_PROMPT, declared)
+
+
+def test_조율자_시스템_프롬프트가_산출을_자르는_상한을_싣는다() -> None:
+    for declared in _PROMPT_PARITY["investigateSystem"]["cases"]:
+        _assert_parity(INVESTIGATOR_SYSTEM_PROMPT, declared)

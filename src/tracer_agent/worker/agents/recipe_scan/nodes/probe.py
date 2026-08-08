@@ -5,14 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from langchain_core.messages import HumanMessage
+from langchain.agents.structured_output import StructuredOutputValidationError
+from langchain_core.messages import AIMessage, HumanMessage
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     MAX_VERDICT_CHARS,
     ProbeDispatch,
+    ProbeName,
     ProbeReport,
     ProbeUpdate,
     ProvenanceCatalog,
+    salvage_probe_report,
 )
 
 from ...runtime.errors import exception_summary
@@ -31,6 +34,23 @@ _log = logging.getLogger(__name__)
 def _failure_verdict(exc: Exception) -> str:
     summary = exception_summary(exc)
     return WORKER_FAILED.format(reason=summary)[:MAX_VERDICT_CHARS]
+
+
+def _rejected_output(exc: BaseException) -> object:
+    """스키마에 걸려 거절된 산출이며 예외 사슬 어디에도 없으면 None 이다."""
+    seen: BaseException | None = exc
+    while seen is not None:
+        message = getattr(seen, "ai_message", None)
+        if isinstance(seen, StructuredOutputValidationError) and isinstance(message, AIMessage):
+            calls = message.tool_calls
+            if calls:
+                return calls[-1].get("args")
+        seen = seen.__cause__ or seen.__context__
+    return None
+
+
+def _salvaged(probe: ProbeName, exc: Exception) -> ProbeReport | None:
+    return salvage_probe_report(probe, _rejected_output(exc))
 
 
 class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
@@ -94,7 +114,8 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
             turns_used = result.num_turns
         except Exception as exc:
             _log.warning("probe %s failed: %s", assignment.probe, exc)
-            report = ProbeReport(
+            # 상한만 넘긴 보고는 잘라 세우고 그 외에는 조사 결과 없이 실패로 낮춘다.
+            report = _salvaged(assignment.probe, exc) or ProbeReport(
                 probe=assignment.probe,
                 verdict=_failure_verdict(exc),
                 excerpts=[],

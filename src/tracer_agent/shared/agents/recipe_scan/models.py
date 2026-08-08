@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Required, TypedDict
 
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import TurnCeilingState, fresh_budget_snapshot
@@ -22,8 +22,22 @@ from ..shared.models import (
     TrimmedStr,
 )
 
+_TOOL_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "recipe-scan" / "tool.json"
+
+
+@lru_cache(maxsize=1)
+def _declared_limits() -> Mapping[str, int]:
+    declared: Any = json.loads(_TOOL_PATH.read_text(encoding="utf-8"))
+    return {str(name): int(value) for name, value in declared["limits"].items()}
+
+
+def _limit(key: str) -> int:
+    """스키마가 강제하는 상한이며 같은 값을 프롬프트가 자리표시자로 읽는다."""
+    return _declared_limits()[key]
+
+
 # 한 태스크가 서로 다른 작업 turn을 담을 수 있으므로 스캔 한 번이 낼 수 있는 후보 수의 상한이다.
-MAX_RECIPE_CANDIDATES = 4
+MAX_RECIPE_CANDIDATES = _limit("recipeCandidateLimit")
 
 
 class RecipeScanRequest(AgentExecutionRequest):
@@ -43,11 +57,11 @@ MAX_PROBE_TURNS = 10
 # 조율자가 고른 깊이를 예산 배분의 몫으로 옮기는 계약의 자리다.
 PROBE_DEPTH_KEY = "dispatchDepth"
 # 한 조사 계획이 부를 수 있는 전문가 수의 상한이다.
-MAX_DISPATCH_PROBES = 3
+MAX_DISPATCH_PROBES = _limit("maxDispatchProbes")
 # 조율자가 종합 대신 전문가를 다시 부를 수 있는 라운드 수이며 무한 루프를 이 값으로 막는다.
-MAX_REDISPATCH_ROUNDS = 1
+MAX_REDISPATCH_ROUNDS = _limit("maxRedispatchRounds")
 # 한 번의 추가 파견 요청이 부를 수 있는 전문가 수의 상한이다.
-MAX_REDISPATCH_PROBES = 3
+MAX_REDISPATCH_PROBES = _limit("maxRedispatchProbes")
 
 
 class ProbeAssignment(ModelFacing):
@@ -92,9 +106,9 @@ class ProbeDispatch(BaseModel):
 
 
 # 발췌 상한이 곧 맥락 격리의 강도이며 넉넉히 열면 전문가의 맥락이 조율자에게 그대로 옮겨온다.
-MAX_EXCERPTS_PER_PROBE = 12
-MAX_EXCERPT_CHARS = 600
-MAX_VERDICT_CHARS = 1_200
+MAX_EXCERPTS_PER_PROBE = _limit("maxProbeExcerpts")
+MAX_EXCERPT_CHARS = _limit("probeExcerptChars")
+MAX_VERDICT_CHARS = _limit("probeVerdictChars")
 
 
 class Excerpt(ModelFacing):
@@ -117,6 +131,40 @@ class ProbeReport(ModelFacing):
     excerpts: list[Excerpt] = Field(default_factory=list, max_length=MAX_EXCERPTS_PER_PROBE)
     # 예산이 끊겨 못 본 것이 있으면 조율자가 남은 예산을 다시 줄지 판단한다.
     exhausted: bool = False
+
+
+def _clamped(value: object, limit: int) -> object:
+    return value[:limit] if isinstance(value, str) else value
+
+
+def _clamped_excerpt(value: object) -> object:
+    if not isinstance(value, Mapping):
+        return value
+    return {
+        "taskId": value.get("taskId"),
+        "eventId": value.get("eventId"),
+        "text": _clamped(value.get("text"), MAX_EXCERPT_CHARS),
+    }
+
+
+def salvage_probe_report(probe: ProbeName, raw: object) -> ProbeReport | None:
+    """상한을 넘겨 거절된 보고를 상한까지 잘라 다시 검증하며 그 외의 이유로 어긋난 보고는 None 이다."""
+    if not isinstance(raw, Mapping):
+        return None
+    excerpts = raw.get("excerpts")
+    listed = list(excerpts) if isinstance(excerpts, list) else []
+    try:
+        return ProbeReport.model_validate(
+            {
+                "probe": probe,
+                "verdict": _clamped(raw.get("verdict"), MAX_VERDICT_CHARS),
+                "excerpts": [_clamped_excerpt(one) for one in listed[:MAX_EXCERPTS_PER_PROBE]],
+                # 잘라 낸 보고는 전문가가 스스로 닫지 못한 조사이므로 소진으로 적는다.
+                "exhausted": True,
+            }
+        )
+    except ValidationError:
+        return None
 
 
 RecipeVerifyTool = Literal["command", "file-read", "file-write", "web"]
