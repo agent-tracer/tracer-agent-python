@@ -14,12 +14,9 @@ from tracer_agent.shared.agents.shared.json_view import (
 )
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionContext, TitleSuggestionTurn
 
-from ..runtime.scoped_event_reader import ScopedEventReader, timeline_path
+from ..runtime.scoped_event_reader import timeline_path
 from ..runtime.tracer_client import TracerApiPort
 from .policy import windowed_turns
-
-# 조회 로직이 task-cleanup과 완전히 같아 새 서브클래스 대신 이름만 이 슬라이스로 가져온다.
-TitleLedgerReader = ScopedEventReader
 
 # TS 축의 TaskNotFoundError·TaskHasNoEventsError와 같은 뜻의 서브타입이며 재시도로 풀리지 않는다.
 TASK_NOT_FOUND = "title.task-not-found"

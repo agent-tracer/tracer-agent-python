@@ -19,6 +19,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 )
 
 from ...runtime.errors import exception_summary
+from ...runtime.llm.budget import AgentBudgetLease, pool_spend, reserved_spend
 from ...runtime.node import GraphNode
 from ..deps import AGENT_NAME, CleanupDeps
 from ..failures import WORKER_FAILED
@@ -38,16 +39,26 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
 
     name = "triage"
 
-    def __init__(self, deps: CleanupDeps) -> None:
+    def __init__(self, deps: CleanupDeps, lease: AgentBudgetLease) -> None:
         self._deps = deps
+        self._lease = lease
 
     async def run(self, _state: TaskCleanupState) -> TriageUpdate:
         deps = self._deps
+        lease = self._lease
         event_ids: dict[str, set[str]] = {}
+        # 예약에서 턴을 하나도 못 받으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
+        if lease.max_turns <= 0:
+            return {
+                "plan": TriagePlan(),
+                "exposed_candidates": {},
+                "event_ids_by_task": event_ids,
+                **reserved_spend(cost_usd=0.0, turns_used=0),
+            }
         # 요청이 실어 준 후보가 곧 조율자가 본 후보이므로 노출 목록을 여기서 결정적으로 세운다.
         triage_prompt, listed = build_triage_prompt(deps.prompt, deps.req.batch)
         exposed: dict[str, CleanupCandidate] = {candidate.id: candidate for candidate in listed}
-        budget = deps.new_loop(self.name)
+        budget = deps.new_loop(self.name, max_cost_usd=lease.max_cost_usd)
         call = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.triage_system,
@@ -55,6 +66,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             output=TriagePlan,
             messages=[HumanMessage(content=triage_prompt)],
             missing_response=f"{AGENT_NAME} triage produced no structured plan",
+            max_turns=lease.max_turns,
             exposed_candidates=exposed,
             event_ids_by_task=event_ids,
         )
@@ -69,8 +81,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             "plan": plan,
             "exposed_candidates": exposed,
             "event_ids_by_task": event_ids,
-            "model_cost_usd": budget.delta,
-            "model_turns_used": call.num_turns,
+            **reserved_spend(cost_usd=budget.delta, turns_used=call.num_turns),
         }
 
 
@@ -87,6 +98,19 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
         task_id = payload.assignment.taskId
         # 장부를 조사마다 새로 두어 다른 후보의 이벤트를 인용하지 못하게 한다.
         event_ids: dict[str, set[str]] = {}
+        # 턴을 하나도 못 받으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
+        if payload.max_turns <= 0:
+            report = InspectReport(
+                taskId=task_id,
+                archivable=False,
+                reason=WORKER_FAILED.format(reason="no turns allocated")[:MAX_INSPECT_REASON_CHARS],
+                citedEventIds=[],
+            )
+            return {
+                "reports": [report],
+                "event_ids_by_task": event_ids,
+                **pool_spend(cost_usd=0.0, turns_used=0),
+            }
         budget = deps.new_loop(CLEANUP_REVIEWER_ROLE, max_cost_usd=payload.cost_budget)
         # 취소(BaseException 계열)는 잡 전체를 멈추라는 신호이므로 잡지 않고 전파한다.
         try:
@@ -97,6 +121,7 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
                 output=InspectReport,
                 messages=[HumanMessage(content=build_inspect_prompt(task_id))],
                 missing_response=f"{task_id} inspection produced no structured report",
+                max_turns=payload.max_turns,
                 event_ids_by_task=event_ids,
             )
             report, turns_used = call.response, call.num_turns
@@ -109,11 +134,10 @@ class InspectNode(GraphNode[InspectDispatch, InspectUpdate]):
                 reason=_failure_reason(exc),
                 citedEventIds=[],
             )
-            # 끊긴 호출이 그은 턴은 셀 수 없으므로 증명할 수 있는 값만 올리고 상한은 달러가 지킨다.
-            turns_used = 0
+            # 실패한 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
+            turns_used = payload.max_turns
         return {
             "reports": [report],
             "event_ids_by_task": event_ids,
-            "model_cost_usd": budget.delta,
-            "model_turns_used": turns_used,
+            **pool_spend(cost_usd=budget.delta, turns_used=turns_used),
         }

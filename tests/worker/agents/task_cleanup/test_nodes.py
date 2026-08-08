@@ -16,10 +16,10 @@ from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerAp
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import ExecutionBudget
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
+from tracer_agent.worker.agents.runtime.scoped_event_reader import ScopedEventReader
 from tracer_agent.worker.agents.task_cleanup.deps import CleanupDeps, new_cleanup_caller
 from tracer_agent.worker.agents.task_cleanup.nodes.inspect import InspectNode
 from tracer_agent.worker.agents.task_cleanup.prompts import build_prompt_bundle
-from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
 
@@ -72,7 +72,7 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     node = InspectNode(
         CleanupDeps(
             req=req,
-            reader=CleanupLedgerReader(FakeTracerApi()),
+            reader=ScopedEventReader(FakeTracerApi()),
             usage=ExecutionTrace(),
             caller=new_cleanup_caller(ChatPair(BoomChat([]), None)),  # type: ignore[arg-type]
             budget=ExecutionBudget(1.0, mk_rates()),
@@ -83,7 +83,9 @@ async def test_후보_조사_예외는_실패_보고로_강등된다() -> None:
     )
 
     result = await node.run(
-        InspectDispatch(assignment=InspectAssignment(taskId="task-1", depth="normal"), cost_budget=0.25)
+        InspectDispatch(
+            assignment=InspectAssignment(taskId="task-1", depth="normal"), max_turns=2, cost_budget=0.25
+        )
     )
 
     # 조사가 실패한 후보는 안전하게 보관 불가로, 사유는 실패로 올린다.
@@ -143,7 +145,7 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
     req = _request(_candidate("task-1", has_events=True), _candidate("task-2", has_events=True))
     deps = CleanupDeps(
         req=req,
-        reader=CleanupLedgerReader(FakeTracerApi(_EVENT_ROWS)),  # type: ignore[arg-type]
+        reader=ScopedEventReader(FakeTracerApi(_EVENT_ROWS)),  # type: ignore[arg-type]
         usage=ExecutionTrace(),
         caller=new_cleanup_caller(ChatPair(_ReadingChat(asyncio.Barrier(2)), None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),
@@ -155,10 +157,14 @@ async def test_병렬로_도는_검토자는_자기_후보의_이벤트만_장�
 
     results = await asyncio.gather(
         node.run(
-            InspectDispatch(assignment=InspectAssignment(taskId="task-1", depth="shallow"), cost_budget=0.25)
+            InspectDispatch(
+                assignment=InspectAssignment(taskId="task-1", depth="shallow"), max_turns=2, cost_budget=0.25
+            )
         ),
         node.run(
-            InspectDispatch(assignment=InspectAssignment(taskId="task-2", depth="shallow"), cost_budget=0.25)
+            InspectDispatch(
+                assignment=InspectAssignment(taskId="task-2", depth="shallow"), max_turns=2, cost_budget=0.25
+            )
         ),
     )
 

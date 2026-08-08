@@ -33,7 +33,6 @@ from tracer_agent.worker.agents.task_cleanup.tools import (
     GET_TASK_EVENTS,
     GET_TASK_EVENTS_DESCRIPTION,
     GetTaskEventsArgs,
-    validate_tool_args,
 )
 
 
@@ -89,10 +88,6 @@ def test_get_task_events의_필수와_선택_인자가_계약과_같다() -> Non
     declared = tool_arg_partition("task-cleanup", GET_TASK_EVENTS)
 
     assert _partition(GetTaskEventsArgs) == declared
-
-
-def test_생략한_인자는_검증을_통과하고_실행이_기본값을_채운다() -> None:
-    assert validate_tool_args(GET_TASK_EVENTS, {"taskId": "task-1"}) == {"taskId": "task-1"}
 
 
 def test_제안_종류가_계약과_같다() -> None:

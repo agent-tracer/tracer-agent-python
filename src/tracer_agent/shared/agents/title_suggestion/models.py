@@ -7,7 +7,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..shared.graph_state import BudgetSnapshotState, fresh_budget_snapshot
+from ..shared.graph_state import SpendChannels, TurnCeilingState, fresh_spend_channels
 from ..shared.models import (
     AgentExecutionRequest,
     Language,
@@ -60,13 +60,11 @@ class TitleSuggestionDraft(ModelFacing):
     suggestions: list[TitleSuggestion] = Field(default_factory=list, max_length=3)
 
 
-class InvestigateUpdate(TypedDict):
+class InvestigateUpdate(SpendChannels):
     """결정 노드가 갱신하는 상태 부분집합이다."""
 
     candidate: TitleSuggestionDraft
     messages: list[BaseMessage]
-    model_cost_usd: float
-    model_turns_used: int
 
 
 class ValidateCandidateUpdate(TypedDict):
@@ -77,14 +75,12 @@ class ValidateCandidateUpdate(TypedDict):
     validation_errors: list[str]
 
 
-class RepairUpdate(TypedDict):
+class RepairUpdate(SpendChannels):
     """수리 노드가 갱신하는 상태 부분집합이다."""
 
     candidate: TitleSuggestionDraft
     messages: list[BaseMessage]
     repair_attempted: bool
-    model_cost_usd: float
-    model_turns_used: int
 
 
 class ResultUpdate(TypedDict):
@@ -93,11 +89,10 @@ class ResultUpdate(TypedDict):
     result: TitleSuggestionDraft
 
 
-class TitleSuggestionState(BudgetSnapshotState):
+class TitleSuggestionState(TurnCeilingState):
     task_id: str
     language: Language
     context: TitleSuggestionContext
-    # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
     candidate: TitleSuggestionDraft | None
     validation_errors: list[str]
@@ -105,10 +100,14 @@ class TitleSuggestionState(BudgetSnapshotState):
     result: TitleSuggestionDraft | None
 
 
-def initial_title_suggestion_state(req: TitleSuggestionRequest) -> TitleSuggestionState:
-    """실행을 처음 시작하는 상태이며 채널이 늘면 이 자리가 함께 갱신된다."""
+def initial_title_suggestion_state(
+    req: TitleSuggestionRequest, *, max_cost_usd: float, max_turns: int
+) -> TitleSuggestionState:
+    """실행을 처음 시작하는 상태이며 예약을 뗀 뒤 조사가 쓸 몫을 함께 싣는다."""
     return {
         "task_id": req.taskId,
+        "max_cost_usd": max_cost_usd,
+        "max_turns": max_turns,
         "language": req.language,
         "context": req.context,
         "messages": [],
@@ -116,5 +115,5 @@ def initial_title_suggestion_state(req: TitleSuggestionRequest) -> TitleSuggesti
         "validation_errors": [],
         "repair_attempted": False,
         "result": None,
-        **fresh_budget_snapshot(),
+        **fresh_spend_channels(),
     }

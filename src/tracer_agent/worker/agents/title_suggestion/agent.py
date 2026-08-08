@@ -22,9 +22,11 @@ from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.routes import EMPTY, FINALIZE
 from ..runtime.routing import build_validation_router
+from ..runtime.scoped_event_reader import ScopedEventReader
 from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
 from ..runtime.validation_nodes import ResultNode
+from ..shared.execution_reservation import load_reservation_policy
 from ..shared.prompt_source_port import AgentPrompt
 from .deps import TitleDeps, new_title_caller
 from .graph import TITLE_SUGGESTION_GRAPH, TITLE_SUGGESTION_NODE_NAMES
@@ -37,7 +39,7 @@ from .nodes.candidate import (
 )
 from .policy import VALIDATION_REASONS
 from .prompts import build_prompt_bundle
-from .reader import TitleLedgerReader, load_title_context
+from .reader import load_title_context
 
 
 class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionState]):
@@ -68,17 +70,23 @@ class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionSt
         chats: ChatPair,
         prior: PriorSpend,
     ) -> GraphRun[TitleSuggestionState]:
+        budget = ExecutionBudget(
+            req.limits.budgetUsd,
+            ModelRates(req.modelRates),
+            max_turns=req.limits.maxTurns,
+            spent_usd=prior.cost_usd,
+            turns_used=prior.turns,
+        )
+        # 조사가 총량을 다 쓰면 고칠 몫이 남지 않으므로 리페어 몫을 계약이 적은 대로 먼저 뗀다.
+        repair_lease = budget.reserve(
+            load_reservation_policy().repair.turns, load_reservation_policy().repair.budget_share
+        )
         deps = TitleDeps(
             req=req,
-            reader=TitleLedgerReader(tracer),
+            reader=ScopedEventReader(tracer),
             usage=usage,
             caller=new_title_caller(chats),
-            budget=ExecutionBudget(
-                req.limits.budgetUsd,
-                ModelRates(req.modelRates),
-                spent_usd=prior.cost_usd,
-                turns_used=prior.turns,
-            ),
+            budget=budget,
             prompts=build_prompt_bundle(prompt),
             language_directives=prompt.language_directives,
         )
@@ -89,7 +97,7 @@ class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionSt
                 {
                     InvestigateNode.name: InvestigateNode(deps),
                     ValidateCandidateNode.name: ValidateCandidateNode(usage),
-                    RepairNode.name: RepairNode(deps),
+                    RepairNode.name: RepairNode(deps, repair_lease),
                     FINALIZE: ResultNode(FINALIZE, finalize_result),
                     EMPTY: ResultNode(EMPTY, empty_result),
                 },
@@ -97,7 +105,12 @@ class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionSt
             ),
             build_validation_router(usage, ValidateCandidateNode.name, VALIDATION_REASONS),
         )
-        return GraphRun(initial_title_suggestion_state(req), context)
+        initial = initial_title_suggestion_state(
+            req,
+            max_cost_usd=budget.remaining_budget_usd,
+            max_turns=budget.remaining_turns,
+        )
+        return GraphRun(initial, context)
 
     def result_of(self, final: dict[str, Any]) -> JsonObject:
         result: TitleSuggestionDraft = final["result"] or TitleSuggestionDraft()

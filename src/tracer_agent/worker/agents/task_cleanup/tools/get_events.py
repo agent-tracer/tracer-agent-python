@@ -26,8 +26,8 @@ class GetTaskEventsArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     taskId: TrimmedStr = Field(min_length=1, description="The task ID")
-    limit: int | None = Field(
-        default=None,
+    limit: int = Field(
+        default=DEFAULT_EVENT_LIMIT,
         ge=1,
         le=MAX_EVENT_LIMIT,
         description=(
@@ -39,8 +39,8 @@ class GetTaskEventsArgs(BaseModel):
         min_length=1,
         description=("Opaque cursor from a previous call's nextCursor. Omit to start from the first page."),
     )
-    order: EventOrder | None = Field(
-        default=None,
+    order: EventOrder = Field(
+        default=DEFAULT_EVENT_ORDER,
         description=(
             'Reading direction: "asc" (default) pages from the earliest event forward; '
             '"desc" pages from the latest event backward.'
@@ -64,15 +64,14 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, CleanupToolContext]):
     name = GET_TASK_EVENTS
     description = GET_TASK_EVENTS_DESCRIPTION
     args_model = GetTaskEventsArgs
-    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: GetTaskEventsArgs, context: CleanupToolContext) -> str:
         events = await context.reader.task_events(
             args.taskId,
-            args.limit if args.limit is not None else DEFAULT_EVENT_LIMIT,
+            args.limit,
             args.cursor,
-            args.order if args.order is not None else DEFAULT_EVENT_ORDER,
+            args.order,
         )
         if events is None:
             return f"Task {args.taskId} not found."

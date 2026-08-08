@@ -14,6 +14,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     DispatchPlan,
     InvestigateUpdate,
     ProvenanceCatalog,
+    RecipeCandidate,
     RecipeDraft,
     RecipeScanState,
     RepairUpdate,
@@ -22,7 +23,14 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 
 from ...runtime.errors import BudgetExceeded
-from ...runtime.llm.budget import AgentBudgetLease, combine_leases
+from ...runtime.llm.budget import (
+    AgentBudgetLease,
+    SharedToolLoopBudget,
+    combine_leases,
+    floor_lease,
+    floor_then_pool_spend,
+    reserved_spend,
+)
 from ...runtime.node import GraphNode
 from ...runtime.telemetry.execution_metrics import (
     record_redispatch_rounds,
@@ -64,14 +72,17 @@ class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[RecipeScanState, Upd
         self._lease = lease
 
     async def _synthesize(
-        self, messages: list[BaseMessage], state: RecipeScanState, lease: AgentBudgetLease
+        self,
+        messages: list[BaseMessage],
+        state: RecipeScanState,
+        lease: AgentBudgetLease,
+        budget: SharedToolLoopBudget,
     ) -> Synthesis:
         deps = self._deps
         catalog = state["provenance"]
         # 몫이 남지 않으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
         if lease.max_turns <= 0:
             return Synthesis(RecipeDraft(), messages, catalog, 0, 0.0)
-        budget = deps.new_loop(max_cost_usd=lease.max_cost_usd)
         result = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.investigator_system,
@@ -94,14 +105,10 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
 
     async def run(self, state: RecipeScanState) -> InvestigateUpdate:
         deps = self._deps
-        pool_turns = remaining_turns(state)
-        pool_usd = remaining_cost_usd(state)
-        lease = combine_leases(
-            [
-                self._lease,
-                AgentBudgetLease(max_turns=pool_turns, max_cost_usd=pool_usd),
-            ]
-        )
+        # 바닥 예약은 실행당 한 번이므로 redispatch 고리로 다시 들어온 종합은 남은 예약만 받는다.
+        floor = floor_lease(state, self._lease)
+        pool = AgentBudgetLease(max_turns=remaining_turns(state), max_cost_usd=remaining_cost_usd(state))
+        lease = combine_leases([floor, pool])
         synthesis = await self._synthesize(
             [
                 HumanMessage(
@@ -118,23 +125,22 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
             ],
             state,
             lease,
+            deps.new_loop(max_cost_usd=lease.max_cost_usd),
         )
-        # 종합의 턴 소모 중 바닥 예약분은 팬아웃 잔량 풀 밖에서 왔으므로 풀의 소모로 세지 않는다.
-        pool_turns_used = max(synthesis.turns_used - self._lease.max_turns, 0)
+        spend = floor_then_pool_spend(floor, cost_usd=synthesis.cost_usd, turns_used=synthesis.turns_used)
         update: InvestigateUpdate = {
             "candidates": synthesis.draft.recipes,
             "messages": synthesis.messages,
             "provenance": synthesis.provenance,
-            "model_cost_usd": synthesis.cost_usd,
-            "model_turns_used": pool_turns_used,
+            **spend,
             "redispatch": None,
             "redispatch_count": state["redispatch_count"],
         }
         plan = _plan_redispatch(
             synthesis.draft,
             state["redispatch_count"],
-            pool_usd - synthesis.cost_usd,
-            pool_turns - pool_turns_used,
+            pool.max_cost_usd - spend["pool_cost_usd"],
+            pool.max_turns - spend["pool_turns_used"],
         )
         if plan is not None:
             update["redispatch"] = plan
@@ -154,7 +160,7 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
 
     async def run(self, state: RecipeScanState) -> RepairUpdate:
         if not state["candidates"]:
-            return {"repair_attempted": True}
+            return self._update(state, state["candidates"], state["messages"], 0.0, 0)
         deps = self._deps
         # 직전 산출을 본문에 실어 맥락 정리가 도구 결과를 비운 뒤에도 무엇을 고치는지 남는다.
         previous = RecipeDraft(recipes=state["candidates"]).model_dump_json()
@@ -166,21 +172,43 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
                 )
             ),
         ]
+        budget = deps.new_loop(max_cost_usd=self._lease.max_cost_usd)
         try:
-            synthesis = await self._synthesize(repair_prompt, state, self._lease)
+            synthesis = await self._synthesize(repair_prompt, state, self._lease, budget)
         except BudgetExceeded:
             # 수리는 이미 마지막 시도이며 끊긴 결과는 근거가 부족해 후보를 내지 못한 것과 같다.
             deps.usage.record_orchestration_event(
                 "node.failed", f"{self.name} exhausted its reserved budget", node_name=self.name
             )
-            # 수리가 끊겨 후보를 잃은 실행은 저장할 패턴이 없던 실행이 아니라 생성이 실패한 실행이다.
-            return {"candidates": [], "repair_attempted": True, "empty_result_reason": DEGRADED}
+            # 수리가 끊겨 후보를 잃은 실행은 생성이 실패한 실행이며 턴은 예약 전부를 쓴 것으로 본다.
+            update = self._update(state, [], state["messages"], budget.delta, self._lease.max_turns)
+            update["empty_result_reason"] = DEGRADED
+            return update
+        # 수리가 추가 파견을 요청하면 실을 자리가 없으므로 이미 통과한 후보를 빈 초안으로 덮지 않는다.
+        repaired = synthesis.draft
+        candidates = state["candidates"] if repaired.redispatch and not repaired.recipes else repaired.recipes
+        repaired_update = self._update(
+            state, candidates, synthesis.messages, synthesis.cost_usd, synthesis.turns_used
+        )
+        repaired_update["provenance"] = synthesis.provenance
+        return repaired_update
+
+    def _update(
+        self,
+        state: RecipeScanState,
+        candidates: list[RecipeCandidate],
+        messages: list[BaseMessage],
+        cost_usd: float,
+        turns_used: int,
+    ) -> RepairUpdate:
+        """수리 한 번이 남기는 갱신이며 예약 리스로 실행했으므로 팬아웃 풀을 건드리지 않는다."""
         return {
-            "candidates": synthesis.draft.recipes,
-            "messages": synthesis.messages,
-            "provenance": synthesis.provenance,
+            "candidates": candidates,
+            "messages": messages,
+            "provenance": state["provenance"],
             "repair_attempted": True,
-            "model_cost_usd": synthesis.cost_usd,
+            "empty_result_reason": state["empty_result_reason"],
+            **reserved_spend(cost_usd=cost_usd, turns_used=turns_used),
         }
 
 

@@ -16,9 +16,10 @@ from ..runtime.llm.budget import ExecutionBudget, SharedToolLoopBudget
 from ..runtime.llm.client import ChatPair
 from ..runtime.llm.model_caller import ModelCall, StructuredModelCaller
 from ..runtime.llm.structured_agent import StructuredAgentResult
+from ..runtime.scoped_event_reader import ScopedEventReader
 from ..shared.prompt_source_port import AgentPrompt
+from .failures import TOOL_FAILED
 from .prompts import CleanupPrompts
-from .reader import CleanupLedgerReader
 from .tools import CLEANUP_TOOLS, CleanupToolContext
 
 AGENT_NAME = AgentJobKind.TASK_CLEANUP
@@ -31,6 +32,7 @@ def new_cleanup_caller(chats: ChatPair) -> StructuredModelCaller[CleanupToolCont
         CLEANUP_TOOLS,
         name="task-cleanup-investigator",
         context_schema=CleanupToolContext,
+        tool_failure_text=TOOL_FAILED,
         serializes_tools=True,
     )
 
@@ -40,7 +42,7 @@ class CleanupDeps:
     """정리 스캔의 선별과 조사와 결정 노드가 함께 받는 실행 의존성이다."""
 
     req: TaskCleanupRequest
-    reader: CleanupLedgerReader
+    reader: ScopedEventReader
     usage: ExecutionTrace
     caller: StructuredModelCaller[CleanupToolContext]
     budget: ExecutionBudget
@@ -62,11 +64,11 @@ class CleanupDeps:
         output: type[OutputT],
         messages: list[BaseMessage],
         missing_response: str,
+        max_turns: int,
         exposed_candidates: dict[str, CleanupCandidate] | None = None,
         event_ids_by_task: dict[str, set[str]] | None = None,
     ) -> StructuredAgentResult[OutputT]:
-        """맡은 도구만 연 채 모델을 호출해 구조화 출력과 메시지와 이 호출이 쓴 턴을 낸다."""
-        max_turns = self.req.limits.maxTurns
+        """호출자가 떼어 준 턴만 열고 모델을 호출해 구조화 출력과 메시지와 그은 턴을 낸다."""
         return await self.caller.invoke(
             ModelCall(
                 system_prompt=system_prompt,

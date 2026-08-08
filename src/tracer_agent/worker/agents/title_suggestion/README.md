@@ -54,6 +54,8 @@ sequenceDiagram
 | `finalize` | `TitleSuggestionState` | `TitleSuggestionDraft`를 외부 결과로 직렬화한다 | 제안 목록 |
 | `empty` | `TitleSuggestionState` | 현재 title이 충분하거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 
+예약을 받는 노드는 `repair` 하나다. `investigate`는 리스를 받지 않고 실행의 잔량으로 돌므로 조사가 잔량을 다 써도 수리는 예약한 턴으로 실행된다.
+
 유효한 출력은 빈 목록 또는 2~3개 제안이다. 각 제안은 현재 title과 달라야 하고, 정규화 후 서로 중복되지 않아야 하며 `untitled`, `test`, `task-123`과 같은 placeholder가 아니어야 한다.
 
 ## 도구 타입
@@ -100,7 +102,7 @@ title-suggestion.investigator.repair
 
 ## 미들웨어와 출력 타입
 
-`AgentMiddlewareStack`이 네 에이전트와 같은 층을 같은 순서로 세운다. `get_task_events`가 선언한 일시 오류는 tool retry가 다시 부른다. 모델 출력은 `ToolStrategy(TitleSuggestionDraft, handle_errors=True)`로 구조화하고 `validate_candidate`가 title 규칙을 결정적으로 검사한다.
+`AgentMiddlewareStack`이 네 에이전트가 함께 쓰는 순서로 층을 세우고, 구조화 출력을 요구하는 잡이라 산출 복구와 도구 실패 되돌림을 함께 받는다. `get_task_events`가 선언한 일시 오류는 tool retry가 다시 부르고, 재시도가 소진된 실패는 계약의 실패 문구를 담은 도구 결과가 되어 모델에게 돌아간다. 모델 출력은 `ToolStrategy(TitleSuggestionDraft, handle_errors=True)`로 구조화하고 `validate_candidate`가 title 규칙을 결정적으로 검사한다.
 
 ## Temporal 워크플로
 

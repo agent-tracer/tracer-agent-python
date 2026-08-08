@@ -86,10 +86,11 @@ async def test_전문가_실행_예외는_실패_보고로_낮춰진다() -> Non
         )
     )
 
-    # 예외를 던진 전문가는 판정을 실패로 싣고 소진 표시를 올려 조율자가 알게 한다.
+    # 예외를 던진 전문가는 판정을 실패로 싣고 실패 목록에 올라 빈 결과 사유가 근거 부족과 갈린다.
     report = result["reports"][0]
     assert report.probe == "timeline"
-    assert report.exhausted is True
+    assert report.exhausted is False
+    assert result["failed_probes"] == ["timeline"]
     assert report.verdict == "Investigation failed: agent blew up"
     assert report.excerpts == []
     # 실패한 호출도 실제로 쓴 만큼만 정산해야 남은 단계가 쓰지 않은 돈까지 잃지 않는다.
@@ -105,8 +106,10 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_낮�
             return await super().ainvoke(messages)
 
     req = _request()
+    # 상한은 배분받은 달러 몫에 비례해 좁아지므로 하향될 전문가에게만 넘길 수 없는 상한을 준다.
     slow_node = _probe_node(SlowChat([]), wall_clock_ceiling_s=0.05, req=req)
-    fast_node = _probe_node(FakeToolLoopChat([]), wall_clock_ceiling_s=0.05, req=req)
+    # 남아야 하는 전문가에게 같은 상한을 주면 이 단언이 agent 컴파일 시간에 매여 순서마다 갈린다.
+    fast_node = _probe_node(FakeToolLoopChat([]), wall_clock_ceiling_s=60.0, req=req)
 
     slow_result, fast_result = await asyncio.gather(
         slow_node.run(
@@ -126,8 +129,8 @@ async def test_전문가가_벽시계_상한을_넘기면_그_전문가만_낮�
     )
 
     # 진전 없이 상한을 넘긴 전문가만 하향되고, 함께 실행된 다른 전문가의 보고는 온전히 남는다.
-    assert slow_result["reports"][0].exhausted is True
-    assert fast_result["reports"][0].exhausted is False
+    assert slow_result["failed_probes"] == ["timeline"]
+    assert fast_result["failed_probes"] == []
 
 
 async def test_취소는_낮춰지지_않고_전파된다() -> None:
@@ -168,6 +171,7 @@ async def test_종단_노드가_이_실행의_근거_장부를_결과에_싣는�
         "candidates": [],
         "provenance": catalog,
         "reports": [],
+        "failed_probes": [],
         "validation_errors": [],
         "empty_result_reason": None,
     }

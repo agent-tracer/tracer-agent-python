@@ -31,7 +31,6 @@ from tracer_agent.worker.agents.recipe_scan.tools import (
     SearchEventsTool,
     SearchRecipesArgs,
     SearchRecipesTool,
-    validate_tool_args,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 
@@ -61,36 +60,34 @@ def test_Python이_도구_이름_설명_인자스키마를_소유한다() -> Non
     assert search_schema["required"] == ["q"]
 
 
+def _validated(args: dict[str, object]) -> dict[str, object]:
+    """레지스트리가 도구를 부르기 전에 지나는 인자 검증과 같은 자리다."""
+    return SearchEventsArgs.model_validate(args).model_dump(exclude_none=True)
+
+
 def test_taskId_없이도_태스크를_가로질러_검색한다() -> None:
-    assert validate_tool_args("search_events", {"q": "failure"}) == {
-        "q": "failure",
-        "limit": 20,
-        "offset": 0,
-    }
+    assert _validated({"q": "failure"}) == {"q": "failure", "limit": 20, "offset": 0}
 
 
 def test_도구_스키마에_없는_인자는_콜백_전에_거부한다() -> None:
     with pytest.raises(ValidationError):
-        validate_tool_args("search_events", {"q": "failure", "drifted": "arg"})
+        _validated({"q": "failure", "drifted": "arg"})
 
 
 def test_알_수_없는_이벤트_종류는_콜백_전에_거부한다() -> None:
     with pytest.raises(ValidationError):
-        validate_tool_args("search_events", {"q": "failure", "kind": "drifted.kind"})
+        _validated({"q": "failure", "kind": "drifted.kind"})
 
 
 def test_아는_이벤트_종류로_거를_수_있다() -> None:
-    validated = validate_tool_args(
-        "search_events",
-        {"q": "failure", "kind": "agent_tracer.user.message"},
-    )
+    validated = _validated({"q": "failure", "kind": "agent_tracer.user.message"})
 
     assert validated["kind"] == "agent_tracer.user.message"
 
 
-def test_모델이_없는_도구를_부르면_거부한다() -> None:
-    with pytest.raises(ValueError, match="unknown recipe-scan tool"):
-        validate_tool_args("delete_everything", {})
+async def test_모델이_없는_도구를_부르면_거부한다() -> None:
+    with pytest.raises(KeyError):
+        await RECIPE_TOOLS.invoke("delete_everything", {}, mk_recipe_context())
 
 
 async def test_유효하지_않은_도구_인자는_실제_조회를_하지_않는다() -> None:
@@ -108,7 +105,7 @@ async def test_유효하지_않은_도구_인자는_실제_조회를_하지_않�
 
 def test_빈_이벤트_커서는_콜백_전에_거부한다() -> None:
     with pytest.raises(ValidationError):
-        validate_tool_args("get_task_events", {"taskId": "task-1", "cursor": ""})
+        GetTaskEventsArgs.model_validate({"taskId": "task-1", "cursor": ""})
 
 
 def test_revision이_있는_recipe만_수정_근거로_인정한다() -> None:

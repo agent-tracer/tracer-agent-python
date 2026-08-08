@@ -15,7 +15,7 @@ from ..runtime.errors import is_retryable_node_failure
 from ..runtime.llm.budget import lease_shares
 from ..runtime.routes import EMPTY
 from ..runtime.timeouts import deadline_fraction_s
-from ..runtime.validation_graph import add_validation_tail, new_graph, observed
+from ..runtime.validation_graph import add_validation_tail, declared_node_names, new_graph, observed
 from ..shared.empty_result import DEGRADED
 from .nodes.candidate import InvestigateNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
@@ -111,7 +111,6 @@ _graph.add_conditional_edges(
     InvestigateNode.name, _after_investigate, [ProbeNode.name, ValidateCandidateNode.name]
 )
 
-# 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
-RECIPE_SCAN_NODE_NAMES: frozenset[str] = frozenset(name for name in _graph.nodes if not name.startswith("__"))
+RECIPE_SCAN_NODE_NAMES: frozenset[str] = declared_node_names(_graph)
 
 RECIPE_SCAN_GRAPH = DurableGraph(_graph)

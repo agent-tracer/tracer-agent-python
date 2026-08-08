@@ -23,9 +23,11 @@ from ..runtime.node import NodeRegistry
 from ..runtime.pricing import ModelRates
 from ..runtime.routes import EMPTY, FINALIZE
 from ..runtime.routing import build_validation_router
+from ..runtime.scoped_event_reader import ScopedEventReader
 from ..runtime.tracer_client import TracerApiPort
 from ..runtime.validation_graph import ValidationGraphContext
 from ..runtime.validation_nodes import ResultNode
+from ..shared.execution_reservation import load_reservation_policy
 from ..shared.prompt_source_port import AgentPrompt
 from .deps import CleanupDeps, new_cleanup_caller
 from .graph import TASK_CLEANUP_GRAPH, TASK_CLEANUP_NODE_NAMES
@@ -35,7 +37,7 @@ from .nodes.result import empty_result, finalize_result
 from .outputs import deliver_suggestions
 from .policy import VALIDATION_REASONS, has_suggestions
 from .prompts import build_prompt_bundle
-from .reader import CleanupLedgerReader, load_cleanup_batch
+from .reader import load_cleanup_batch
 
 
 class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
@@ -73,17 +75,26 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
         chats: ChatPair,
         prior: PriorSpend,
     ) -> GraphRun[TaskCleanupState]:
+        budget = ExecutionBudget(
+            req.limits.budgetUsd,
+            ModelRates(req.modelRates),
+            max_turns=req.limits.maxTurns,
+            spent_usd=prior.cost_usd,
+            turns_used=prior.turns,
+        )
+        # 뗄 순서를 바꾸면 그 시점 잔량에 곱하는 비율이 달라지므로 계약이 적은 순서를 지킨다.
+        policy = load_reservation_policy()
+        repair_lease = budget.reserve(policy.repair.turns, policy.repair.budget_share)
+        triage_lease = budget.reserve(policy.survey.turns, policy.survey.budget_share)
+        decision_floor_lease = budget.reserve(
+            policy.synthesis_floor.turns, policy.synthesis_floor.budget_share
+        )
         deps = CleanupDeps(
             req=req,
-            reader=CleanupLedgerReader(tracer),
+            reader=ScopedEventReader(tracer),
             usage=usage,
             caller=new_cleanup_caller(chats),
-            budget=ExecutionBudget(
-                req.limits.budgetUsd,
-                ModelRates(req.modelRates),
-                spent_usd=prior.cost_usd,
-                turns_used=prior.turns,
-            ),
+            budget=budget,
             prompts=build_prompt_bundle(prompt),
             prompt=prompt,
             language_directives=prompt.language_directives,
@@ -93,11 +104,11 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
             usage,
             NodeRegistry(
                 {
-                    TriageNode.name: TriageNode(deps),
+                    TriageNode.name: TriageNode(deps, triage_lease),
                     InspectNode.name: InspectNode(deps),
-                    InvestigateNode.name: InvestigateNode(deps),
+                    InvestigateNode.name: InvestigateNode(deps, decision_floor_lease),
                     ValidateDecisionsNode.name: ValidateDecisionsNode(usage),
-                    RepairNode.name: RepairNode(deps),
+                    RepairNode.name: RepairNode(deps, repair_lease),
                     FINALIZE: ResultNode(FINALIZE, finalize_result),
                     EMPTY: ResultNode(EMPTY, empty_result),
                 },
@@ -107,7 +118,12 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
                 usage, ValidateDecisionsNode.name, VALIDATION_REASONS, has_result=has_suggestions
             ),
         )
-        return GraphRun(initial_task_cleanup_state(req), context)
+        initial = initial_task_cleanup_state(
+            req,
+            max_cost_usd=budget.remaining_budget_usd,
+            max_turns=budget.remaining_turns,
+        )
+        return GraphRun(initial, context)
 
     def result_of(self, final: dict[str, Any]) -> JsonObject:
         result: CleanupResult = final["result"] or CleanupResult()

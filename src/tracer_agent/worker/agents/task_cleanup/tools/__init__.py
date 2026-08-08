@@ -14,15 +14,16 @@ from .get_events import (
     GetTaskEventsTool,
 )
 from .registry import (
+    CLEANUP_TOOL_CLASSES,
     CLEANUP_TOOLS,
     COORDINATOR_TOOL_NAMES,
     INSPECT_TOOL_NAMES,
     TRIAGE_TOOL_NAMES,
-    validate_tool_args,
 )
 
 __all__ = [
     "CLEANUP_TOOLS",
+    "CLEANUP_TOOL_CLASSES",
     "COORDINATOR_TOOL_NAMES",
     "DEFAULT_EVENT_LIMIT",
     "DEFAULT_EVENT_ORDER",
@@ -35,5 +36,4 @@ __all__ = [
     "EventOrder",
     "GetTaskEventsArgs",
     "GetTaskEventsTool",
-    "validate_tool_args",
 ]

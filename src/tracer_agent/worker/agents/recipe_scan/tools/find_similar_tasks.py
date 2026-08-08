@@ -37,7 +37,6 @@ class FindSimilarTasksTool(AgentTool[FindSimilarTasksArgs, RecipeToolContext]):
     name = FIND_SIMILAR_TASKS
     description = FIND_SIMILAR_TASKS_DESCRIPTION
     args_model = FindSimilarTasksArgs
-    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: FindSimilarTasksArgs, context: RecipeToolContext) -> str:

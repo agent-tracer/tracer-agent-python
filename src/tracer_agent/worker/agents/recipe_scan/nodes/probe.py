@@ -19,6 +19,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 )
 
 from ...runtime.errors import exception_summary
+from ...runtime.llm.budget import pool_spend
 from ...runtime.node import GraphNode
 from ...runtime.telemetry.execution_metrics import record_probe_exhaustion
 from ...runtime.timeouts import weighted_wall_clock_s
@@ -76,7 +77,12 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
                 excerpts=[],
                 exhausted=True,
             )
-            return {"reports": [report], "provenance": catalog, "model_cost_usd": 0.0, "model_turns_used": 0}
+            return {
+                "reports": [report],
+                "provenance": catalog,
+                "failed_probes": [],
+                **pool_spend(cost_usd=0.0, turns_used=0),
+            }
         budget = deps.new_loop(assignment.probe, max_cost_usd=payload.max_cost_usd)
         wall_clock_s = weighted_wall_clock_s(
             self._wall_clock_ceiling_s,
@@ -112,21 +118,21 @@ class ProbeNode(GraphNode[ProbeDispatch, ProbeUpdate]):
             )
             report = result.response
             turns_used = result.num_turns
+            failed: list[ProbeName] = []
         except Exception as exc:
             _log.warning("probe %s failed: %s", assignment.probe, exc)
             # 상한만 넘긴 보고는 잘라 세우고 그 외에는 조사 결과 없이 실패로 낮춘다.
-            report = _salvaged(assignment.probe, exc) or ProbeReport(
-                probe=assignment.probe,
-                verdict=_failure_verdict(exc),
-                excerpts=[],
-                exhausted=True,
+            salvaged = _salvaged(assignment.probe, exc)
+            report = salvaged or ProbeReport(
+                probe=assignment.probe, verdict=_failure_verdict(exc), excerpts=[]
             )
+            failed = [] if salvaged else [assignment.probe]
             # 실패한 호출은 실제 턴을 모르므로 계약의 정산-무보고 규칙대로 배분받은 턴 전부를 쓴 것으로 본다.
             turns_used = payload.max_turns
         record_probe_exhaustion(AGENT_NAME, assignment.probe, budget.delta, payload.max_cost_usd)
         return {
             "reports": [report],
             "provenance": catalog,
-            "model_cost_usd": budget.delta,
-            "model_turns_used": turns_used,
+            "failed_probes": failed,
+            **pool_spend(cost_usd=budget.delta, turns_used=turns_used),
         }

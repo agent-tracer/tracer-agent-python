@@ -5,15 +5,41 @@ from __future__ import annotations
 from langgraph.graph import START
 from langgraph.types import Send
 
-from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd
-from tracer_agent.shared.agents.task_cleanup.models import InspectDispatch, TaskCleanupState
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
+from tracer_agent.shared.agents.task_cleanup.models import (
+    InspectAssignment,
+    InspectDispatch,
+    TaskCleanupState,
+)
 
 from ..runtime.durable_graph import DurableGraph
-from ..runtime.orchestration import allocate_cost_shares
+from ..runtime.llm.budget import lease_shares
 from ..runtime.routes import EMPTY
-from ..runtime.validation_graph import add_validation_tail, new_graph, observed
+from ..runtime.validation_graph import add_validation_tail, declared_node_names, new_graph, observed
 from .nodes.decision import InvestigateNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
+
+
+def _fan_out(assignments: list[InspectAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
+    if not assignments or remaining_turns <= 0 or remaining_usd <= 0.0:
+        return []
+    leases = lease_shares([item.share for item in assignments], remaining_turns, remaining_usd)
+    return [
+        Send(
+            InspectNode.name,
+            InspectDispatch(
+                assignment=assignment,
+                max_turns=lease.max_turns,
+                cost_budget=lease.max_cost_usd,
+            ),
+        )
+        for assignment, lease in zip(assignments, leases, strict=True)
+    ]
+
+
+def _remaining(state: TaskCleanupState) -> tuple[int, float]:
+    """예약을 뗀 뒤 팬아웃이 아직 쓰지 않은 턴과 달러다."""
+    return remaining_turns(state), remaining_cost_usd(state)
 
 
 def _dispatch(state: TaskCleanupState) -> list[Send]:
@@ -21,28 +47,16 @@ def _dispatch(state: TaskCleanupState) -> list[Send]:
     # 조율자가 도구를 갖지 않으므로 조회할 후보가 없으면 바로 빈 결과로 끝낸다.
     if plan is None or not plan.assignments:
         return [Send(EMPTY, state)]
-    remaining = remaining_cost_usd(state)
-    if remaining <= 0.0:
-        return [Send(EMPTY, state)]
-    return [
-        Send(InspectNode.name, InspectDispatch(assignment=assignment, cost_budget=cost_budget))
-        for assignment, cost_budget in allocate_cost_shares(
-            plan.assignments,
-            ceiling=remaining,
-        )
-    ]
+    turns, usd = _remaining(state)
+    return _fan_out(plan.assignments, turns, usd) or [Send(EMPTY, state)]
 
 
 def _after_investigate(state: TaskCleanupState) -> list[Send]:
     plan = state["redispatch"]
     if plan is None:
         return [Send(ValidateDecisionsNode.name, state)]
-    return [
-        Send(InspectNode.name, InspectDispatch(assignment=assignment, cost_budget=cost_budget))
-        for assignment, cost_budget in allocate_cost_shares(
-            plan.assignments, ceiling=state["redispatch_ceiling"]
-        )
-    ]
+    turns, usd = _remaining(state)
+    return _fan_out(plan.assignments, turns, usd) or [Send(ValidateDecisionsNode.name, state)]
 
 
 _graph = new_graph(TaskCleanupState)
@@ -57,9 +71,6 @@ _graph.add_conditional_edges(
     InvestigateNode.name, _after_investigate, [InspectNode.name, ValidateDecisionsNode.name]
 )
 
-# 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
-TASK_CLEANUP_NODE_NAMES: frozenset[str] = frozenset(
-    name for name in _graph.nodes if not name.startswith("__")
-)
+TASK_CLEANUP_NODE_NAMES: frozenset[str] = declared_node_names(_graph)
 
 TASK_CLEANUP_GRAPH = DurableGraph(_graph)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...runtime.llm.standard_agent import StandardAgentContext
-from ..reader import TitleLedgerReader
+from ...runtime.scoped_event_reader import ScopedEventReader
 
 
 @dataclass(kw_only=True)
@@ -13,4 +13,4 @@ class TitleToolContext(StandardAgentContext):
     """한 모델 호출이 연 도구가 함께 보는 사용자 범위 조회 진입점이다."""
 
     tool_owner: str
-    reader: TitleLedgerReader
+    reader: ScopedEventReader

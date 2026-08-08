@@ -71,7 +71,9 @@ sequenceDiagram
 궤적 이벤트로 남긴다. 사유의 어휘와 기본값은 계약의 `agent/shared/execution.budget.json`
 `orchestratorFailureDemotion.emptyResultReason`이 소유하며 `shared/empty_result.py`가 읽는다.
 `survey` 실패와 `repair` 예산 소진은 그 자리에서 `generation-degraded`를 상태에 적고,
-나머지는 종단 노드가 검증 오류와 전문가 소진 여부로 판정한다.
+나머지는 종단 노드가 검증 오류와 보고를 세우지 못한 전문가와 전문가 소진 여부를 이 순서로 보고 판정한다.
+보고를 세우지 못하고 죽은 전문가는 `failed_probes` 채널에 쌓여 조사 단계가 실패한 것으로 세므로,
+조사를 마치고 근거가 모자랐던 실행과 갈린다.
 
 `MAX_REDISPATCH_ROUNDS`를 넘는 재배정은 허용하지 않는다. 기준 task는 후보의 `contributing_slices`에 포함되어야 하며, 동일 turn의 중복 인용은 검증에서 거부한다.
 
@@ -141,7 +143,7 @@ recipe-scan.probe.system
 
 ## 미들웨어와 출력 타입
 
-`AgentMiddlewareStack`이 model call limit, context editing, 구조화 복구, standardization, prompt cache, tool retry, 선택적 fallback, model retry를 이 순서로 세운다. 구조화 출력은 `ToolStrategy(output, handle_errors=True)`로 처리하며 `DispatchPlan`, `ProbeReport`, `RecipeDraft`를 사용한다. 최종 검증은 후보의 provenance와 인용 식별자를 결정적으로 대조한다.
+`AgentMiddlewareStack`이 model call limit, context editing, 구조화 복구, standardization, prompt cache, 도구 실패 되돌림, tool retry, 선택적 fallback, model retry를 이 순서로 세운다. 구조화 출력은 `ToolStrategy(output, handle_errors=True)`로 처리하며 `DispatchPlan`, `ProbeReport`, `RecipeDraft`를 사용한다. 최종 검증은 후보의 provenance와 인용 식별자를 결정적으로 대조한다.
 
 ## Temporal 워크플로
 

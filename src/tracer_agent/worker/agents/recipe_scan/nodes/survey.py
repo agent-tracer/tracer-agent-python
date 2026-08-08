@@ -11,7 +11,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     SurveyUpdate,
 )
 
-from ...runtime.llm.budget import AgentBudgetLease
+from ...runtime.llm.budget import AgentBudgetLease, reserved_spend
 from ...runtime.node import GraphNode
 from ..deps import RecipeDeps
 from ..prompts import build_survey_prompt
@@ -32,7 +32,7 @@ class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
         lease = self._lease
         # 예약에서 턴을 하나도 못 받으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
         if lease.max_turns <= 0:
-            return {"plan": DispatchPlan(probes=[]), "model_cost_usd": 0.0}
+            return {"plan": DispatchPlan(probes=[]), **reserved_spend(cost_usd=0.0, turns_used=0)}
         budget = deps.new_loop(self.name, max_cost_usd=lease.max_cost_usd)
         result = await deps.invoke(
             budget=budget,
@@ -60,4 +60,7 @@ class SurveyNode(GraphNode[RecipeScanState, SurveyUpdate]):
             f"{self.name} -> {chosen}",
             node_name=self.name,
         )
-        return {"plan": plan, "model_cost_usd": budget.delta}
+        return {
+            "plan": plan,
+            **reserved_spend(cost_usd=budget.delta, turns_used=result.num_turns),
+        }

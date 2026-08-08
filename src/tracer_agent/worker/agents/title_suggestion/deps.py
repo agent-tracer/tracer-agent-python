@@ -14,11 +14,12 @@ from tracer_agent.shared.agents.title_suggestion.models import (
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.execution.trace import ExecutionTrace
-from ..runtime.llm.budget import ExecutionBudget
+from ..runtime.llm.budget import AgentBudgetLease, ExecutionBudget
 from ..runtime.llm.client import ChatPair
 from ..runtime.llm.model_caller import ModelCall, StructuredModelCaller
+from ..runtime.scoped_event_reader import ScopedEventReader
+from .failures import TOOL_FAILED
 from .prompts import TitlePrompts
-from .reader import TitleLedgerReader
 from .tools import TITLE_TOOLS, TitleToolContext
 
 AGENT_NAME = AgentJobKind.TITLE_SUGGESTION
@@ -31,6 +32,7 @@ def new_title_caller(chats: ChatPair) -> StructuredModelCaller[TitleToolContext]
         TITLE_TOOLS,
         name="title-suggestion-investigator",
         context_schema=TitleToolContext,
+        tool_failure_text=TOOL_FAILED,
     )
 
 
@@ -49,17 +51,17 @@ class TitleDeps:
     """제목 후보를 세우는 노드들이 함께 받는 실행 의존성이다."""
 
     req: TitleSuggestionRequest
-    reader: TitleLedgerReader
+    reader: ScopedEventReader
     usage: ExecutionTrace
     caller: StructuredModelCaller[TitleToolContext]
     budget: ExecutionBudget
     prompts: TitlePrompts
     language_directives: Mapping[str, str]
 
-    async def investigate(self, messages: list[BaseMessage]) -> TitleCall:
-        """조사 도구를 연 채 모델을 호출해 제목 후보와 그 호출이 쓴 턴과 달러를 낸다."""
-        max_turns = self.req.limits.maxTurns
-        budget = self.budget.new_loop(AGENT_NAME, self.req.model)
+    async def investigate(self, messages: list[BaseMessage], lease: AgentBudgetLease) -> TitleCall:
+        """호출자가 떼어 준 몫만 열고 모델을 호출해 제목 후보와 그 호출이 쓴 턴과 달러를 낸다."""
+        max_turns = lease.max_turns
+        budget = self.budget.new_loop(AGENT_NAME, self.req.model, max_cost_usd=lease.max_cost_usd)
         result = await self.caller.invoke(
             ModelCall(
                 system_prompt=self.prompts.investigator_system,

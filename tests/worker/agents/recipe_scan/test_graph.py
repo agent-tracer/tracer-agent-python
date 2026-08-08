@@ -22,7 +22,7 @@ from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.worker.agents.recipe_scan import agent as recipe_mod
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.shared.empty_result import (
     default_empty_result_reason,
@@ -148,14 +148,16 @@ async def _run(
     chats = ChatPair(chat, None)
     fake_ledger = ledger if ledger is not None else _default_ledger()
     return await execute(
-        "recipe-scan",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="recipe-scan",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: recipe_mod.RECIPE_SCAN_JOB.run(
             req, fake_ledger, usage, RECIPE_SCAN_PROMPT, None, chats
         ),
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 

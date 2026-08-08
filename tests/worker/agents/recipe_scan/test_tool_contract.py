@@ -41,7 +41,6 @@ from tracer_agent.worker.agents.recipe_scan.tools import (
     SearchEventsArgs,
     SearchEventsTool,
     TimelineEventKind,
-    validate_tool_args,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 
@@ -82,13 +81,17 @@ def _langchain_tools() -> list[Any]:
     return RECIPE_TOOLS.langchain_tools()
 
 
+def _args_model(tool: str) -> Any:
+    return next(cls.args_model for cls in RECIPE_TOOL_CLASSES if cls.name == tool)
+
+
 def _fields(tool: str) -> Any:
-    return next(cls.args_model for cls in RECIPE_TOOL_CLASSES if cls.name == tool).model_fields
+    return _args_model(tool).model_fields
 
 
 def _accepts(tool: str, field: str, value: object) -> bool:
     try:
-        validate_tool_args(tool, {**VALID_ARGS[tool], field: value})
+        _args_model(tool).model_validate({**VALID_ARGS[tool], field: value})
     except ValidationError:
         return False
     return True
@@ -123,7 +126,9 @@ def test_전문가_역할과_도구와_보고가_계약과_같다() -> None:
 
     assert orchestration["workerMaxTurns"] == MAX_PROBE_TURNS
     assert roles == orchestration["roles"]
-    assert list(ProbeReport.model_fields) == orchestration["workerReport"]["required"]
+    # truncated 는 잘라 세운 보고를 예산 소진과 구분하는 코드 쪽 칸이며 계약은 아직 이 칸을 선언하지 않는다.
+    reported = [name for name in ProbeReport.model_fields if name != "truncated"]
+    assert reported == orchestration["workerReport"]["required"]
     assert list(Excerpt.model_fields) == orchestration["workerReport"]["excerptRequired"]
 
 

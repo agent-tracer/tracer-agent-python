@@ -89,6 +89,9 @@ def test_조율자는_스캔_시점과_상한과_조사_보고를_받는다() ->
     _show("investigate (조율자)", INVESTIGATOR_SYSTEM_PROMPT, user)
     assert "Scan time: 2026-07-14T00:00:00Z" in user
     assert "Propose at most 3 tasks to archive." in user
+    # 상한을 넘긴 꼬리는 코드가 조용히 지우므로 무엇을 버릴지 모델이 고를 기준을 함께 준다.
+    assert "If more than 3 qualify, order them by the strength of the evidence you cited" in user
+    assert "only the first 3 are kept." in user
     assert "What the cleanup candidate reviewers reported:" in user
     assert "- task-1: archivable" in user
     assert "(events: event-1)" in user

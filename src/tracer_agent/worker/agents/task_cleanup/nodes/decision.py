@@ -9,9 +9,11 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 from tracer_agent.shared.agents.task_cleanup.models import (
     MAX_REDISPATCH_ROUNDS,
     CleanupDraft,
+    CleanupDraftSuggestion,
     InvestigateUpdate,
     RepairUpdate,
     TaskCleanupState,
@@ -19,6 +21,15 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     ValidateDecisionsUpdate,
 )
 
+from ...runtime.errors import BudgetExceeded
+from ...runtime.llm.budget import (
+    AgentBudgetLease,
+    SharedToolLoopBudget,
+    combine_leases,
+    floor_lease,
+    floor_then_pool_spend,
+    reserved_spend,
+)
 from ...runtime.node import GraphNode
 from ...runtime.validation_nodes import ValidationNode
 from ..deps import AGENT_NAME, CleanupDeps
@@ -28,14 +39,14 @@ from ..tools import COORDINATOR_TOOL_NAMES
 
 
 def _plan_redispatch(
-    draft: CleanupDraft, redispatch_count: int, remaining: float
-) -> tuple[TriagePlan, float] | None:
-    """후보를 한 번 더 조사할지 정하고 남은 예산과 함께 계획을 돌려주거나 없으면 None을 낸다."""
+    draft: CleanupDraft, redispatch_count: int, remaining_usd: float, remaining_turns: int
+) -> TriagePlan | None:
+    """후보를 한 번 더 조사할지 정해 계획을 돌려주거나 남은 몫이 없으면 None을 낸다."""
     if not draft.redispatch or redispatch_count >= MAX_REDISPATCH_ROUNDS:
         return None
-    if remaining <= 0.0:
+    if remaining_usd <= 0.0 or remaining_turns <= 0:
         return None
-    return TriagePlan(inspect=draft.redispatch), remaining
+    return TriagePlan(inspect=draft.redispatch)
 
 
 @dataclass(frozen=True)
@@ -49,13 +60,21 @@ class _Decision:
 
 
 class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, UpdateT], ABC):
-    def __init__(self, deps: CleanupDeps) -> None:
+    def __init__(self, deps: CleanupDeps, lease: AgentBudgetLease) -> None:
         self._deps = deps
+        self._lease = lease
 
-    async def _decide(self, messages: list[BaseMessage], state: TaskCleanupState) -> _Decision:
+    async def _decide(
+        self,
+        messages: list[BaseMessage],
+        state: TaskCleanupState,
+        lease: AgentBudgetLease,
+        budget: SharedToolLoopBudget,
+    ) -> _Decision:
         deps = self._deps
-        budget = deps.new_loop()
-        # 조율자는 후보를 직접 조회하지 않고 검토 전문가의 보고만으로 제안을 쓴다.
+        # 몫이 남지 않으면 재귀 한도가 0이 되어 그래프가 시작하지 못하므로 모델을 부르지 않는다.
+        if lease.max_turns <= 0:
+            return _Decision(CleanupDraft(), messages, 0, 0.0)
         call = await deps.invoke(
             budget=budget,
             system_prompt=deps.prompts.investigator_system,
@@ -63,6 +82,7 @@ class _DecisionAgent[UpdateT: Mapping[str, Any]](GraphNode[TaskCleanupState, Upd
             output=CleanupDraft,
             messages=messages,
             missing_response=f"{AGENT_NAME} produced no structured output",
+            max_turns=lease.max_turns,
             exposed_candidates=state["exposed_candidates"],
             event_ids_by_task=state["event_ids_by_task"],
         )
@@ -76,6 +96,10 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
 
     async def run(self, state: TaskCleanupState) -> InvestigateUpdate:
         deps = self._deps
+        # 바닥 예약은 실행당 한 번이므로 redispatch 고리로 다시 들어온 결정은 남은 예약만 받는다.
+        floor = floor_lease(state, self._lease)
+        pool = AgentBudgetLease(max_turns=remaining_turns(state), max_cost_usd=remaining_cost_usd(state))
+        lease = combine_leases([floor, pool])
         decided = await self._decide(
             [
                 HumanMessage(
@@ -88,25 +112,28 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
                 )
             ],
             state,
+            lease,
+            deps.new_loop(max_cost_usd=lease.max_cost_usd),
         )
         draft = decided.draft
+        spend = floor_then_pool_spend(floor, cost_usd=decided.cost_usd, turns_used=decided.turns_used)
         update: InvestigateUpdate = {
             "suggestions": draft.suggestions,
             "messages": decided.messages,
             "exposed_candidates": state["exposed_candidates"],
             "event_ids_by_task": state["event_ids_by_task"],
-            "model_cost_usd": decided.cost_usd,
-            "model_turns_used": decided.turns_used,
+            **spend,
             "redispatch": None,
-            "redispatch_ceiling": 0.0,
             "redispatch_count": state["redispatch_count"],
         }
-        remaining = deps.budget.max_cost_usd - deps.budget.spent
-        redispatch = _plan_redispatch(draft, state["redispatch_count"], remaining)
-        if redispatch is not None:
-            plan, ceiling = redispatch
+        plan = _plan_redispatch(
+            draft,
+            state["redispatch_count"],
+            pool.max_cost_usd - spend["pool_cost_usd"],
+            pool.max_turns - spend["pool_turns_used"],
+        )
+        if plan is not None:
             update["redispatch"] = plan
-            update["redispatch_ceiling"] = ceiling
             update["redispatch_count"] = state["redispatch_count"] + 1
             chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments)
             deps.usage.record_orchestration_event(
@@ -129,15 +156,41 @@ class RepairNode(_DecisionAgent[RepairUpdate]):
                 )
             ),
         ]
-        decided = await self._decide(repair_prompt, state)
+        deps = self._deps
+        budget = deps.new_loop(max_cost_usd=self._lease.max_cost_usd)
+        try:
+            decided = await self._decide(repair_prompt, state, self._lease, budget)
+        except BudgetExceeded:
+            # 수리는 이미 마지막 시도이며 끊긴 수리가 앞서 검증을 통과한 제안까지 잃게 하지 않는다.
+            deps.usage.record_orchestration_event(
+                "node.failed", f"{self.name} exhausted its reserved budget", node_name=self.name
+            )
+            return self._update(
+                state, state["suggestions"], state["messages"], budget.delta, self._lease.max_turns
+            )
+        draft = decided.draft
+        # 수리가 추가 조사를 요청하면 실을 자리가 없으므로 이미 통과한 제안을 빈 초안으로 덮지 않는다.
+        suggestions = (
+            state["suggestions"] if draft.redispatch and not draft.suggestions else draft.suggestions
+        )
+        return self._update(state, suggestions, decided.messages, decided.cost_usd, decided.turns_used)
+
+    def _update(
+        self,
+        state: TaskCleanupState,
+        suggestions: list[CleanupDraftSuggestion],
+        messages: list[BaseMessage],
+        cost_usd: float,
+        turns_used: int,
+    ) -> RepairUpdate:
+        """수리 한 번이 남기는 갱신이며 예약 리스로 실행했으므로 팬아웃 풀을 건드리지 않는다."""
         return {
-            "suggestions": decided.draft.suggestions,
-            "messages": decided.messages,
+            "suggestions": suggestions,
+            "messages": messages,
             "exposed_candidates": state["exposed_candidates"],
             "event_ids_by_task": state["event_ids_by_task"],
             "repair_attempted": True,
-            "model_cost_usd": decided.cost_usd,
-            "model_turns_used": decided.turns_used,
+            **reserved_spend(cost_usd=cost_usd, turns_used=turns_used),
         }
 
 

@@ -24,8 +24,8 @@ def windowed_turns(
     return included, len(turns) > len(included)
 
 
-# 후보 하나가 쓸모없어 떨어질 때의 사유이며 모델이 아니라 코드가 지운다.
 MIN_TITLE_SUGGESTIONS = 2
+# 후보 하나가 쓸모없어 떨어질 때의 사유이며 모델이 아니라 코드가 지운다.
 SHORT_OF_MINIMUM = (
     f"only {{kept}} usable suggestion(s) remain after dropping unusable ones; "
     f"return {MIN_TITLE_SUGGESTIONS}-3 distinct titles that differ from the current one"

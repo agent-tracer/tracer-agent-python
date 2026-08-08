@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tests.support.topology import edge_lines
 from tracer_agent.shared.agents.recipe_scan.models import DispatchPlan, ProbeDispatch
 from tracer_agent.worker.agents.recipe_scan.graph import RECIPE_SCAN_GRAPH, _dispatch
@@ -58,7 +60,7 @@ def test_남은_예산이_없으면_전문가를_띄우지_않고_끝낸다() ->
     plan = DispatchPlan(probes=[{"probe": "timeline", "depth": "shallow", "question": "무엇을 했나"}])  # type: ignore[list-item]
 
     sends = _dispatch(
-        {"plan": plan, "max_cost_usd": 2.0, "model_cost_usd": 2.0, "max_turns": 8}  # type: ignore[typeddict-item]
+        {"plan": plan, "max_cost_usd": 2.0, "pool_cost_usd": 2.0, "max_turns": 8}  # type: ignore[typeddict-item]
     )
 
     assert [send.node for send in sends] == ["empty"]
@@ -68,7 +70,60 @@ def test_남은_턴이_없으면_전문가를_띄우지_않고_끝낸다() -> No
     plan = DispatchPlan(probes=[{"probe": "timeline", "depth": "shallow", "question": "무엇을 했나"}])  # type: ignore[list-item]
 
     sends = _dispatch(
-        {"plan": plan, "max_cost_usd": 2.0, "max_turns": 8, "model_turns_used": 8}  # type: ignore[typeddict-item]
+        {"plan": plan, "max_cost_usd": 2.0, "max_turns": 8, "pool_turns_used": 8}  # type: ignore[typeddict-item]
     )
 
     assert [send.node for send in sends] == ["empty"]
+
+
+def test_예약_리스가_쓴_지출은_팬아웃_잔량을_줄이지_않는다() -> None:
+    plan = DispatchPlan(
+        probes=[
+            {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
+            {"probe": "rules", "depth": "shallow", "question": "어떤 규칙이"},  # type: ignore[list-item]
+        ]
+    )
+
+    sends = _dispatch(
+        {  # type: ignore[typeddict-item]
+            "plan": plan,
+            "max_cost_usd": 2.0,
+            "max_turns": 8,
+            "model_cost_usd": 0.5,
+            "model_turns_used": 3,
+        }
+    )
+
+    # 조율자가 자기 예약으로 쓴 3턴은 총 지출에만 오르므로 전문가의 몫은 8턴 전부로 남는다.
+    assert {send.arg.assignment.probe: send.arg.max_turns for send in sends} == {
+        "timeline": 6,
+        "rules": 2,
+    }
+
+
+def test_팬아웃이_이미_쓴_풀만큼만_좁혀_다시_배분한다() -> None:
+    plan = DispatchPlan(
+        probes=[
+            {"probe": "timeline", "depth": "deep", "question": "무엇을 했나"},  # type: ignore[list-item]
+            {"probe": "rules", "depth": "shallow", "question": "어떤 규칙이"},  # type: ignore[list-item]
+        ]
+    )
+
+    sends = _dispatch(
+        {  # type: ignore[typeddict-item]
+            "plan": plan,
+            "max_cost_usd": 2.0,
+            "max_turns": 8,
+            "pool_cost_usd": 0.5,
+            "pool_turns_used": 3,
+        }
+    )
+
+    # 남은 5턴을 deep 10과 shallow 3의 몫으로 좁혀 4:1턴, 남은 $1.5를 그 비율로 나눈다.
+    assert {send.arg.assignment.probe: send.arg.max_turns for send in sends} == {
+        "timeline": 4,
+        "rules": 1,
+    }
+    budgets = {send.arg.assignment.probe: send.arg.max_cost_usd for send in sends}
+    assert budgets["timeline"] == pytest.approx(1.2)
+    assert budgets["rules"] == pytest.approx(0.3)

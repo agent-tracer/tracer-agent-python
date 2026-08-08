@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.title_suggestion.models import (
     TitleSuggestionRequest,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.title_suggestion import agent as title_mod
 
@@ -84,14 +84,16 @@ async def _run(
     req = _request(**request_overrides)
     fake_ledger = ledger or FakeTracerApi()
     result = await execute(
-        "title-suggestion",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="title-suggestion",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: title_mod.TITLE_SUGGESTION_JOB.run(
             req, fake_ledger, usage, TITLE_SUGGESTION_PROMPT, None, chats
         ),
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
     return chat, result, fake_ledger
 

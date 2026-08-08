@@ -8,6 +8,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 from tracer_agent.shared.agents.title_suggestion.models import (
     InvestigateUpdate,
     RepairUpdate,
@@ -17,6 +18,7 @@ from tracer_agent.shared.agents.title_suggestion.models import (
     ValidateCandidateUpdate,
 )
 
+from ...runtime.llm.budget import AgentBudgetLease, pool_spend, reserved_spend
 from ...runtime.node import GraphNode
 from ...runtime.validation_nodes import ValidationNode
 from ..deps import TitleDeps
@@ -25,16 +27,28 @@ from ..prompts import build_user_prompt
 
 
 class _CandidateAgent[UpdateT: Mapping[str, Any]](GraphNode[TitleSuggestionState, UpdateT], ABC):
-    def __init__(self, deps: TitleDeps) -> None:
+    def __init__(self, deps: TitleDeps, lease: AgentBudgetLease) -> None:
         self._deps = deps
+        self._lease = lease
 
 
-class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
+class InvestigateNode(GraphNode[TitleSuggestionState, InvestigateUpdate]):
     """대화 발췌와 필요한 이벤트로 제목 후보를 조사한다."""
 
     name = "investigate"
 
+    def __init__(self, deps: TitleDeps) -> None:
+        self._deps = deps
+
     async def run(self, state: TitleSuggestionState) -> InvestigateUpdate:
+        # 리페어 예약을 뗀 나머지가 조사의 몫이며 조사가 총량을 다 쓰면 고칠 턴이 남지 않는다.
+        lease = AgentBudgetLease(max_turns=remaining_turns(state), max_cost_usd=remaining_cost_usd(state))
+        if lease.max_turns <= 0:
+            return {
+                "candidate": TitleSuggestionDraft(),
+                "messages": [],
+                **pool_spend(cost_usd=0.0, turns_used=0),
+            }
         call = await self._deps.investigate(
             [
                 HumanMessage(
@@ -45,12 +59,12 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
                     )
                 )
             ],
+            lease,
         )
         return {
             "candidate": call.draft,
             "messages": call.messages,
-            "model_cost_usd": call.cost_usd,
-            "model_turns_used": call.turns_used,
+            **pool_spend(cost_usd=call.cost_usd, turns_used=call.turns_used),
         }
 
 
@@ -60,6 +74,13 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
     name = "repair"
 
     async def run(self, state: TitleSuggestionState) -> RepairUpdate:
+        if self._lease.max_turns <= 0:
+            return {
+                "candidate": state["candidate"] or TitleSuggestionDraft(),
+                "messages": state["messages"],
+                "repair_attempted": True,
+                **reserved_spend(cost_usd=0.0, turns_used=0),
+            }
         repair_prompt = [
             *state["messages"],
             HumanMessage(
@@ -68,13 +89,12 @@ class RepairNode(_CandidateAgent[RepairUpdate]):
                 )
             ),
         ]
-        call = await self._deps.investigate(repair_prompt)
+        call = await self._deps.investigate(repair_prompt, self._lease)
         return {
             "candidate": call.draft,
             "messages": call.messages,
             "repair_attempted": True,
-            "model_cost_usd": call.cost_usd,
-            "model_turns_used": call.turns_used,
+            **reserved_spend(cost_usd=call.cost_usd, turns_used=call.turns_used),
         }
 
 

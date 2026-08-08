@@ -40,6 +40,9 @@ def empty_result_reason(state: RecipeScanState) -> EmptyResultReason:
     if state["validation_errors"]:
         # 수리를 쓰고도 검증을 통과하지 못한 산출이라 저장할 패턴이 없던 실행과 갈린다.
         return DEGRADED
+    if state["failed_probes"]:
+        # 보고를 세우지 못하고 죽은 전문가는 조사 단계가 실패한 것이라 근거가 모자란 것과 갈린다.
+        return DEGRADED
     if any(report.exhausted for report in state["reports"]):
         return INSUFFICIENT_EVIDENCE
     return default_empty_result_reason()

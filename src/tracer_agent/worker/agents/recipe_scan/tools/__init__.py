@@ -39,7 +39,6 @@ from .registry import (
     RECIPE_TOOL_CLASSES,
     RECIPE_TOOLS,
     SURVEY_TOOLS,
-    validate_tool_args,
 )
 from .search_events import (
     DEFAULT_SEARCH_LIMIT,
@@ -103,5 +102,4 @@ __all__ = [
     "SearchRecipesArgs",
     "SearchRecipesTool",
     "TimelineEventKind",
-    "validate_tool_args",
 ]

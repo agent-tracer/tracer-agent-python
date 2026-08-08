@@ -14,12 +14,8 @@ from tracer_agent.shared.agents.shared.json_view import (
 )
 from tracer_agent.shared.agents.task_cleanup.models import CleanupBatch, CleanupTaskStatus
 
-from ..runtime.scoped_event_reader import ScopedEventReader
 from ..runtime.tracer_client import TracerApiPort
-from .policy import CleanupTaskSnapshot, qualify_candidates, without_active_children
-
-# 조회 로직이 title-suggestion과 완전히 같아 새 서브클래스 대신 이름만 이 슬라이스로 가져온다.
-CleanupLedgerReader = ScopedEventReader
+from .candidates import CleanupTaskSnapshot, qualify_candidates, without_active_children
 
 # 한 번의 스캔이 조회하는 태스크의 상한이며 걸러내기 전의 원본을 센다.
 TASK_SCAN_LIMIT = 500

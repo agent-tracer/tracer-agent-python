@@ -61,7 +61,9 @@ sequenceDiagram
 | `finalize` | `TaskCleanupState` | 제안을 `max_suggestions`까지 외부 결과로 직렬화한다 | `suggestions` |
 | `empty` | `TaskCleanupState` | 제안이 없거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 
-서버 후보 선별은 `qualify_candidates`가 담당한다. 최근 활동, running/waiting 상태의 stale 여부, event 유무, 중복 제목, placeholder 제목을 결정론적으로 평가하며 active child가 있는 task는 제외한다.
+서버 후보 선별은 `candidates.py`의 `qualify_candidates`가 담당한다. 최근 활동, running/waiting 상태의 stale 여부, event 유무, 중복 제목, placeholder 제목을 결정론적으로 평가하며 active child가 있는 task는 제외한다.
+
+`repair`는 실행 하나의 마지막 시도이므로 그 호출이 예산에서 끊겨도 예외를 그래프 밖으로 흘리지 않는다. 궤적에 `node.failed`를 적고, 직전에 검증을 통과한 제안을 그대로 안은 채 예약 채널로 지출을 적어 갱신을 낸다. recipe-scan의 같은 노드와 이 규약이 같다.
 
 ## 도구 타입
 
@@ -116,7 +118,7 @@ task-cleanup.inspect.system
 
 ## 미들웨어와 출력 타입
 
-`AgentMiddlewareStack`이 네 에이전트와 같은 층을 같은 순서로 세우며, 공유 장부를 쓰는 도구는 이 호출의 락으로 직렬화한다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 도메인 제약을 결정적으로 본다. 겹친 제안과 상한을 넘은 꼬리는 다시 물어도 같은 답이 오므로 사유 없이 지우고, 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다.
+`AgentMiddlewareStack`이 네 에이전트가 함께 쓰는 순서로 층을 세우고, 구조화 출력을 요구하는 잡이라 산출 복구와 도구 실패 되돌림을 함께 받는다. 공유 장부를 쓰는 도구는 이 호출의 락으로 직렬화한다. 구조화 출력은 `TriagePlan`, `InspectReport`, `CleanupDraft`이며, `validate_suggestions`가 도메인 제약을 결정적으로 본다. 겹친 제안과 상한을 넘은 꼬리는 다시 물어도 같은 답이 오므로 사유 없이 지우고, 근거가 어긋난 제안만 모델이 고칠 사유로 남긴다.
 
 ## Temporal 워크플로
 
@@ -159,6 +161,7 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | --- | --- |
 | 그래프 정의 | `graph.py` |
 | 요청별 실행 조립 | `agent.py` |
+| 결정적 후보 선별 | `candidates.py` |
 | 선별·검사·결정 노드 | `nodes/inspect.py`, `nodes/decision.py`, `nodes/result.py` |
 | LangChain agent와 미들웨어 | `runtime/llm/middleware_stack.py`, `runtime/llm/structured_agent.py` |
 | 모델 호출자 조립 | `deps.py` |

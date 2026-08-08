@@ -21,7 +21,7 @@ from tracer_agent.shared.agents.title_suggestion.models import (
     TitleSuggestionContext,
 )
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.title_suggestion.reader import TitleLedgerReader
+from tracer_agent.worker.agents.runtime.scoped_event_reader import ScopedEventReader
 from tracer_agent.worker.agents.title_suggestion.tools import (
     DEFAULT_EVENT_LIMIT,
     DEFAULT_EVENT_ORDER,
@@ -126,7 +126,7 @@ def test_읽기_방향의_기본값과_허용_값이_계약과_같다() -> None:
 
 async def test_get_task_events의_응답_본문이_계약과_같다() -> None:
     responses = _contract()["responses"][GET_TASK_EVENTS]
-    reader = TitleLedgerReader(FakeTracerApi([_row("event-1"), _row("event-2")]))
+    reader = ScopedEventReader(FakeTracerApi([_row("event-1"), _row("event-2")]))
 
     page = await reader.task_events("task-1", 1, None, "asc")
 

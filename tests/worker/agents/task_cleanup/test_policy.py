@@ -11,12 +11,12 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupDraftSuggestion,
     TaskCleanupState,
 )
-from tracer_agent.worker.agents.task_cleanup.policy import (
+from tracer_agent.worker.agents.task_cleanup.candidates import (
     CleanupTaskSnapshot,
     qualify_candidates,
-    validate_suggestions,
     without_active_children,
 )
+from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
 
 
 def _candidate(task_id: str, *, has_events: bool) -> CleanupCandidate:

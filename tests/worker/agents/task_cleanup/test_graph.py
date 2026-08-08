@@ -12,7 +12,7 @@ from tests.support.prompts import CONTRACT_VERSION, TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.agents.task_cleanup.models import CleanupResult, TaskCleanupRequest
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.task_cleanup import agent as cleanup_mod
 
@@ -82,12 +82,14 @@ async def _run(
     req = _request(*candidates)
     chats = ChatPair(chat, None)  # type: ignore[arg-type]
     return await execute(
-        "task-cleanup",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="task-cleanup",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: cleanup_mod.TASK_CLEANUP_JOB.run(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 

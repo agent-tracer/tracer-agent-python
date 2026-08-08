@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
-from ..shared.graph_state import CostCeilingState, fresh_budget_snapshot
+from ..shared.graph_state import SpendChannels, TurnCeilingState, fresh_spend_channels
 from ..shared.models import AgentExecutionRequest, Language, TrimmedStr
 
 # 저장 계약의 판별자와 같은 값이어야 하는 정리 제안의 종류다.
@@ -138,12 +138,14 @@ class TriagePlan(BaseModel):
 
 
 class InspectDispatch(BaseModel):
-    """조율자가 후보 조사 분기 하나에 실어 보내는 조사 지시와 배분한 비용 예산이다."""
+    """조율자가 후보 조사 분기 하나에 실어 보내는 조사 지시와 배분한 턴과 달러 몫이다."""
 
     model_config = ConfigDict(extra="forbid")
 
     assignment: InspectAssignment
-    cost_budget: float = Field(gt=0.0)
+    # 0턴은 그 검토자에게 몫이 남지 않았다는 뜻이며 노드가 모델을 부르지 않는 길로 스스로 보낸다.
+    max_turns: int = Field(ge=0)
+    cost_budget: float = Field(ge=0.0)
 
 
 class InspectReport(BaseModel):
@@ -199,37 +201,30 @@ class CleanupDraft(BaseModel):
         return self
 
 
-class TriageUpdate(TypedDict):
+class TriageUpdate(SpendChannels):
     """조율자 노드가 갱신하는 상태 부분집합이다."""
 
     plan: TriagePlan
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
-    model_cost_usd: float
-    model_turns_used: int
 
 
-class InspectUpdate(TypedDict):
+class InspectUpdate(SpendChannels):
     """후보 조사 노드가 갱신하는 상태 부분집합이다."""
 
     reports: list[InspectReport]
     event_ids_by_task: dict[str, set[str]]
-    model_cost_usd: float
-    model_turns_used: int
 
 
-class InvestigateUpdate(TypedDict):
+class InvestigateUpdate(SpendChannels):
     """결정 노드가 갱신하는 상태 부분집합이다."""
 
     suggestions: list[CleanupDraftSuggestion]
     messages: list[BaseMessage]
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
-    model_cost_usd: float
-    model_turns_used: int
     # None이면 검증으로 넘어가고, 계획이 담기면 그 후보들을 한 번 더 조회한다.
     redispatch: TriagePlan | None
-    redispatch_ceiling: float
     redispatch_count: int
 
 
@@ -240,7 +235,7 @@ class ValidateDecisionsUpdate(TypedDict):
     validation_errors: list[str]
 
 
-class RepairUpdate(TypedDict):
+class RepairUpdate(SpendChannels):
     """수리 노드가 갱신하는 상태 부분집합이다."""
 
     suggestions: list[CleanupDraftSuggestion]
@@ -248,8 +243,6 @@ class RepairUpdate(TypedDict):
     exposed_candidates: dict[str, CleanupCandidate]
     event_ids_by_task: dict[str, set[str]]
     repair_attempted: bool
-    model_cost_usd: float
-    model_turns_used: int
 
 
 class CleanupResult(BaseModel):
@@ -265,19 +258,16 @@ class ResultUpdate(TypedDict):
     result: CleanupResult
 
 
-class TaskCleanupState(CostCeilingState):
+class TaskCleanupState(TurnCeilingState):
     scanned_at: str
-    # 후보를 가리기 전에 조회한 태스크 수이며 제안이 없어도 산출이 이 수를 싣는다.
     tasks_scanned: int
     language: Language
     max_suggestions: int
-    # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 남아 캐시된다.
     messages: list[BaseMessage]
     plan: TriagePlan | None
     # 조율자가 결정 대신 요청한 추가 조사 계획이며 없으면 검증으로 넘어간다.
     redispatch: TriagePlan | None
-    # 추가 조사에 넘길 수 있는 남은 비용 상한과, 상한을 지키기 위해 센 파견 횟수다.
-    redispatch_ceiling: float
+    # 추가 파견의 상한을 지키기 위해 센 파견 횟수다.
     redispatch_count: int
     # 후보마다 병렬로 조회하므로 노출·인용·지출이 모두 누적으로 합쳐져야 한다.
     reports: Annotated[list[InspectReport], operator.add]
@@ -289,8 +279,10 @@ class TaskCleanupState(CostCeilingState):
     result: CleanupResult | None
 
 
-def initial_task_cleanup_state(req: TaskCleanupRequest) -> TaskCleanupState:
-    """실행을 처음 시작하는 상태이며 채널이 늘면 이 자리가 함께 갱신된다."""
+def initial_task_cleanup_state(
+    req: TaskCleanupRequest, *, max_cost_usd: float, max_turns: int
+) -> TaskCleanupState:
+    """실행을 처음 시작하는 상태이며 예약을 뗀 뒤 팬아웃이 나눌 몫을 함께 싣는다."""
     return {
         "scanned_at": req.scannedAt,
         "tasks_scanned": req.batch.tasksScanned,
@@ -299,15 +291,15 @@ def initial_task_cleanup_state(req: TaskCleanupRequest) -> TaskCleanupState:
         "messages": [],
         "plan": None,
         "redispatch": None,
-        "redispatch_ceiling": 0.0,
         "redispatch_count": 0,
         "reports": [],
         "exposed_candidates": {},
         "event_ids_by_task": {},
-        "max_cost_usd": req.limits.budgetUsd,
+        "max_cost_usd": max_cost_usd,
+        "max_turns": max_turns,
         "suggestions": [],
         "validation_errors": [],
         "repair_attempted": False,
         "result": None,
-        **fresh_budget_snapshot(),
+        **fresh_spend_channels(),
     }

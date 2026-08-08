@@ -7,13 +7,13 @@ import operator
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, Required, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
-from ..shared.graph_state import TurnCeilingState, fresh_budget_snapshot
+from ..shared.graph_state import SpendChannels, TurnCeilingState, fresh_spend_channels
 from ..shared.models import (
     AgentExecutionRequest,
     EmptyResultReason,
@@ -131,6 +131,8 @@ class ProbeReport(ModelFacing):
     excerpts: list[Excerpt] = Field(default_factory=list, max_length=MAX_EXCERPTS_PER_PROBE)
     # 예산이 끊겨 못 본 것이 있으면 조율자가 남은 예산을 다시 줄지 판단한다.
     exhausted: bool = False
+    # 상한을 넘겨 코드가 잘라 세운 보고임을 예산 소진과 섞지 않고 따로 적는다.
+    truncated: bool = False
 
 
 def _clamped(value: object, limit: int) -> object:
@@ -159,8 +161,8 @@ def salvage_probe_report(probe: ProbeName, raw: object) -> ProbeReport | None:
                 "probe": probe,
                 "verdict": _clamped(raw.get("verdict"), MAX_VERDICT_CHARS),
                 "excerpts": [_clamped_excerpt(one) for one in listed[:MAX_EXCERPTS_PER_PROBE]],
-                # 잘라 낸 보고는 전문가가 스스로 닫지 못한 조사이므로 소진으로 적는다.
-                "exhausted": True,
+                "exhausted": bool(raw.get("exhausted", False)),
+                "truncated": True,
             }
         )
     except ValidationError:
@@ -311,31 +313,27 @@ def merged_provenance(left: ProvenanceCatalog, right: ProvenanceCatalog) -> Prov
     return combined
 
 
-class SurveyUpdate(TypedDict):
+class SurveyUpdate(SpendChannels):
     """조율자 노드가 갱신하는 상태 부분집합이다."""
 
     plan: DispatchPlan
-    model_cost_usd: float
 
 
-class ProbeUpdate(TypedDict):
+class ProbeUpdate(SpendChannels):
     """전문가 조사 노드가 갱신하는 상태 부분집합이다."""
 
     reports: list[ProbeReport]
     provenance: ProvenanceCatalog
-    model_cost_usd: float
-    # 전문가가 그은 턴은 팬아웃 잔량 풀에서 곧장 빠져 다음 팬아웃의 가용 턴을 줄인다.
-    model_turns_used: int
+    # 보고를 세우지 못하고 죽은 전문가이며 빈 결과의 사유가 근거 부족과 갈린다.
+    failed_probes: list[ProbeName]
 
 
-class InvestigateUpdate(TypedDict):
+class InvestigateUpdate(SpendChannels):
     """결정 노드가 갱신하는 상태 부분집합이다."""
 
     candidates: list[RecipeCandidate]
     messages: list[BaseMessage]
     provenance: ProvenanceCatalog
-    model_cost_usd: float
-    model_turns_used: int
     redispatch: DispatchPlan | None
     redispatch_count: int
 
@@ -346,15 +344,14 @@ class ValidateCandidateUpdate(TypedDict):
     validation_errors: list[str]
 
 
-class RepairUpdate(TypedDict, total=False):
+class RepairUpdate(SpendChannels):
     """수리 노드가 갱신하는 상태 부분집합이다."""
 
     candidates: list[RecipeCandidate]
     messages: list[BaseMessage]
     provenance: ProvenanceCatalog
-    repair_attempted: Required[bool]
-    model_cost_usd: float
-    empty_result_reason: EmptyResultReason
+    repair_attempted: bool
+    empty_result_reason: EmptyResultReason | None
 
 
 class ProvenanceWire(BaseModel):
@@ -386,10 +383,10 @@ class RecipeScanState(TurnCeilingState):
     redispatch_count: int
     # 전문가가 병렬로 보고를 올리므로 동시 갱신을 누적으로 합치는 리듀서가 필요하다.
     reports: Annotated[list[ProbeReport], operator.add]
+    failed_probes: Annotated[list[ProbeName], operator.add]
     task_id: str
     language: Language
     user_prompt: str | None
-    # 근거는 프롬프트에 다시 붙이지 않고 대화 이력에 그대로 남아 캐시된다.
     messages: list[BaseMessage]
     provenance: Annotated[ProvenanceCatalog, merged_provenance]
     candidates: list[RecipeCandidate]
@@ -409,6 +406,7 @@ def initial_recipe_scan_state(
         "redispatch": None,
         "redispatch_count": 0,
         "reports": [],
+        "failed_probes": [],
         "task_id": req.taskId,
         "language": req.language,
         "user_prompt": req.userPrompt,
@@ -421,7 +419,7 @@ def initial_recipe_scan_state(
         "repair_attempted": False,
         "empty_result_reason": None,
         "result": None,
-        **fresh_budget_snapshot(),
+        **fresh_spend_channels(),
     }
 
 

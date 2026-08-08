@@ -110,6 +110,10 @@ def build_user_prompt(
         [
             f"Scan time: {scanned_at}",
             f"Propose at most {max_suggestions} tasks to archive.",
+            (
+                f"If more than {max_suggestions} qualify, order them by the strength of the evidence "
+                f"you cited; only the first {max_suggestions} are kept."
+            ),
             f"Output language: {directive}",
         ]
     ) + render_reports(reports)

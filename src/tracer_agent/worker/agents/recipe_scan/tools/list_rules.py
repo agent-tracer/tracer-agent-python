@@ -34,7 +34,6 @@ class ListRulesTool(AgentTool[ListRulesArgs, RecipeToolContext]):
     name = LIST_RULES
     description = LIST_RULES_DESCRIPTION
     args_model = ListRulesArgs
-    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: ListRulesArgs, context: RecipeToolContext) -> str:

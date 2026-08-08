@@ -35,11 +35,21 @@ def test_인용_본문과_인용_수를_각각_상한까지_줄인다() -> None:
     assert all(len(one.text) == MAX_EXCERPT_CHARS for one in report.excerpts)
 
 
-def test_스스로_닫지_못한_조사이므로_소진으로_적는다() -> None:
+def test_잘라_세운_보고를_예산_소진과_가른다() -> None:
+    # 글자 수를 넘긴 것과 예산이 끊겨 못 본 것은 다른 사실이며 조율자의 판단도 갈린다.
     report = salvage_probe_report("rules", {"verdict": "판정", "exhausted": False})
 
     assert report is not None
+    assert report.truncated is True
+    assert report.exhausted is False
+
+
+def test_전문가가_적은_소진은_잘라_세워도_그대로_남는다() -> None:
+    report = salvage_probe_report("rules", {"verdict": "판정", "exhausted": True})
+
+    assert report is not None
     assert report.exhausted is True
+    assert report.truncated is True
 
 
 def test_맡은_축을_보고가_잘못_적었어도_파견이_정한_축으로_세운다() -> None:

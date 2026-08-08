@@ -17,6 +17,7 @@ from ..runtime.llm.client import ChatPair
 from ..runtime.llm.model_caller import ModelCall, StructuredModelCaller
 from ..runtime.llm.structured_agent import StructuredAgentResult
 from ..shared.prompt_source_port import AgentPrompt
+from .failures import TOOL_FAILED
 from .prompts import RecipePrompts
 from .reader import RecipeLedgerReader
 from .search import RecipeSearchReader
@@ -32,6 +33,7 @@ def new_recipe_caller(chats: ChatPair) -> StructuredModelCaller[RecipeToolContex
         RECIPE_TOOLS,
         name="recipe-scan-investigator",
         context_schema=RecipeToolContext,
+        tool_failure_text=TOOL_FAILED,
     )
 
 

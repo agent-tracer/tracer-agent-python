@@ -174,7 +174,12 @@ def render_reports(reports: Sequence[ProbeReport] | None) -> str:
         return ""
     blocks = []
     for report in reports:
-        lines = [f"### {report.probe}" + (" (budget exhausted)" if report.exhausted else "")]
+        notes = []
+        if report.exhausted:
+            notes.append("budget exhausted")
+        if report.truncated:
+            notes.append("report truncated")
+        lines = [f"### {report.probe}" + (f" ({', '.join(notes)})" if notes else "")]
         lines.append(report.verdict)
         lines.extend(f"- [{excerpt.taskId}/{excerpt.eventId}] {excerpt.text}" for excerpt in report.excerpts)
         blocks.append("\n".join(lines))

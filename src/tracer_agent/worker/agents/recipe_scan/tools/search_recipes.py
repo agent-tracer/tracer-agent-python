@@ -37,7 +37,6 @@ class SearchRecipesTool(AgentTool[SearchRecipesArgs, RecipeToolContext]):
     name = SEARCH_RECIPES
     description = SEARCH_RECIPES_DESCRIPTION
     args_model = SearchRecipesArgs
-    # 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
     transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: SearchRecipesArgs, context: RecipeToolContext) -> str:
