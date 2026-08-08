@@ -163,6 +163,46 @@
   일원화한다. **그대로 두는 것이 가장 나쁘다** — 선언은 약속으로 읽히는데 지키는 코드가 없다.
 - **TypeScript.** 어느 쪽을 고르든 두 축이 함께 움직인다.
 
+### 1.15 요약 프롬프트를 계약이 소유하지 않는다
+
+- **막고 있는 것.** `contract/agent/chat/summary.json`은 언제 접고 무엇을 접고 몇 턴을 남기는지를
+  갖지만 요약 러너가 모델에게 보내는 문장은 갖지 않는다.
+  `contract/agent/chat/prompt.json`의 `fragments`에도 요약 조각이 없다. 그래서
+  `worker/agents/chat/prompts.py`의 `CHAT_SUMMARY_SYSTEM_PROMPT`와 TypeScript 축의
+  `chat.prompt.ts` 가 같은 영어 문장을 각자 들고 있다.
+- **왜 문제인가.** 두 축이 같은 원장 한 칸을 번갈아 덮는데 그 칸의 본문을 빚는 문장이 두 벌이다.
+  한쪽만 문장을 고치면 같은 스레드의 요약이 턴마다 다른 규칙으로 다시 쓰인다. 요약 본문의 길이
+  상한도 그 문장 안에만 있어 계약이 대조하지 못한다.
+- **계약.** `prompt.json`이 요약 조각을 `fragments`로 갖고 `summary.json`의 `limits`가 그 조각이
+  적는 낱말 상한을 함께 선언한다.
+- **TypeScript.** 정본 문장을 계약으로 옮기고 두 축이 같은 조각을 읽는다.
+
+### 1.16 파견 계획의 유일성을 프롬프트가 말하지 않는다
+
+- **막고 있는 것.** `contract/agent/shared/dispatch.plan.json`의 `uniqueness`는 한 계획이 같은 자리를
+  두 번 담지 않는다고 적지만, 모델이 읽는 조각 어디에도 그 규칙이 없다.
+  `contract/agent/recipe-scan/prompt.json`의 `dispatchWeighting`·`emptyPlan`·`specialistCatalog`와
+  `contract/agent/task-cleanup/prompt.json`의 `triagePolicy`·`inspectWeighting`을 열어 확인했다.
+  두 저장소의 `redispatchProtocol`도 마찬가지다.
+- **왜 문제인가.** 이 축은 겹친 배정을 스키마 검증으로 거절하므로 모델은 계획을 낸 뒤에야 규칙을
+  안다. 되받아 고치는 데 조율자 턴 하나와 그만큼의 달러가 든다. 상한을 프롬프트에도 보낸다는
+  `CLAUDE.md`의 규칙이 이 자리에도 그대로 해당한다.
+- **계약.** `dispatchWeighting`과 `triagePolicy`가 같은 자리를 두 번 배정하지 말라는 문장을 갖는다.
+- **TypeScript.** 같은 조각을 읽으므로 조각이 서면 두 축이 함께 받는다.
+
+### 1.17 잡 산출의 `output` 가림을 계약이 자리로 지목하지 않는다
+
+- **막고 있는 것.** `contract/agent/shared/redaction.json`의 `stages.output`은 모델의 답을 사용자에게
+  내보내기 전의 자리라고만 적는다. 어느 산출이 그 자리를 지나야 하는지는 적지 않는다.
+- **왜 문제인가.** 이 축은 세 잡의 `result_of`에 그 자리를 놓았고 그 값이 잡 원장과 조회와 추적
+  창구 배달로 함께 나간다. 계약이 자리를 지목하지 않으므로 TypeScript 축이 같은 자리에 놓았는지
+  대조할 근거가 없다. 두 축이 다르면 `divergence.json`에 적어야 하는데 지금은 가림 단계에 관한
+  항목이 그 파일에 하나도 없다.
+- **계약.** `redaction.json`이 잡 산출을 `output` 자리의 대상으로 지목하거나
+  `wire/job.kinds.json`의 산출 선언이 그 자리를 함께 적는다.
+- **TypeScript.** 세 잡의 산출이 `output` 자리를 지나는지 먼저 확인해야 한다. 이 저장소에서는
+  확인할 수 없다.
+
 ---
 
 ## 2. `divergence.json`에 근거가 필요한 항목
@@ -226,3 +266,13 @@
 - TS 축의 갱신 SQL이 대화 실행의 축으로 거르는지, `ai_job_stage_outputs`에 어떤 `stage`·`slot`
   값을 쓰는지 확인하지 못했다. 두 항목은 `STRUCTURE-MIGRATION.md`의 P1·P4가 그 확인을 선행 조건으로
   적는다.
+
+### 3.4 요약의 글자 문턱을 두 축이 다른 단위로 센다
+
+- **무엇이.** `contract/agent/chat/summary.json`의 `production.trigger.charsUnit`은 `codePoint`다.
+  이 축은 `summary_spec.py`의 `should_summarize`가 `len`으로 세어 코드포인트를 그대로 센다.
+  TypeScript 축의 `chat.summary.spec.ts`는 `String.prototype.length`로 세므로 UTF-16 단위를 센다.
+- **왜 함께 고치나.** 기본 다국어 평면 밖 글자가 섞인 스레드에서 TS 축이 계약보다 이른 시점에
+  이력을 접는다. 같은 스레드를 두 축이 번갈아 처리하면 문턱이 턴마다 달라진다.
+- **어떻게.** TS 축이 코드포인트를 세도록 고친다. 계약이 이미 단위를 정했으므로 이 항목은
+  `divergence.json`에 적을 차이가 아니라 한 축의 결함이다.
