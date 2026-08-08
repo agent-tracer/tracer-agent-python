@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact
 from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupResult,
     TaskCleanupRequest,
@@ -127,7 +128,8 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
 
     def result_of(self, final: dict[str, Any]) -> JsonObject:
         result: CleanupResult = final["result"] or CleanupResult()
-        return dumped(result)
+        # 원장과 조회와 창구 배달이 이 한 벌을 나눠 쓰므로 가림도 이 자리에 선다.
+        return cast("JsonObject", redact(dumped(result), stage=RedactionStage.OUTPUT))
 
 
 TASK_CLEANUP_JOB = TaskCleanupJob()

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import operator
+from collections.abc import Sequence
 from enum import StrEnum
-from typing import Annotated, Literal, TypedDict
+from functools import lru_cache
+from pathlib import Path
+from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -123,6 +127,41 @@ class InspectAssignment(BaseModel):
         return depth_share("task-cleanup", INSPECT_DEPTH_KEY, self.depth)
 
 
+_PLAN_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "shared" / "dispatch.plan.json"
+
+
+@lru_cache(maxsize=1)
+def _slot_field() -> str:
+    """이 에이전트에서 계획의 한 자리를 가리키는 필드이며 값은 계약이 갖는다."""
+    declared: Any = json.loads(_PLAN_PATH.read_text(encoding="utf-8"))
+    return str(declared["uniqueness"]["keys"]["task-cleanup"])
+
+
+def slot_of(assignment: InspectAssignment) -> str:
+    """배정 하나가 계획에서 차지하는 자리다."""
+    slot: object = getattr(assignment, _slot_field())
+    return str(slot)
+
+
+def duplicate_slots(assignments: Sequence[InspectAssignment]) -> list[str]:
+    """계획이 두 번 담은 자리이며 처음 담은 것은 세지 않는다."""
+    seen: set[str] = set()
+    repeated: list[str] = []
+    for assignment in assignments:
+        slot = slot_of(assignment)
+        if slot in seen:
+            repeated.append(slot)
+        seen.add(slot)
+    return repeated
+
+
+def reject_duplicate_slots(assignments: Sequence[InspectAssignment]) -> None:
+    """겹친 배정은 같은 자리를 두 번 조사해 값을 두 번 치르고 계획이 덮기로 한 범위를 덮지 못한다."""
+    repeated = duplicate_slots(assignments)
+    if repeated:
+        raise ValueError(f"assign each {_slot_field()} at most once in one plan: {sorted(set(repeated))}")
+
+
 class TriagePlan(BaseModel):
     """조율자가 후보 배치를 보고 무엇을 조사할지 정한 결과다."""
 
@@ -131,6 +170,11 @@ class TriagePlan(BaseModel):
     assignments: list[InspectAssignment] = Field(
         default_factory=list, alias="inspect", max_length=MAX_SUGGESTIONS
     )
+
+    @model_validator(mode="after")
+    def _unique_assignments(self) -> TriagePlan:
+        reject_duplicate_slots(self.assignments)
+        return self
 
     def total_share(self) -> int:
         """계획이 요구하는 몫의 합이다."""
@@ -198,6 +242,7 @@ class CleanupDraft(BaseModel):
     def _draft_or_redispatch(self) -> CleanupDraft:
         if self.suggestions and self.redispatch:
             raise ValueError("return either suggestions or a redispatch request, not both")
+        reject_duplicate_slots(self.redispatch)
         return self
 
 

@@ -58,6 +58,9 @@ sequenceDiagram
 
 유효한 출력은 빈 목록 또는 2~3개 제안이다. 각 제안은 현재 title과 달라야 하고, 정규화 후 서로 중복되지 않아야 하며 `untitled`, `test`, `task-123`과 같은 placeholder가 아니어야 한다.
 
+`result_of`는 직렬화한 산출을 계약의 `agent/shared/redaction.json` `stages.output` 자리로 통과시킨다.
+그 한 벌이 잡 원장과 조회 표면으로 함께 나가므로 가림도 그 자리 하나에 선다.
+
 ## 도구 타입
 
 | 도구 | 주요 인자 | 역할 |

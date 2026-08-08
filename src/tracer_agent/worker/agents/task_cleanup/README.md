@@ -61,6 +61,13 @@ sequenceDiagram
 | `finalize` | `TaskCleanupState` | 제안을 `max_suggestions`까지 외부 결과로 직렬화한다 | `suggestions` |
 | `empty` | `TaskCleanupState` | 제안이 없거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 
+`result_of`는 직렬화한 산출을 계약의 `agent/shared/redaction.json` `stages.output` 자리로 통과시킨다.
+그 한 벌이 잡 원장과 조회 표면과 정리 제안 창구 배달로 함께 나가므로 가림도 그 자리 하나에 선다.
+
+한 계획이 같은 task를 두 번 담으면 `TriagePlan`과 `CleanupDraft.redispatch`가 그 계획을 거부한다.
+task를 가리키는 필드와 그 규칙은 계약의 `agent/shared/dispatch.plan.json` `uniqueness`가 소유한다.
+거부된 계획은 궤적에 실린 뒤 구조화 복구가 사유와 함께 한 번 되돌려 준다.
+
 서버 후보 선별은 `candidates.py`의 `qualify_candidates`가 담당한다. 최근 활동, running/waiting 상태의 stale 여부, event 유무, 중복 제목, placeholder 제목을 결정론적으로 평가하며 active child가 있는 task는 제외한다.
 
 `repair`는 실행 하나의 마지막 시도이므로 그 호출이 예산에서 끊겨도 예외를 그래프 밖으로 흘리지 않는다. 궤적에 `node.failed`를 적고, 직전에 검증을 통과한 제안을 그대로 안은 채 예약 채널로 지출을 적어 갱신을 낸다. recipe-scan의 같은 노드와 이 규약이 같다.

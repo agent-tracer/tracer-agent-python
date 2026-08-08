@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from tracer_agent.shared.agents.recipe_scan.models import (
     ProvenanceCatalog,
@@ -12,6 +12,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     initial_recipe_scan_state,
 )
 from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 
 from ..runtime.durable_graph import PriorSpend
@@ -121,7 +122,8 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
         result: RecipeScanResult = final["result"] or RecipeScanResult(
             provenance=wire_provenance(ProvenanceCatalog())
         )
-        return dumped(result, exclude_none=True)
+        # 원장과 조회와 창구 배달이 이 한 벌을 나눠 쓰므로 가림도 이 자리에 선다.
+        return cast("JsonObject", redact(dumped(result, exclude_none=True), stage=RedactionStage.OUTPUT))
 
 
 RECIPE_SCAN_JOB = RecipeScanJob()

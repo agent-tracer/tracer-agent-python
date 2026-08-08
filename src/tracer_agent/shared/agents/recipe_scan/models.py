@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import operator
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict
@@ -79,6 +79,41 @@ class ProbeAssignment(ModelFacing):
         return depth_share("recipe-scan", PROBE_DEPTH_KEY, self.depth)
 
 
+_PLAN_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "shared" / "dispatch.plan.json"
+
+
+@lru_cache(maxsize=1)
+def _slot_field() -> str:
+    """이 에이전트에서 계획의 한 자리를 가리키는 필드이며 값은 계약이 갖는다."""
+    declared: Any = json.loads(_PLAN_PATH.read_text(encoding="utf-8"))
+    return str(declared["uniqueness"]["keys"]["recipe-scan"])
+
+
+def slot_of(assignment: ProbeAssignment) -> str:
+    """배정 하나가 계획에서 차지하는 자리다."""
+    slot: object = getattr(assignment, _slot_field())
+    return str(slot)
+
+
+def duplicate_slots(assignments: Sequence[ProbeAssignment]) -> list[str]:
+    """계획이 두 번 담은 자리이며 처음 담은 것은 세지 않는다."""
+    seen: set[str] = set()
+    repeated: list[str] = []
+    for assignment in assignments:
+        slot = slot_of(assignment)
+        if slot in seen:
+            repeated.append(slot)
+        seen.add(slot)
+    return repeated
+
+
+def reject_duplicate_slots(assignments: Sequence[ProbeAssignment]) -> None:
+    """겹친 배정은 같은 자리를 두 번 조사해 값을 두 번 치르고 계획이 덮기로 한 범위를 덮지 못한다."""
+    repeated = duplicate_slots(assignments)
+    if repeated:
+        raise ValueError(f"assign each {_slot_field()} at most once in one plan: {sorted(set(repeated))}")
+
+
 class DispatchPlan(ModelFacing):
     """조율자가 세운 조사 계획이며 어디를 얼마나 조사할지 스스로 정한 결과다."""
 
@@ -86,6 +121,11 @@ class DispatchPlan(ModelFacing):
 
     # 빈 목록은 조사할 것이 없다는 뜻이며 그 실행은 후보 없이 끝난다.
     probes: list[ProbeAssignment] = Field(default_factory=list, max_length=MAX_DISPATCH_PROBES)
+
+    @model_validator(mode="after")
+    def _unique_probes(self) -> DispatchPlan:
+        reject_duplicate_slots(self.probes)
+        return self
 
     def total_share(self) -> int:
         """계획이 요구하는 몫의 합이다."""
@@ -291,6 +331,7 @@ class RecipeDraft(ModelFacing):
     def _draft_or_redispatch(self) -> RecipeDraft:
         if self.recipes and self.redispatch:
             raise ValueError("return either recipes or a redispatch request, not both")
+        reject_duplicate_slots(self.redispatch)
         return self
 
 
