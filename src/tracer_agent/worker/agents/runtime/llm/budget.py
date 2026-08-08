@@ -13,7 +13,7 @@ from tracer_agent.shared.agents.shared.graph_state import SpendChannels, TurnCei
 
 from ..errors import BudgetExceeded
 from ..pricing import ModelRates
-from .pacing import landing_reserve_calls
+from .pacing import landing_reserve_calls, provider_budget_backstop
 from .trajectory import extract_token_usage, message_identity
 
 
@@ -128,6 +128,14 @@ def _ceiling(max_cost_usd: float, peak_call_cost_usd: float, landed: bool) -> fl
     return max_cost_usd + peak_call_cost_usd * landing_reserve_calls()
 
 
+def _execution_ceiling(max_cost_usd: float, peak_call_cost_usd: float, landed: bool) -> float:
+    """실행 하나가 공급자에게 낼 수 있는 달러의 끝이며 마무리 몫으로 열린 여유도 이 안에 머문다."""
+    return min(
+        _ceiling(max_cost_usd, peak_call_cost_usd, landed),
+        provider_budget_backstop(max_cost_usd),
+    )
+
+
 class ModelCallBudget(Protocol):
     """표준 에이전트 미들웨어가 요구하는 호출 비용 장부 계약이다."""
 
@@ -237,7 +245,7 @@ class ExecutionBudget:
     ) -> None:
         """이미 답한 호출의 비용을 실행 장부에 더하고 상한을 넘겼으면 그 뒤의 호출을 끊는다."""
         # 여유는 이 호출 전의 최고 호출로 잡아, 비싼 마무리 호출이 스스로 상한을 밀어 올리지 못하게 한다.
-        execution_ceiling = _ceiling(self._max, self._peak, loop_landed)
+        execution_ceiling = _execution_ceiling(self._max, self._peak, loop_landed)
         # 아직 아무 호출도 하지 않은 루프는 자기 최고 호출을 모르므로 실행이 본 최고 호출로 여유를 잡는다.
         loop_ceiling = _ceiling(loop_max_cost_usd, max(loop_peak, self._peak), loop_landed)
         # 공급자가 이미 답한 호출이라 상한에서 끊더라도 그 비용은 장부에 남는다.

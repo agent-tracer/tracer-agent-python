@@ -11,15 +11,27 @@ from tracer_agent.shared.workflows.chat_spec import (
     CHAT_TASK_QUEUE,
     CHAT_THREAD_WORKFLOW,
     FAIL_ACTIVITY,
+    FAIL_TIMEOUT_S,
     FINALIZE_ACTIVITY,
+    FINALIZE_TIMEOUT_S,
     GENERATE_ACTIVITY,
+    GENERATE_HEARTBEAT_TIMEOUT_S,
+    GENERATE_MAX_ATTEMPTS,
+    GENERATE_TIMEOUT_S,
     NEXT_EXECUTION_ACTIVITY,
     NEXT_EXECUTION_TIMEOUT_S,
     PREPARE_ACTIVITY,
+    PREPARE_TIMEOUT_S,
+    RUNNING_LEASE_S,
     STAGE_MAX_ATTEMPTS,
     STOP_BUDGET_LANDED,
     STOP_CANCELED,
     STOP_COMPLETED,
+    THREAD_BUSY_FAILURE,
+    THREAD_BUSY_MAX_ROUNDS,
+    THREAD_BUSY_RETRY_S,
+    THREAD_IDLE_S,
+    THREAD_MAX_CHILDREN,
     execution_workflow_id,
     thread_workflow_id,
 )
@@ -78,6 +90,33 @@ def test_액티비티_이름과_배치가_계약이_적은_것과_같다() -> No
         FAIL_ACTIVITY,
     ]
     assert {activity["queue"] for activity in activities} == {CHAT_QUEUE_KEY}
+
+
+def test_스레드가_기다리는_유휴와_여는_자식_수가_계약이_적은_값과_같다() -> None:
+    assert _WORKFLOWS["chatThread"]["idleSeconds"] == THREAD_IDLE_S
+    assert _WORKFLOWS["chatThread"]["maxChildren"] == THREAD_MAX_CHILDREN
+
+
+def test_실행_액티비티의_상한과_시도_수가_계약이_적은_값과_같다() -> None:
+    activities = {activity["name"]: activity for activity in _WORKFLOWS["chatExecution"]["activities"]}
+
+    assert activities[PREPARE_ACTIVITY]["startToCloseSeconds"] == PREPARE_TIMEOUT_S
+    assert activities[GENERATE_ACTIVITY]["startToCloseSeconds"] == GENERATE_TIMEOUT_S
+    assert activities[GENERATE_ACTIVITY]["heartbeatTimeoutSeconds"] == GENERATE_HEARTBEAT_TIMEOUT_S
+    assert activities[GENERATE_ACTIVITY]["maximumAttempts"] == GENERATE_MAX_ATTEMPTS
+    assert activities[FINALIZE_ACTIVITY]["startToCloseSeconds"] == FINALIZE_TIMEOUT_S
+    assert activities[FAIL_ACTIVITY]["startToCloseSeconds"] == FAIL_TIMEOUT_S
+    for name in (PREPARE_ACTIVITY, FINALIZE_ACTIVITY, FAIL_ACTIVITY):
+        assert activities[name]["maximumAttempts"] == STAGE_MAX_ATTEMPTS, name
+
+
+def test_리스와_스레드_혼잡의_값이_계약이_적은_값과_같다() -> None:
+    leases = _CONTRACT["leases"]
+
+    assert leases["chatRunningMs"] == RUNNING_LEASE_S * 1000
+    assert leases["threadBusyRetryMs"] == THREAD_BUSY_RETRY_S * 1000
+    assert leases["threadBusyMaxRounds"] == THREAD_BUSY_MAX_ROUNDS
+    assert leases["threadBusyFailure"] == THREAD_BUSY_FAILURE
 
 
 def test_정지_사유가_실행_어휘와_같다() -> None:

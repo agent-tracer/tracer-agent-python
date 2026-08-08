@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from anthropic import APIConnectionError, APIError, AuthenticationError, InternalServerError
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langgraph.errors import NodeTimeoutError
 
 from tests.support.contract import shared_contract
+from tests.support.prompts import CONTRACT_VERSION
 from tracer_agent.shared.agents.shared.redaction import marker
 from tracer_agent.worker.agents.runtime.errors import (
     EMITTED_SUBTYPES,
@@ -16,6 +19,7 @@ from tracer_agent.worker.agents.runtime.errors import (
     classify_exception,
     is_retryable_node_failure,
 )
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 
 
 def _status_error(status: int, body: object | None = None) -> AuthenticationError | InternalServerError:
@@ -146,13 +150,61 @@ class TestOwnErrorSubtypes:
         assert classify_exception(DeadlineExceeded()).summary == "agent deadline exceeded"
 
 
+def _declared_python_subtypes() -> set[str]:
+    """계약이 이 축에 적은 어휘 전부이며 표본이 아니라 목록 그대로다."""
+    contract = shared_contract("error.subtypes.json")
+    return {subtype for subtype, axes in contract["emittedBy"].items() if "python" in axes}
+
+
+def _emitting_failures() -> list[BaseException | None]:
+    """실행 하나를 실패로 접는 입력이며 None 은 본문이 데드라인을 넘긴 실행이다."""
+    request = httpx.Request("POST", "https://api.anthropic.com")
+    return [
+        None,
+        BudgetExceeded("예산"),
+        OutputTruncated("절단"),
+        ModelCallLimitExceededError(thread_count=0, run_count=1, thread_limit=None, run_limit=1),
+        APIConnectionError(message="down", request=request),
+        APIError("boom", request=request, body=None),
+        _status_error(400),
+        RuntimeError("boom"),
+        asyncio.CancelledError(),
+    ]
+
+
+async def _executed_subtype(failure: BaseException | None) -> str:
+    """실행 래퍼를 실제로 실행해 그 실패가 원장에 남기는 서브타입을 받는다."""
+
+    async def body(_trace: object) -> dict[str, object]:
+        if failure is None:
+            await asyncio.sleep(5)
+            return {}
+        raise failure
+
+    response = await execute(
+        ExecutionRequest(
+            label="subtype-coverage",
+            model="claude-haiku-4-5",
+            deadline_ms=20 if failure is None else 5_000,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+            execution_id="execution-1",
+        ),
+        body,
+    )
+    assert response.error is not None
+    return response.error.subtype
+
+
 class TestErrorSubtypeContract:
     def test_계약이_선언한_python_어휘와_같다(self) -> None:
-        contract = shared_contract("error.subtypes.json")
+        assert _declared_python_subtypes() == EMITTED_SUBTYPES
 
-        declared = {subtype for subtype, axes in contract["emittedBy"].items() if "python" in axes}
+    async def test_계약이_이_축에_적은_어휘를_실행이_하나도_빠짐없이_낸다(self) -> None:
+        # 어휘 목록이 손으로 적은 상수라, 실행이 실제로 내는 값과 견주지 않으면 계약만 따라 적어도 통과한다.
+        produced = {await _executed_subtype(failure) for failure in _emitting_failures()}
 
-        assert declared == EMITTED_SUBTYPES
+        assert produced == _declared_python_subtypes()
 
     def test_분류기가_이름_짓는_값은_모두_선언된_어휘다(self) -> None:
         contract = shared_contract("error.subtypes.json")

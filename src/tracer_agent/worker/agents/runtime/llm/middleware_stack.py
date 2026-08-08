@@ -9,7 +9,7 @@ from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddlewar
 from langchain_core.language_models import BaseChatModel
 
 from .fallback import FallbackModelMiddleware
-from .pacing import provider_backstop_calls
+from .pacing import landing_reserve_calls
 from .prompt_cache import PromptCacheMiddleware
 from .retry import model_retry_middleware, tool_retry_middleware
 from .standard_agent import StandardAgentMiddleware, context_editing_middleware
@@ -56,8 +56,8 @@ class AgentMiddlewareStack:
         return middleware
 
     def _turn_limit(self) -> ModelCallLimitMiddleware[Any, Any]:
-        # 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 상한은 알리는 총량보다 넉넉하다.
-        run_limit = self.max_turns + provider_backstop_calls()
+        # 모델에게 알린 총량 위에 마무리 호출의 몫을 얹어, 도구를 닫은 뒤의 호출이 설 자리를 남긴다.
+        run_limit = self.max_turns + landing_reserve_calls()
         if self.ends_on_turn_limit:
             # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
             return TurnLimitMiddleware(run_limit=run_limit, exit_behavior="end")

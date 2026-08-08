@@ -100,6 +100,24 @@ def test_착지한_루프도_마무리_몫을_넘기면_끊긴다() -> None:
     assert execution.spent == pytest.approx(1.0 + reserve + 1.0)
 
 
+def test_착지한_루프도_공급자_백스톱_위로는_열리지_않는다() -> None:
+    # 마무리 몫은 가장 비쌌던 호출에 비례해 열리므로, 비싼 호출 하나가 그 여유를 폭주로 키운다.
+    backstop = shared_contract("execution.budget.json")["pacing"]["landingReserve"]["providerBackstop"]
+    execution = ExecutionBudget(1.0, mk_rates())
+    loop = execution.new_loop("synthesize", "claude-haiku-4-5")
+    message = mk_ai(
+        usage={**_USAGE, "input_tokens": 900_000}, response_metadata={"model": "claude-haiku-4-5"}
+    )
+
+    loop.charge(message)
+    loop.land()
+    loop.charge(message)
+    with pytest.raises(BudgetExceeded):
+        loop.charge(message)
+
+    assert execution.spent > 1.0 * backstop
+
+
 def test_조사_루프는_배정받은_상한을_넘지_않는다() -> None:
     execution = ExecutionBudget(2.0, mk_rates())
     inspect = execution.new_loop("inspect", "claude-haiku-4-5", max_cost_usd=0.5)

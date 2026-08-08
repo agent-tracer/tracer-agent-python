@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import httpx
+import pytest
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from tests.support.contract import shared_contract
 from tracer_agent.worker.agents.chat.langchain_agent import chat_stack
+from tracer_agent.worker.agents.runtime.llm import pacing
 from tracer_agent.worker.agents.runtime.llm.middleware_stack import AgentMiddlewareStack
 
 _TRANSIENT: tuple[type[Exception], ...] = (httpx.TransportError,)
 _FALLBACK = GenericFakeChatModel(messages=iter([]))
+
+
+def _pacing_with(*, calls: int, provider_backstop: int) -> Callable[[], dict[str, Any]]:
+    """두 칸이 같은 값인 동안 가려지는 파생 근거를 드러내도록 계약의 두 칸을 갈라 놓는다."""
+    declared = shared_contract("execution.budget.json")["pacing"]
+    reserve = {**declared["landingReserve"], "calls": calls, "providerBackstop": provider_backstop}
+    return lambda: {**declared, "landingReserve": reserve}
 
 
 def _job_stack(*, fallback: bool = False, serializes_tools: bool = False) -> AgentMiddlewareStack:
@@ -98,12 +108,21 @@ class Test미들웨어순서:
                 name
             )
 
-    def test_상한은_알리는_총량보다_계약이_적은_백스톱만큼_넉넉하다(self) -> None:
-        headroom = shared_contract("execution.budget.json")["pacing"]["landingReserve"]["providerBackstop"]
+    def test_상한은_알리는_총량보다_마무리_호출_몫만큼_넉넉하다(self) -> None:
+        headroom = shared_contract("execution.budget.json")["pacing"]["landingReserve"]["calls"]
 
         for stack in (chat_stack(_TRANSIENT, max_turns=4), _job_stack()):
             limit = next(one for one in stack.build() if isinstance(one, ModelCallLimitMiddleware))
             assert limit.run_limit == 4 + headroom
+
+    def test_턴_몫의_근거는_calls_하나이고_달러_백스톱은_턴에_닿지_않는다(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(pacing, "_pacing", _pacing_with(calls=5, provider_backstop=9))
+
+        for stack in (chat_stack(_TRANSIENT, max_turns=4), _job_stack()):
+            limit = next(one for one in stack.build() if isinstance(one, ModelCallLimitMiddleware))
+            assert limit.run_limit == 4 + 5
 
     def test_대화만_상한에서_그때까지의_답을_남기고_끝낸다(self) -> None:
         assert _kinds(chat_stack(_TRANSIENT, max_turns=4).build())[0] == "TurnLimitMiddleware"

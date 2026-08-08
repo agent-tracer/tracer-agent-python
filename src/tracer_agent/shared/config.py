@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     agent_db_name: str = "agent"
     agent_db_user: str = "root"
     agent_db_password: str = "root"
+    # 원장 연결 풀이 여는 연결의 하한과 상한이며 배포마다 다른 값을 준다.
+    agent_db_pool_min_size: int = 1
+    agent_db_pool_max_size: int = 8
     # 풀이 마른 순간을 영구 정지가 아니라 관측되는 실패로 드러내는 획득 여유다.
     agent_db_acquire_timeout_s: float = DEFAULT_ACQUIRE_TIMEOUT_S
 

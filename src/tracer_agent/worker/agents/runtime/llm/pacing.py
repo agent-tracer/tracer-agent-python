@@ -35,6 +35,6 @@ def landing_reserve_calls() -> int:
     return int(_pacing()["landingReserve"]["calls"])
 
 
-def provider_backstop_calls() -> int:
-    """실행을 조이는 것은 종료이고 공급자에게 넘기는 자기 상한은 그 위에 두는 폭주 백스톱이다."""
-    return int(_pacing()["landingReserve"]["providerBackstop"])
+def provider_budget_backstop(max_cost_usd: float) -> float:
+    """실행을 조이는 것은 종료이고 달러의 폭주만 끊는 백스톱은 그 상한보다 위에 둔다."""
+    return max_cost_usd * float(_pacing()["landingReserve"]["providerBackstop"])

@@ -7,9 +7,21 @@ from tracer_agent.shared.config import DEFAULT_TASK_QUEUE_PREFIX
 from tracer_agent.shared.workflows.chat_spec import CHAT_TASK_QUEUE
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
+    FAIL_AGENT_JOB_ACTIVITY,
+    FINALIZE_AGENT_JOB_ACTIVITY,
     GENERATE_AGENT_JOB_ACTIVITY,
     GENERATE_QUEUE_KEY,
     GENERATE_TASK_QUEUE,
+    JOB_CANCEL_SETTLE_TIMEOUT_S,
+    JOB_FINALIZE_MAX_ATTEMPTS,
+    JOB_FINALIZE_TIMEOUT_S,
+    JOB_GENERATE_MAX_ATTEMPTS,
+    JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
+    JOB_GENERATE_TIMEOUT_S,
+    JOB_HEARTBEAT_INTERVAL_S,
+    JOB_HEARTBEAT_TIMEOUT_S,
+    JOB_PREPARE_MAX_ATTEMPTS,
+    JOB_PREPARE_TIMEOUT_S,
     JOBS_QUEUE_KEY,
     JOBS_TASK_QUEUE,
     PREPARE_AGENT_JOB_ACTIVITY,
@@ -58,3 +70,28 @@ def test_모델을_부르지_않는_준비_액티비티가_jobs_큐에서_실행
 
 def test_취소_닫기_액티비티가_jobs_큐에서_실행된다() -> None:
     assert _QUEUE_OF[SETTLE_CANCELED_JOB_ACTIVITY] == JOBS_QUEUE_KEY
+
+
+def test_액티비티의_상한과_시도_수가_계약이_적은_값과_같다() -> None:
+    activities = {activity["name"]: activity for activity in _AGENT_JOB["activities"]}
+    prepare = activities[PREPARE_AGENT_JOB_ACTIVITY]
+    generate = activities[GENERATE_AGENT_JOB_ACTIVITY]
+    finalize = activities[FINALIZE_AGENT_JOB_ACTIVITY]
+
+    assert prepare["startToCloseSeconds"] == JOB_PREPARE_TIMEOUT_S
+    assert prepare["maximumAttempts"] == JOB_PREPARE_MAX_ATTEMPTS
+    assert generate["startToCloseSeconds"] == JOB_GENERATE_TIMEOUT_S
+    assert generate["scheduleToCloseSeconds"] == JOB_GENERATE_SCHEDULE_TO_CLOSE_S
+    assert generate["maximumAttempts"] == JOB_GENERATE_MAX_ATTEMPTS
+    assert generate["heartbeatTimeoutSeconds"] == JOB_HEARTBEAT_TIMEOUT_S
+    assert generate["heartbeatIntervalSeconds"] == JOB_HEARTBEAT_INTERVAL_S
+    assert finalize["startToCloseSeconds"] == JOB_FINALIZE_TIMEOUT_S
+    assert finalize["maximumAttempts"] == JOB_FINALIZE_MAX_ATTEMPTS
+    assert activities[SETTLE_CANCELED_JOB_ACTIVITY]["startToCloseSeconds"] == JOB_CANCEL_SETTLE_TIMEOUT_S
+
+
+def test_실패_처리_액티비티가_종결과_같은_상한과_시도_수를_쓴다() -> None:
+    fail = {activity["name"]: activity for activity in _AGENT_JOB["activities"]}[FAIL_AGENT_JOB_ACTIVITY]
+
+    assert fail["startToCloseSeconds"] == JOB_FINALIZE_TIMEOUT_S
+    assert fail["maximumAttempts"] == JOB_FINALIZE_MAX_ATTEMPTS

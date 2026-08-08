@@ -9,7 +9,7 @@ def deadline_fraction_s(deadline_ms: int, fraction: float) -> float:
 
 
 def weighted_wall_clock_s(
-    ceiling_s: float, cost_share: float, budget_usd: float, *, min_fraction: float = 0.3
+    ceiling_s: float, cost_share: float, budget_usd: float, *, min_fraction: float
 ) -> float:
     """워커가 받은 달러 몫에 비례해 벽시계 상한을 내어 큰 몫을 받은 워커를 먼저 끊지 않는다."""
     fraction = cost_share / budget_usd if budget_usd > 0 else 1.0
