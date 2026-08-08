@@ -255,6 +255,37 @@ stateDiagram-v2
 같은 실행이 연달아 실패하면 원장에 대기로 남아 무한히 다시 집히므로 스레드 워크플로가 그 회차를
 접는다. 대화 액티비티는 `generate` 큐가 아니라 `chat` 큐에서 실행된다.
 
+## 요약 접기
+
+이력이 길어지면 재생 창 바깥에 남는 오래된 메시지를 요약 한 칸으로 접는다. 두 축이 `chat_threads`
+한 칸을 공유하므로 문턱과 접을 대상과 재생이 남기는 턴 수는 계약이 갖고 `chat_summary_spec`이
+읽는다.
+
+```
+계약   contract/agent/chat/summary.json
+production.trigger · production.target · consumption.recentKeepCount · limits
+```
+
+`finalize` 액티비티가 산출물을 적은 뒤 `ChatSummaryProjection`을 실행한다. 취소로 끝난 턴과
+전이가 막혀 아무것도 적히지 않은 턴에서는 실행하지 않는다.
+
+```mermaid
+flowchart TD
+    FINAL[finalize 가 산출물을 적었다] --> READ[스레드와 메시지를 읽는다]
+    READ --> TRIGGER{문턱을 넘었나}
+    TRIGGER -->|아니다| SKIP[만들지 않는다]
+    TRIGGER -->|그렇다| OLDER{재생 창 바깥에 남는 것이 있나}
+    OLDER -->|없다| SKIP
+    OLDER -->|있다| CALL[앞선 요약과 함께 도구 없는 단발 호출]
+    CALL --> WRITE[요약 칸을 덮는다]
+    CALL -->|호출 실패| WARN[경고만 남기고 턴은 그대로 둔다]
+```
+
+- 요약은 파생 계산이므로 만들지 못해도 그 턴을 실패로 접지 않는다.
+- 모델을 부르는 동안 원장 연결을 빌리지 않는다. 읽기와 쓰기가 각각 연결을 빌리고 반납한다.
+- 요약이 덮는 마지막 메시지를 원장이 적지 않아 읽는 쪽은 신선도를 판단하지 못한다. 이 구멍은
+  계약이 `knownGap.chat.summary.freshness`로 미해소로 남겼고 해소에는 migration이 함께 간다.
+
 ## 관련 코드
 
 | 확인 대상 | 파일 |
@@ -268,5 +299,6 @@ stateDiagram-v2
 | 프롬프트 조립 | `prompts.py` |
 | 읽기·기억·쓰기 창구 | `reader.py`, `memory.py`, `writer.py` |
 | 실행 원장 쓰기 | `execution_writer.py` |
+| 요약 접기 | `summary.py`, `shared/agents/chat/summary_spec.py` |
 | 체크포인트 | `runtime/checkpoint.py`, `checkpointer.py` |
 | 워크플로와 액티비티 | `worker/workflows/chat_workflows.py`, `chat_activities.py` |

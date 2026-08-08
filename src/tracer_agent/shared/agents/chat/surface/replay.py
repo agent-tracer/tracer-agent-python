@@ -5,12 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from ...runtime.ledger import SqlRow
+from ..summary_spec import chat_summary_spec
 
 ASSISTANT = "assistant"
 TOOL = "tool"
-
-# 요약이 있으면 이 수만큼의 최근 대화 턴만 재생 창에 남는다.
-CHAT_REPLAY_RECENT_KEEP_COUNT = 8
 
 MESSAGE_NOT_FOUND = "Chat replay message not found"
 
@@ -35,17 +33,24 @@ def build_chat_replay(
 
 
 def select_replay_messages(messages: list[SqlRow], has_summary: bool) -> list[SqlRow]:
-    """요약이 있으면 최근 대화 턴 여덟 개까지만 남기고 도구 결과는 턴으로 세지 않는다."""
+    """요약이 있으면 계약이 정한 수만큼의 최근 대화 턴만 남기고 도구 결과는 턴으로 세지 않는다."""
     if not has_summary:
         return messages
+    keep = chat_summary_spec().recent_keep_count
     turns = 0
     for index in range(len(messages) - 1, -1, -1):
         if messages[index]["role"] == TOOL:
             continue
         turns += 1
-        if turns > CHAT_REPLAY_RECENT_KEEP_COUNT:
+        if turns > keep:
             return messages[index + 1 :]
     return messages
+
+
+def select_messages_to_fold(messages: list[SqlRow]) -> list[SqlRow]:
+    """요약이 접을 대상은 재생 창 바깥에 남는 오래된 메시지다."""
+    kept = len(select_replay_messages(messages, True))
+    return messages[: len(messages) - kept]
 
 
 def _until_anchor(messages: list[SqlRow], replay_anchor_message_id: str) -> list[SqlRow]:

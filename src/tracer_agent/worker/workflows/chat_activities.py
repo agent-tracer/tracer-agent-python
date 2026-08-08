@@ -33,6 +33,7 @@ from ...shared.workflows.chat_spec import (
 from ..agents.chat.agent import AGENT_NAME, run_chat
 from ..agents.chat.execution_writer import ChatExecutionWriter
 from ..agents.chat.prompts import build_system_prompt
+from ..agents.chat.summary import ChatSummaryProjection, ModelChatSummarizer
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.runner import AgentBody, ExecutionRequest, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
@@ -139,12 +140,28 @@ class ChatExecutionActivities:
 
     @activity.defn(name=FINALIZE_ACTIVITY)
     async def finalize(self, generated: GeneratedChatExecution) -> None:
-        """턴의 산출물을 실행 전이와 스레드 갱신과 함께 한 트랜잭션으로 적는다."""
+        """턴의 산출물을 실행 전이와 스레드 갱신과 함께 한 트랜잭션으로 적고 요약을 잇는다."""
         # 취소가 남긴 것이 빈 답변뿐이면 적재할 산출물이 없으므로 실행을 그대로 둔다.
         if generated.canceled and not generated.text.strip():
             return
         async with self._sql.connect() as sql:
-            await ChatExecutionWriter(sql, self._wakeup).finalize(ledger_outcome(generated), _now())
+            persisted = await ChatExecutionWriter(sql, self._wakeup).finalize(
+                ledger_outcome(generated), _now()
+            )
+        # 사용자가 지출을 멈추라고 한 턴에서는 파생 계산을 새로 실행하지 않는다.
+        if not persisted or generated.canceled:
+            return
+        await self._summarize(generated)
+
+    async def _summarize(self, generated: GeneratedChatExecution) -> None:
+        """이 턴으로 길어진 스레드의 오래된 메시지를 요약으로 접는다."""
+
+        async def api_key() -> str:
+            envelope = await self._envelopes.issue(generated.execution_id, generated.attempt)
+            return str(envelope.fields["apiKey"])
+
+        summarizer = ModelChatSummarizer(api_key)
+        await ChatSummaryProjection(self._sql, summarizer).project(generated.thread_id, _now())
 
     @activity.defn(name=FAIL_ACTIVITY)
     async def fail(self, request: FailedChatExecution) -> None:
