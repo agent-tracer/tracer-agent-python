@@ -6,12 +6,14 @@ from typing import Any
 
 import pytest
 
+from tracer_agent.shared.agents.chat.summary_spec import chat_summary_spec
 from tracer_agent.shared.agents.chat.surface.replay import (
-    CHAT_REPLAY_RECENT_KEEP_COUNT,
     ChatReplayMessageMissing,
     build_chat_replay,
     select_replay_messages,
 )
+
+RECENT_KEEP_COUNT = chat_summary_spec().recent_keep_count
 
 CALL = {"id": "call-1", "name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
 
@@ -93,10 +95,10 @@ class Test재생_창:
     def test_요약이_있으면_최근_대화_턴만_남긴다(self) -> None:
         rows = [user(f"m{index}", "말") for index in range(30)]
 
-        assert len(select_replay_messages(rows, True)) == CHAT_REPLAY_RECENT_KEEP_COUNT
+        assert len(select_replay_messages(rows, True)) == RECENT_KEEP_COUNT
 
     def test_도구_결과는_대화_턴으로_세지_않는다(self) -> None:
-        rows = [user(f"m{index}", "말") for index in range(CHAT_REPLAY_RECENT_KEEP_COUNT)]
+        rows = [user(f"m{index}", "말") for index in range(RECENT_KEEP_COUNT)]
         rows += [tool("t1", "결과", "call-1"), tool("t2", "결과", "call-2")]
 
         assert len(select_replay_messages(rows, True)) == len(rows)

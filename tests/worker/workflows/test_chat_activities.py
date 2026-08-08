@@ -14,6 +14,7 @@ from temporalio.testing import ActivityEnvironment
 
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES
 from tests.support.prompts import CHAT_PROMPT
+from tracer_agent.shared.agents.chat.summary_spec import chat_summary_spec
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
@@ -140,14 +141,33 @@ class StubEnvelopes:
 
 
 @pytest.fixture
-def activities(store: SqliteLedgerSql) -> ChatExecutionActivities:
+def envelopes() -> StubEnvelopes:
+    return StubEnvelopes()
+
+
+@pytest.fixture
+def activities(store: SqliteLedgerSql, envelopes: StubEnvelopes) -> ChatExecutionActivities:
     return ChatExecutionActivities(
         SingleSqlSource(store),
         httpx.AsyncClient(),
         GraphCheckpointProvider("postgresql://unused"),
-        StubEnvelopes(),
+        envelopes,
         CHAT_PROMPT,
     )
+
+
+def long_thread_messages() -> list[dict[str, Any]]:
+    """요약 문턱을 넘기는 이력이며 마지막 자리는 이번 턴이 적을 답변이 채운다."""
+    return [
+        {
+            "id": f"m{index}",
+            "thread_id": "t1",
+            "role": "user",
+            "content": f"말{index}",
+            "created_at": NOW,
+        }
+        for index in range(chat_summary_spec().trigger_messages)
+    ]
 
 
 async def test_준비가_대기_실행을_집고_원장이_든_사실을_낸다(
@@ -200,7 +220,7 @@ async def test_없는_실행은_다시_태우지_않는다(activities: ChatExecu
 
 
 async def test_종결이_산출물과_스레드_갱신을_함께_적는다(
-    store: SqliteLedgerSql, activities: ChatExecutionActivities
+    store: SqliteLedgerSql, activities: ChatExecutionActivities, envelopes: StubEnvelopes
 ) -> None:
     store.seed("chat_executions", [execution_row(status="running")])
 
@@ -208,6 +228,7 @@ async def test_종결이_산출물과_스레드_갱신을_함께_적는다(
 
     assert store.rows("chat_executions")[0]["status"] == "completed"
     assert store.rows("chat_threads")[0]["backend"] == "python"
+    assert envelopes.issued == []
 
 
 async def test_빈_취소_턴은_실행을_그대로_둔다(
@@ -219,6 +240,31 @@ async def test_빈_취소_턴은_실행을_그대로_둔다(
 
     assert store.rows("chat_executions")[0]["assistant_message_id"] is None
     assert store.rows("chat_messages") == []
+
+
+async def test_길어진_스레드는_종결_뒤에_요약을_잇는다(
+    store: SqliteLedgerSql, activities: ChatExecutionActivities, envelopes: StubEnvelopes
+) -> None:
+    store.seed("chat_executions", [execution_row(status="running")])
+    store.seed("chat_messages", long_thread_messages())
+
+    await activities.finalize(generated())
+
+    assert envelopes.issued == [("e1", 1)]
+    # 자격을 받지 못해 요약을 만들지 못해도 이 턴은 완료로 남는다.
+    assert store.rows("chat_executions")[0]["status"] == "completed"
+    assert store.rows("chat_threads")[0]["summary"] is None
+
+
+async def test_취소된_턴은_요약을_잇지_않는다(
+    store: SqliteLedgerSql, activities: ChatExecutionActivities, envelopes: StubEnvelopes
+) -> None:
+    store.seed("chat_executions", [execution_row(status="canceled")])
+    store.seed("chat_messages", long_thread_messages())
+
+    await activities.finalize(generated(canceled=True, text="여기까지", observation=observation("cancelled")))
+
+    assert envelopes.issued == []
 
 
 async def test_취소된_턴의_산출물은_남는다(

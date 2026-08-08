@@ -31,6 +31,12 @@ UPDATE chat_threads SET title = $2, updated_at = $3
 RETURNING *
 """
 
+_FOLD_THREAD_SUMMARY = """
+UPDATE chat_threads SET summary = $2, updated_at = $3
+ WHERE id = $1
+RETURNING id
+"""
+
 _SELECT_MESSAGES = """
 SELECT * FROM chat_messages
  WHERE thread_id = $1
@@ -143,6 +149,11 @@ class ChatSurfaceLedger:
         """스레드의 제목을 고친 행을 낸다."""
         rows = await self._sql.fetch(_RENAME_THREAD, thread_id, title, now)
         return rows[0]
+
+    async def fold_thread_summary(self, thread_id: str, summary: str, now: datetime) -> bool:
+        """스레드의 요약 칸을 새 본문으로 덮고 덮었는지 낸다."""
+        rows = await self._sql.fetch(_FOLD_THREAD_SUMMARY, thread_id, summary, now)
+        return len(rows) == 1
 
     async def delete_thread(self, thread_id: str) -> None:
         """스레드를 그 메시지와 실행과 궤적과 대기 도구까지 지운다."""

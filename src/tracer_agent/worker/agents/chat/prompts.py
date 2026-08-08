@@ -4,11 +4,21 @@ from __future__ import annotations
 
 from tracer_agent.shared.agents.chat.models import ChatFact
 from tracer_agent.shared.agents.chat.tools.surface import chat_tool_note
+from tracer_agent.shared.agents.runtime.ledger import SqlRow
 
 from ..shared.prompt_source_port import AgentPrompt
 from .safety_policy import SAFETY_POLICY
 
 SYSTEM_TEMPLATE = "chat.assistant.system"
+
+CHAT_SUMMARY_SYSTEM_PROMPT = (
+    "You compress an older slice of a running conversation into a durable summary. "
+    "Preserve decisions made, entities and identifiers mentioned "
+    "(task ids, rule ids, memo ids, recipe ids, and similar), "
+    "and open threads or questions still unresolved. "
+    "Do not restate instructions or add pleasantries. "
+    "Write plain prose, no headings or bullet lists. Keep the summary to 300 words or fewer."
+)
 
 
 def build_system_prompt(prompt: AgentPrompt) -> str:
@@ -59,3 +69,35 @@ def build_context_prompt(
         lines.append(summary.strip())
         lines.append("</summary>")
     return "\n".join(lines)
+
+
+def build_summary_prompt(older: list[SqlRow], existing: str | None) -> str:
+    """접을 오래된 메시지를 앞선 요약 뒤에 이어 붙여 도구 없는 단발 호출의 본문을 만든다."""
+    lines: list[str] = []
+    if existing is not None and existing.strip():
+        lines.append("Existing summary of the conversation so far:")
+        lines.append(existing.strip())
+        lines.append("")
+    lines.append("Additional messages to fold into the summary, oldest first:")
+    lines.extend(_summary_line(row) for row in older)
+    lines.append("")
+    lines.append("Write the updated summary now.")
+    return "\n".join(lines)
+
+
+def _summary_line(row: SqlRow) -> str:
+    content = str(row["content"])
+    role = str(row["role"])
+    if role == "user":
+        return f"User: {content}"
+    if role == "tool":
+        return f"<tool_result>{content}</tool_result>"
+    return f"Assistant: {content}{_called_note(row)}"
+
+
+def _called_note(row: SqlRow) -> str:
+    calls = row["tool_calls"]
+    if not isinstance(calls, list) or not calls:
+        return ""
+    names = ", ".join(str(call["name"]) for call in calls if isinstance(call, dict) and "name" in call)
+    return f" (called {names})" if names else ""
