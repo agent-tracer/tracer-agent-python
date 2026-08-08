@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from ...runtime.ledger import LedgerSql, SqlRow
+from ...runtime.ledger import SqlRow, SqlSource
 from ..intake.cancel import UpdateSignal
 from ..intake.dispatch import ExecutionDispatch
 from ..intake.follow_up import follow_up_client_request_id, follow_up_input_hash
@@ -37,17 +37,18 @@ class ThreadUpdateAnnouncer:
 
     def __init__(
         self,
-        ledger: ChatSurfaceLedger,
+        source: SqlSource,
         updates: UpdateSignal | None = None,
         watch: ChatExecutionUpdates | None = None,
     ) -> None:
-        self._ledger = ledger
+        self._source = source
         self._updates = updates
         self._watch = watch
 
     async def announce(self, thread_id: str) -> None:
         """이 스레드에서 열려 있는 실행이 있을 때만 그 채널로 갱신 사실을 보낸다."""
-        active = await self._ledger.latest_active_execution(thread_id)
+        async with self._source.connect() as sql:
+            active = await ChatSurfaceLedger(sql).latest_active_execution(thread_id)
         if active is None:
             return
         # 이 프로세스의 연결에는 브로커를 거치지 않고 곧바로 알린다.
@@ -57,19 +58,26 @@ class ThreadUpdateAnnouncer:
             await self._updates.publish(active, {"executionId": active})
 
 
+@dataclass(frozen=True)
+class ClaimedConfirmation:
+    """상류를 부르기 전에 원장에서 확정한 자리이며 그 뒤 구간은 연결 없이 이것만 읽는다."""
+
+    tool_name: str
+    args: dict[str, Any]
+    status: str
+
+
 class ChatConfirmationResolution:
-    """대기 행의 자리를 먼저 집고, 그 자리로만 도구를 불러 결과를 대화와 이어 말할 턴으로 잇는다."""
+    """대기 행의 자리를 먼저 가져가고, 그 자리로만 도구를 불러 결과를 대화와 이어 말할 턴으로 잇는다."""
 
     def __init__(
         self,
-        sql: LedgerSql,
+        source: SqlSource,
         executor: ChatToolExecutor,
         dispatch: ExecutionDispatch,
         announcer: ThreadUpdateAnnouncer,
     ) -> None:
-        self._sql = sql
-        self._ledger = ChatSurfaceLedger(sql)
-        self._intake = ChatIntakeLedger(sql)
+        self._source = source
         self._executor = executor
         self._dispatch = dispatch
         self._announcer = announcer
@@ -83,61 +91,100 @@ class ChatConfirmationResolution:
         now: datetime,
     ) -> ResolvedConfirmation:
         """대기 중인 도구 호출 하나를 해소하고 대화에 남은 결과와 이어 말할 실행을 낸다."""
-        await owned_thread(self._ledger, user_id, thread_id)
-        pending = await self._pending(thread_id, confirmation_id)
-        tool_name = str(pending["tool_name"])
-        status = REJECTED if decision == "reject" else APPROVED
-        # 전이를 먼저 확정해야 같은 확인의 두 승인이 상류 쓰기를 나란히 내지 못한다.
-        resolved = await self._ledger.resolve_pending_tool(confirmation_id, status, now)
-        if resolved is None:
-            raise ChatRejected(*CONFIRMATION_RESOLVED)
-        content = await self._decide(user_id, tool_name, pending, decision, confirmation_id)
-        async with self._sql.transaction():
-            anchor = await self._ledger.insert_tool_message(
-                generate_ulid(now), thread_id, content, confirmation_id, now
-            )
-            execution = (
-                None
-                if status == REJECTED
-                else await self._follow_up(user_id, thread_id, confirmation_id, anchor, now)
-            )
+        claimed = await self._claim(user_id, thread_id, confirmation_id, decision, now)
+        content = await self._decide(user_id, claimed, decision, confirmation_id)
+        execution = await self._record(user_id, thread_id, confirmation_id, content, decision, now)
         if execution is not None:
             await self._dispatch.start(str(execution["id"]), thread_id)
         await self._announcer.announce(thread_id)
         return ResolvedConfirmation(
             confirmation_id=confirmation_id,
-            tool_name=tool_name,
-            status=str(resolved["status"]),
+            tool_name=claimed.tool_name,
+            status=claimed.status,
             result=content,
             execution=execution,
+        )
+
+    async def _claim(
+        self,
+        user_id: str,
+        thread_id: str,
+        confirmation_id: str,
+        decision: ToolDecision,
+        now: datetime,
+    ) -> ClaimedConfirmation:
+        """소유권과 대기 상태를 확인하고 이 요청이 상류를 부를 자리를 확정한다."""
+        status = REJECTED if decision == "reject" else APPROVED
+        async with self._source.connect() as sql:
+            ledger = ChatSurfaceLedger(sql)
+            await owned_thread(ledger, user_id, thread_id)
+            pending = await self._pending(ledger, thread_id, confirmation_id)
+            # 전이를 먼저 확정해야 같은 확인의 두 승인이 상류 쓰기를 나란히 내지 못한다.
+            resolved = await ledger.resolve_pending_tool(confirmation_id, status, now)
+        if resolved is None:
+            raise ChatRejected(*CONFIRMATION_RESOLVED)
+        return ClaimedConfirmation(
+            tool_name=str(pending["tool_name"]),
+            args=dict(pending["args"] or {}),
+            status=str(resolved["status"]),
         )
 
     async def _decide(
         self,
         user_id: str,
-        tool_name: str,
-        pending: SqlRow,
+        claimed: ClaimedConfirmation,
         decision: ToolDecision,
         confirmation_id: str,
     ) -> str:
         if decision == "reject":
-            return f"User rejected the proposed {tool_name}. It was not executed."
+            return f"User rejected the proposed {claimed.tool_name}. It was not executed."
         try:
-            return await self._executor.execute(user_id, tool_name, dict(pending["args"] or {}))
+            # 확인 도구 가운데 둘은 이 서비스로 되돌아오므로 상류를 부르는 동안 원장 연결을 반납한다.
+            return await self._executor.execute(user_id, claimed.tool_name, claimed.args)
         except BaseException:
             # 상류가 받지 못한 승인은 자리를 놓아 사용자가 같은 확인을 다시 물을 수 있게 한다.
-            await self._ledger.reopen_pending_tool(confirmation_id)
+            async with self._source.connect() as sql:
+                await ChatSurfaceLedger(sql).reopen_pending_tool(confirmation_id)
             raise
 
+    async def _record(
+        self,
+        user_id: str,
+        thread_id: str,
+        confirmation_id: str,
+        content: str,
+        decision: ToolDecision,
+        now: datetime,
+    ) -> SqlRow | None:
+        """도구 결과 줄과 이어 말할 턴이 함께 남거나 함께 사라지도록 한 트랜잭션으로 적는다."""
+        async with self._source.connect() as sql:
+            ledger = ChatSurfaceLedger(sql)
+            async with sql.transaction():
+                anchor = await ledger.insert_tool_message(
+                    generate_ulid(now), thread_id, content, confirmation_id, now
+                )
+                if decision == "reject":
+                    return None
+                return await self._follow_up(
+                    ledger, ChatIntakeLedger(sql), user_id, thread_id, confirmation_id, anchor, now
+                )
+
     async def _follow_up(
-        self, user_id: str, thread_id: str, confirmation_id: str, anchor: str, now: datetime
+        self,
+        ledger: ChatSurfaceLedger,
+        intake: ChatIntakeLedger,
+        user_id: str,
+        thread_id: str,
+        confirmation_id: str,
+        anchor: str,
+        now: datetime,
     ) -> SqlRow | None:
         """실행한 결과를 모델이 읽고 이어 말하도록 그 결과를 앵커로 삼는 턴을 세운다."""
-        # 아직 문맥을 읽지 않은 턴만 이 결과를 이력으로 집으므로 그때만 줄을 더 세우지 않는다.
-        if await self._ledger.latest_queued_execution(thread_id) is not None:
+        # 아직 문맥을 읽지 않은 턴만 이 결과를 이력으로 가져가므로 그때만 줄을 더 세우지 않는다.
+        if await ledger.latest_queued_execution(thread_id) is not None:
             return None
-        previous = await self._ledger.list_executions(thread_id)
-        return await self._intake.insert_queued_execution(
+        previous = await ledger.list_executions(thread_id)
+        return await intake.insert_queued_execution(
             generate_ulid(now),
             user_id,
             thread_id,
@@ -149,8 +196,8 @@ class ChatConfirmationResolution:
             now,
         )
 
-    async def _pending(self, thread_id: str, confirmation_id: str) -> SqlRow:
-        pending = await self._ledger.find_pending_tool(confirmation_id)
+    async def _pending(self, ledger: ChatSurfaceLedger, thread_id: str, confirmation_id: str) -> SqlRow:
+        pending = await ledger.find_pending_tool(confirmation_id)
         # 남의 스레드에 걸린 확인은 존재 자체를 알리지 않는다.
         if pending is None or pending["thread_id"] != thread_id:
             raise ChatRejected(*CONFIRMATION_NOT_FOUND)

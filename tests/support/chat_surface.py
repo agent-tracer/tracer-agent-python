@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.agents.runtime.ledger import LedgerSql, LedgerUnavailable
 
 NOW = datetime(2026, 7, 30, tzinfo=UTC)
 
@@ -18,20 +18,31 @@ DRAFT_TOKEN = "grant"
 DRAFT_TOKEN_HASH = "3492ad65d05a973fef8c825521eeb41ae64625a672a8aeeeabc696e16d62a020"
 
 
+# 빌린 자리가 정해진 여유 안에 나지 않으면 실물처럼 거절로 드러나도록 이 값을 획득 대기 상한으로 쓴다.
+BORROW_TIMEOUT_S = 1.0
+
+
 class SingleSql:
     """테스트 하나가 쓰는 메모리 원장을 연결 풀처럼 정해진 수만큼만 동시에 빌려 준다."""
 
-    def __init__(self, store: SqliteLedgerSql, max_size: int = 1) -> None:
+    # 빌려 주는 객체가 언제나 같으므로 연결마다 갈리는 트랜잭션 경계와 세션 상태는 이 대역에 없다.
+    def __init__(
+        self, store: SqliteLedgerSql, max_size: int = 1, acquire_timeout_s: float = BORROW_TIMEOUT_S
+    ) -> None:
         self._store = store
         self._slots = asyncio.Semaphore(max_size)
+        self._acquire_timeout_s = acquire_timeout_s
 
     def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
-        """빌릴 자리가 날 때까지 기다렸다가 같은 메모리 원장을 낸다."""
+        """빌릴 자리가 날 때까지 기다렸다가 같은 메모리 원장을 내고 여유를 넘긴 대기는 거절로 낸다."""
         return self._lend()
 
     @asynccontextmanager
     async def _lend(self) -> AsyncIterator[LedgerSql]:
-        await self._slots.acquire()
+        try:
+            await asyncio.wait_for(self._slots.acquire(), self._acquire_timeout_s)
+        except TimeoutError as dry:
+            raise LedgerUnavailable(f"원장 연결을 {self._acquire_timeout_s}초 안에 빌리지 못했다") from dry
         try:
             yield self._store
         finally:

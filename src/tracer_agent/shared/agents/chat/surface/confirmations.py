@@ -73,9 +73,9 @@ async def propose_chat_tool(
             pending = await ledger.insert_pending_tool(
                 generate_ulid(now), thread_id, body.toolName, args, now
             )
-            await ThreadUpdateAnnouncer(ledger, updates, watch).announce(thread_id)
     except ChatRejected as rejected:
         return rejection(rejected)
+    await ThreadUpdateAnnouncer(source, updates, watch).announce(thread_id)
     return ok(
         {
             "confirmationId": pending["id"],
@@ -109,15 +109,11 @@ async def decide_chat_tool(
     if isinstance(body, JSONResponse):
         return body
     now = datetime.now(UTC)
+    resolution = ChatConfirmationResolution(
+        source, executor, dispatch, ThreadUpdateAnnouncer(source, updates, watch)
+    )
     try:
-        async with source.connect() as sql:
-            resolution = ChatConfirmationResolution(
-                sql,
-                executor,
-                dispatch,
-                ThreadUpdateAnnouncer(ChatSurfaceLedger(sql), updates, watch),
-            )
-            resolved = await resolution.resolve(user_id, thread_id, confirmation_id, body.decision, now)
+        resolved = await resolution.resolve(user_id, thread_id, confirmation_id, body.decision, now)
     except ChatRejected as rejected:
         return rejection(rejected)
     except ChatToolArgsInvalid:

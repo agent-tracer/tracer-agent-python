@@ -13,13 +13,13 @@ from tests.support.chat_surface import (
     RecordingExecutor,
     RecordingUpdates,
     SilentWatch,
+    SingleSql,
     seed_execution,
     seed_pending_tool,
     seed_thread,
 )
 from tracer_agent.shared.agents.chat.intake.follow_up import follow_up_client_request_id
 from tracer_agent.shared.agents.chat.rejections import ChatRejected
-from tracer_agent.shared.agents.chat.surface.ledger import ChatSurfaceLedger
 from tracer_agent.shared.agents.chat.surface.resolution import (
     ChatConfirmationResolution,
     ThreadUpdateAnnouncer,
@@ -66,11 +66,13 @@ def _resolution(
     updates: RecordingUpdates | None = None,
     watch: SilentWatch | None = None,
 ) -> ChatConfirmationResolution:
+    # 상한이 하나인 창구로 빌려 주므로 한 해소가 연결을 쥔 채 다시 빌리면 이 시험이 거절로 멈춘다.
+    source = SingleSql(store)
     return ChatConfirmationResolution(
-        store,
+        source,
         executor,
         dispatch,
-        ThreadUpdateAnnouncer(ChatSurfaceLedger(store), updates, watch),
+        ThreadUpdateAnnouncer(source, updates, watch),
     )
 
 
