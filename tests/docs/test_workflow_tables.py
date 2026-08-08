@@ -9,16 +9,24 @@ from typing import Any
 import pytest
 from tests.support.contract import workflow_contract
 
+from tracer_agent.worker.agents.chat.steps.converse import CONVERSE_DEADLINE_SHARE
+from tracer_agent.worker.agents.chat.steps.load_context import CONTEXT_ATTEMPTS
 from tracer_agent.worker.agents.runtime.llm.retry import MAX_RETRIES
+from tracer_agent.worker.agents.runtime.llm.standard_agent import (
+    CONTEXT_EDITING_KEEP_TOOL_RESULTS,
+    CONTEXT_EDITING_TRIGGER_TOKENS,
+)
 
 AGENTS_ROOT = Path(__file__).resolve().parents[2] / "src" / "tracer_agent" / "worker" / "agents"
 
 CHAT_DOC = AGENTS_ROOT / "chat" / "README.md"
+AGENTS_DOC = AGENTS_ROOT / "README.md"
 JOB_DOCS = (
     AGENTS_ROOT / "recipe_scan" / "README.md",
     AGENTS_ROOT / "task_cleanup" / "README.md",
     AGENTS_ROOT / "title_suggestion" / "README.md",
 )
+
 
 _ROW = re.compile(r"^\|\s*`(?P<name>\w+)`\s*\|(?P<rest>.+)\|\s*$", re.M)
 _SECONDS = re.compile(r"^(\d+)초$")
@@ -83,3 +91,53 @@ def test_문서가_적은_재시도_횟수가_런타임이_정한_값과_같다(
 
     assert written, doc.name
     assert {int(count) for count in written} == {MAX_RETRIES}, doc.name
+
+
+def _generate_activity(workflow_key: str, name: str) -> dict[str, Any]:
+    return _declared(workflow_key)[name]
+
+
+# 문서는 세는 수를 낱말로 적으므로 그 낱말과 값을 잇는 자리를 여기 하나 둔다.
+_KOREAN_COUNTS = {1: "한 번", 2: "두 번", 3: "세 번", 4: "네 번", 5: "다섯 번"}
+
+# 문서가 소유자 없이 적으면 조용히 낡으므로 표 밖에 적힌 값도 자기 소유자와 맨다.
+_CITATIONS: tuple[tuple[Path, str, str], ...] = (
+    (AGENTS_DOC, r"([\d,]+) token부터", f"{CONTEXT_EDITING_TRIGGER_TOKENS:,}"),
+    (CHAT_DOC, r"([\d,]+) token부터", f"{CONTEXT_EDITING_TRIGGER_TOKENS:,}"),
+    (AGENTS_DOC, r"최근 (\d+)개를 유지한다", str(CONTEXT_EDITING_KEEP_TOOL_RESULTS)),
+    (CHAT_DOC, r"최근 (\d+)개를 보존한다", str(CONTEXT_EDITING_KEEP_TOOL_RESULTS)),
+    (CHAT_DOC, r"연결 계열 오류만 (.+?)까지 다시 걸고", _KOREAN_COUNTS[CONTEXT_ATTEMPTS]),
+    (CHAT_DOC, r"실행 데드라인의 (\d+)%", str(round(CONVERSE_DEADLINE_SHARE * 100))),
+)
+
+
+@pytest.mark.parametrize(
+    ("doc", "pattern", "expected"),
+    _CITATIONS,
+    ids=[f"{doc.parent.name}-{index}" for index, (doc, _, _) in enumerate(_CITATIONS)],
+)
+def test_문서가_표_밖에_적은_값이_소유자와_같다(doc: Path, pattern: str, expected: str) -> None:
+    written = re.findall(pattern, doc.read_text(encoding="utf-8"))
+
+    assert written, f"{doc.name}: {pattern}"
+    assert set(written) == {expected}, f"{doc.name}: {pattern}"
+
+
+@pytest.mark.parametrize("doc", [CHAT_DOC, *JOB_DOCS], ids=lambda doc: doc.parent.name)
+def test_비고가_적은_하트비트_상한이_계약이_적은_값과_같다(doc: Path) -> None:
+    key = "chatExecution" if doc == CHAT_DOC else "agentJob"
+    name = "generateChatExecution" if doc == CHAT_DOC else "generateAgentJob"
+    declared = _generate_activity(key, name)
+    written = re.findall(r"(\d+)초 heartbeat", doc.read_text(encoding="utf-8"))
+
+    assert written, doc.name
+    assert set(written) == {str(declared["heartbeatTimeoutSeconds"])}, doc.name
+
+
+@pytest.mark.parametrize("doc", JOB_DOCS, ids=lambda doc: doc.parent.name)
+def test_비고가_적은_전체_상한이_계약이_적은_값과_같다(doc: Path) -> None:
+    declared = _generate_activity("agentJob", "generateAgentJob")
+    written = re.findall(r"(\d+)분 schedule-to-close", doc.read_text(encoding="utf-8"))
+
+    assert written, doc.name
+    assert set(written) == {str(declared["scheduleToCloseSeconds"] // 60)}, doc.name
