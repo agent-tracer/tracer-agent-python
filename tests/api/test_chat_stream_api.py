@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import timedelta
 
 import pytest
@@ -21,7 +21,7 @@ from tests.support.chat_surface import (
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger
 from tracer_agent.shared.agents.chat.surface.stream import frames, watch_chat_execution
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.agents.runtime.ledger import LedgerSql
+from tracer_agent.shared.agents.runtime.ledger import LedgerSql, LedgerUnavailable
 
 THREADS = "/api/agent/chat/threads"
 
@@ -53,6 +53,25 @@ class WakingWatch:
 
     def _release(self) -> None:
         self.released = True
+
+
+class DryingSource:
+    """정해진 순간부터 원장을 빌려 주지 못하는 창구 대역이다."""
+
+    def __init__(self, inner: SingleSql) -> None:
+        self._inner = inner
+        self.dry = False
+
+    def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
+        """마른 것으로 표시된 뒤에는 빌리려는 순간 원장을 쓸 수 없다고 알린다."""
+        if self.dry:
+            return self._dry()
+        return self._inner.connect()
+
+    @asynccontextmanager
+    async def _dry(self) -> AsyncIterator[LedgerSql]:
+        raise LedgerUnavailable("원장 연결을 얻지 못했다")
+        yield
 
 
 class OrderedSource:
@@ -175,6 +194,22 @@ class Test끊김과_취소와_재생:
         assert len(sent) == 1
         # 구독보다 먼저 읽은 정본을 첫 프레임으로 쓰면 그 사이에 온 갱신을 재전송 주기까지 놓친다.
         assert events == ["read", "subscribe", "read"]
+
+    async def test_첫_프레임_뒤에_원장을_잃으면_구독을_놓고_닫는다(self, store: SqliteLedgerSql) -> None:
+        seed_thread(store)
+        seed_execution(store, "e1", status="running")
+        watch = WakingWatch()
+        source = DryingSource(SingleSql(store))
+
+        stream = frames(watch, source, "local", "t1", "e1")
+        await anext(stream)
+        source.dry = True
+        watch.wake()
+
+        # 헤더가 이미 나가 상태를 바꿀 수 없으므로 계약의 어휘 대신 연결을 닫는 것으로만 드러난다.
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+        assert watch.released
 
     async def test_연결이_끊기면_구독을_놓는다(self, store: SqliteLedgerSql) -> None:
         seed_thread(store)

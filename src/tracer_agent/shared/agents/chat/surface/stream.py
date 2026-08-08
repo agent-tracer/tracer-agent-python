@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -12,7 +13,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
-from ...runtime.ledger import SqlSource
+from ...runtime.ledger import LedgerUnavailable, SqlSource
 from ..dependencies import Watch
 from ..models import TERMINAL_CHAT_EXECUTION_STATUSES
 from ..rejections import ChatRejected
@@ -25,6 +26,8 @@ from .updates import ChatExecutionUpdates
 from .views import confirmation_dto, execution_dto
 
 CHAT_EXECUTION_EVENTS_PATH = f"{CHAT_EXECUTION_PATH}/events"
+
+_log = logging.getLogger(__name__)
 
 EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
 SNAPSHOT_EVENT = "snapshot"
@@ -94,6 +97,10 @@ async def frames(
                 last = ""
     except ChatRejected:
         # 조회하던 실행이 사라졌으면 더 실을 것이 없으므로 연결을 닫는다.
+        return
+    except LedgerUnavailable:
+        # 헤더가 이미 나가 상태를 바꿀 수 없으므로 계약의 어휘 대신 관측에만 남기고 닫는다.
+        _log.warning("chat.stream.failed", exc_info=True)
         return
     finally:
         unsubscribe()
