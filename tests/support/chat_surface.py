@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -18,18 +19,23 @@ DRAFT_TOKEN_HASH = "3492ad65d05a973fef8c825521eeb41ae64625a672a8aeeeabc696e16d62
 
 
 class SingleSql:
-    """테스트 하나가 쓰는 메모리 원장을 창구에 그대로 빌려 준다."""
+    """테스트 하나가 쓰는 메모리 원장을 연결 풀처럼 정해진 수만큼만 동시에 빌려 준다."""
 
-    def __init__(self, store: SqliteLedgerSql) -> None:
+    def __init__(self, store: SqliteLedgerSql, max_size: int = 1) -> None:
         self._store = store
+        self._slots = asyncio.Semaphore(max_size)
 
     def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
-        """빌릴 때마다 같은 메모리 원장을 낸다."""
+        """빌릴 자리가 날 때까지 기다렸다가 같은 메모리 원장을 낸다."""
         return self._lend()
 
     @asynccontextmanager
     async def _lend(self) -> AsyncIterator[LedgerSql]:
-        yield self._store
+        await self._slots.acquire()
+        try:
+            yield self._store
+        finally:
+            self._slots.release()
 
 
 class RecordingDispatch:

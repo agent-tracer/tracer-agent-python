@@ -127,5 +127,6 @@ def _compiled_strategy(monkeypatch: pytest.MonkeyPatch) -> Any:
         context_schema=StandardAgentContext,
         name="recipe-scan-investigator",
         max_turns=4,
+        tool_failure_text="Tool {tool} failed: {reason}.",
     )
     return seen["response_format"]

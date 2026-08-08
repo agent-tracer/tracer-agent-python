@@ -47,6 +47,7 @@ def build_structured_agent(
     context_schema: type[Any],
     name: str,
     max_turns: int,
+    tool_failure_text: str,
     fallback_chat: BaseChatModel | None = None,
     serializes_tools: bool = False,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
@@ -57,20 +58,21 @@ def build_structured_agent(
         fallback_chat=fallback_chat,
         repairs_structured_output=True,
         serializes_tools=serializes_tools,
+        tool_failure_text=tool_failure_text,
     ).build()
     return create_agent(
         chat,
         tools=list(tools),
         system_prompt=SystemMessage(content=system_prompt),
         middleware=middleware,
-        response_format=_output_tool(output),
+        response_format=output_tool(output),
         context_schema=context_schema,
         name=name,
     )
 
 
 # 출력 타입을 그대로 넘기면 공급자 강제로 넘어가 첫 응답이 곧 산출이 되고 조사 도구를 부를 턴이 남지 않는다.
-def _output_tool(output: type[BaseModel]) -> ToolStrategy[Any]:
+def output_tool(output: type[BaseModel]) -> ToolStrategy[Any]:
     """산출을 도구 하나로 선언해 모델이 조사 도구를 먼저 부른 뒤 산출을 낼 수 있게 한다."""
     # 스키마를 어긴 산출은 SDK가 대신 처리하지 않고 이 저장소의 다시 받는 층과 장부를 지나야 한다.
     return ToolStrategy(output, handle_errors=False)

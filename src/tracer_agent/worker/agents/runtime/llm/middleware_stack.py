@@ -9,14 +9,13 @@ from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddlewar
 from langchain_core.language_models import BaseChatModel
 
 from .fallback import FallbackModelMiddleware
+from .pacing import provider_backstop_calls
 from .prompt_cache import PromptCacheMiddleware
 from .retry import model_retry_middleware, tool_retry_middleware
 from .standard_agent import StandardAgentMiddleware, context_editing_middleware
 from .structured_repair import StructuredOutputRepairMiddleware
+from .tool_failure import ToolFailureMiddleware
 from .turn_limit import TurnLimitMiddleware
-
-# 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 상한은 알리는 총량보다 마무리 몫만큼 넉넉하다.
-_FINALIZE_HEADROOM = 2
 
 
 @dataclass(frozen=True)
@@ -32,6 +31,8 @@ class AgentMiddlewareStack:
     serializes_tools: bool = False
     # 상한에 닿았을 때 그때까지의 답을 남기고 끝낼지, 예외로 끊을지 정한다.
     ends_on_turn_limit: bool = False
+    # 재시도가 소진된 도구 실패를 모델에게 돌려줄 때 쓰는 계약 문구이며 없으면 그 층을 세우지 않는다.
+    tool_failure_text: str | None = None
 
     def build(self) -> list[AgentMiddleware[Any, Any, Any]]:
         """목록의 첫 항목이 가장 바깥이며 안쪽으로 갈수록 모델에 가깝다."""
@@ -44,6 +45,9 @@ class AgentMiddlewareStack:
         middleware.append(StandardAgentMiddleware(serialize_tools=self.serializes_tools))
         # 남은 몫을 알리는 꼬리가 붙은 뒤에 서야 경계를 그 꼬리 앞에 놓을 수 있다.
         middleware.append(PromptCacheMiddleware(ttl="1h"))
+        if self.tool_failure_text is not None:
+            # 재시도 바깥이어야 소진된 뒤에만 실패가 모델이 읽는 결과로 바뀐다.
+            middleware.append(ToolFailureMiddleware(self.tool_failure_text))
         middleware.append(tool_retry_middleware(self.transient_errors))
         # 재시도가 더 안쪽이어야 같은 모델로 소진된 뒤에만 대체 모델로 넘어간다.
         if self.fallback_chat is not None:
@@ -52,7 +56,8 @@ class AgentMiddlewareStack:
         return middleware
 
     def _turn_limit(self) -> ModelCallLimitMiddleware[Any, Any]:
-        run_limit = self.max_turns + _FINALIZE_HEADROOM
+        # 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 상한은 알리는 총량보다 넉넉하다.
+        run_limit = self.max_turns + provider_backstop_calls()
         if self.ends_on_turn_limit:
             # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
             return TurnLimitMiddleware(run_limit=run_limit, exit_behavior="end")

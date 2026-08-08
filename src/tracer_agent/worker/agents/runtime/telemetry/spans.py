@@ -10,6 +10,7 @@ from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
+from ..errors import redact_exception
 from .attributes import (
     GEN_AI_OPERATION,
     build_invoke_agent_attributes,
@@ -73,9 +74,7 @@ async def tool_span(
         except BaseException as err:
             error_type = type(err).__name__
             span.set_attribute("error.type", error_type)
-            from ..errors import _redact_exception
-
-            span.record_exception(_redact_exception(err))
+            span.record_exception(redact_exception(err))
             raise
         finally:
             duration_attrs = {**metric_attrs}

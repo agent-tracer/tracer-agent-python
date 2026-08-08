@@ -45,33 +45,6 @@ def slim_event(item: JsonObject, optional_keys: tuple[str, ...] = OPTIONAL_EVENT
     return event
 
 
-async def read_event_window(
-    tracer: TracerApiPort, task_id: str, wanted: int
-) -> tuple[list[JsonObject], int] | None:
-    """이른 이벤트부터 원하는 만큼 여러 장에 걸쳐 읽고 전체 건수를 함께 낸다."""
-    collected: list[JsonObject] = []
-    total = 0
-    cursor: str | None = None
-    while len(collected) < wanted:
-        params: dict[str, JsonValue] = {
-            "limit": min(wanted - len(collected), TIMELINE_PAGE_LIMIT),
-            "order": "asc",
-            "cursor": cursor,
-        }
-        payload = await tracer.get(timeline_path(task_id), params)
-        if payload is None:
-            return None
-        page = as_object(payload)
-        items = as_objects(page.get("items"))
-        total = as_int(page.get("total"), total + len(items))
-        collected.extend(items)
-        next_cursor = opt_text(page.get("nextCursor"))
-        if not items or next_cursor is None:
-            break
-        cursor = next_cursor
-    return collected[:wanted], total
-
-
 def event_page(payload: JsonObject, view: EventView = slim_event) -> JsonObject:
     """타임라인 한 장을 도구가 내주는 페이지 모양으로 옮긴다."""
     items = as_objects(payload.get("items"))
@@ -87,10 +60,11 @@ def event_page(payload: JsonObject, view: EventView = slim_event) -> JsonObject:
 
 
 class ScopedEventReader:
-    """한 사용자가 소유한 태스크의 이벤트만 페이지 단위로 읽는다."""
+    """한 사용자가 소유한 태스크의 이벤트만 그 축이 정한 표현으로 읽는다."""
 
-    def __init__(self, tracer: TracerApiPort) -> None:
+    def __init__(self, tracer: TracerApiPort, view: EventView = slim_event) -> None:
         self._tracer = tracer
+        self._view = view
 
     async def task_events(
         self, task_id: str, limit: int, cursor: str | None, order: Literal["asc", "desc"]
@@ -101,4 +75,28 @@ class ScopedEventReader:
         )
         if payload is None:
             return None
-        return event_page(as_object(payload))
+        return event_page(as_object(payload), self._view)
+
+    async def event_window(self, task_id: str, wanted: int) -> tuple[list[JsonObject], int] | None:
+        """이른 이벤트부터 원하는 만큼 여러 장에 걸쳐 읽고 전체 건수를 함께 낸다."""
+        collected: list[JsonObject] = []
+        total = 0
+        cursor: str | None = None
+        while len(collected) < wanted:
+            params: dict[str, JsonValue] = {
+                "limit": min(wanted - len(collected), TIMELINE_PAGE_LIMIT),
+                "order": "asc",
+                "cursor": cursor,
+            }
+            payload = await self._tracer.get(timeline_path(task_id), params)
+            if payload is None:
+                return None
+            page = as_object(payload)
+            items = as_objects(page.get("items"))
+            total = as_int(page.get("total"), total + len(items))
+            collected.extend(items)
+            next_cursor = opt_text(page.get("nextCursor"))
+            if not items or next_cursor is None:
+                break
+            cursor = next_cursor
+        return collected[:wanted], total

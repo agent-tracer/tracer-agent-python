@@ -12,9 +12,12 @@ from pydantic import BaseModel
 from tracer_agent.shared.agents.recipe_scan.models import RecipeDraft
 from tracer_agent.shared.agents.task_cleanup.models import CleanupDraft
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionDraft
+from tracer_agent.worker.agents.recipe_scan.failures import TOOL_FAILED as RECIPE_TOOL_FAILED
 from tracer_agent.worker.agents.recipe_scan.tools import RecipeToolContext
 from tracer_agent.worker.agents.runtime.llm.structured_agent import build_structured_agent
+from tracer_agent.worker.agents.task_cleanup.failures import TOOL_FAILED as CLEANUP_TOOL_FAILED
 from tracer_agent.worker.agents.task_cleanup.tools import CleanupToolContext
+from tracer_agent.worker.agents.title_suggestion.failures import TOOL_FAILED as TITLE_TOOL_FAILED
 from tracer_agent.worker.agents.title_suggestion.tools import TitleToolContext
 
 
@@ -36,6 +39,7 @@ def mk_recipe_agent(
         context_schema=RecipeToolContext,
         name="recipe-scan-investigator",
         max_turns=max_turns,
+        tool_failure_text=RECIPE_TOOL_FAILED,
         fallback_chat=fallback_chat,
     )
 
@@ -56,6 +60,7 @@ def mk_cleanup_agent(
         context_schema=CleanupToolContext,
         name="task-cleanup-investigator",
         max_turns=max_turns,
+        tool_failure_text=CLEANUP_TOOL_FAILED,
         serializes_tools=True,
     )
 
@@ -76,4 +81,5 @@ def mk_title_agent(
         context_schema=TitleToolContext,
         name="title-suggestion-investigator",
         max_turns=max_turns,
+        tool_failure_text=TITLE_TOOL_FAILED,
     )

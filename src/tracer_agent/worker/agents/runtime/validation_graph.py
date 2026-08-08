@@ -38,6 +38,12 @@ def new_graph(state_schema: type[Any]) -> StateGraph[Any, Any, Any, Any]:
     return StateGraph(state_schema, context_schema=ValidationGraphContext)
 
 
+def declared_node_names(graph: StateGraph[Any, Any, Any, Any]) -> frozenset[str]:
+    """위상이 직접 세운 노드의 이름만 낸다."""
+    # 오류 처리기를 붙인 노드마다 LangGraph 가 자기 몫의 노드를 더하므로 그 자리는 세지 않는다.
+    return frozenset(name for name in graph.nodes if not name.startswith("__"))
+
+
 def observed(
     graph: StateGraph[Any, Any, Any, Any],
     node_name: str,

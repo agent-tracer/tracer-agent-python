@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
+from weakref import WeakKeyDictionary
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -28,7 +29,8 @@ class DurableGraph:
     def __init__(self, builder: StateGraph[Any, Any, Any, Any]) -> None:
         self._builder = builder
         self._volatile: CompiledGraph | None = None
-        self._durable: dict[int, CompiledGraph] = {}
+        # 세이버 자체를 약한 열쇠로 삼아 끝난 실행의 판이 남지도, 재사용된 id가 남의 판을 내주지도 않는다.
+        self._durable: WeakKeyDictionary[BaseCheckpointSaver[Any], CompiledGraph] = WeakKeyDictionary()
 
     def compiled(self, saver: BaseCheckpointSaver[Any] | None) -> CompiledGraph:
         """이 실행이 쓸 그래프를 낸다."""
@@ -36,11 +38,10 @@ class DurableGraph:
             if self._volatile is None:
                 self._volatile = self._builder.compile()
             return self._volatile
-        key = id(saver)
-        compiled = self._durable.get(key)
+        compiled = self._durable.get(saver)
         if compiled is None:
             compiled = self._builder.compile(checkpointer=saver)
-            self._durable[key] = compiled
+            self._durable[saver] = compiled
         return compiled
 
 

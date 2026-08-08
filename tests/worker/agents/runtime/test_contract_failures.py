@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tracer_agent.shared.agents.chat.tools.surface import chat_tool_failure_text
+from tracer_agent.shared.agents.shared.contract_root import CONTRACT_ROOT
 from tracer_agent.worker.agents.chat.tools.registry import TOOL_FAILED
 from tracer_agent.worker.agents.recipe_scan.failures import WORKER_FAILED as RECIPE_WORKER_FAILED
 from tracer_agent.worker.agents.shared.contract_failures import (
@@ -15,10 +16,7 @@ from tracer_agent.worker.agents.shared.contract_failures import (
     WORKER_FAILED_KEY,
     failure_text,
 )
-from tracer_agent.worker.agents.shared.contract_prompt_source import (
-    CONTRACT_ROOT,
-    ContractPromptUnavailable,
-)
+from tracer_agent.worker.agents.shared.contract_prompt_source import ContractPromptUnavailable
 from tracer_agent.worker.agents.task_cleanup.failures import WORKER_FAILED as CLEANUP_WORKER_FAILED
 
 

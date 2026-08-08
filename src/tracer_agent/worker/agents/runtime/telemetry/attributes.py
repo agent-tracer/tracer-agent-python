@@ -7,24 +7,21 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, AXIS_ATTRIBUTE_KEY
+from tracer_agent.shared.agents.shared.axis import agent_axis, axis_attribute_key
+from tracer_agent.shared.agents.shared.job_kinds import JOB_KIND_BY_AGENT_NAME
 from tracer_agent.shared.agents.shared.models import UsageDTO
 
 JOB_ID_ATTRIBUTE = "agent_tracer.job.id"
 TOOL_PARAMETERS_FINGERPRINT_ATTRIBUTE = "agent_tracer.tool.parameters.fingerprint"
 JOB_KIND_ATTRIBUTE = "agent_tracer.job.kind"
-BACKEND_ATTRIBUTE = AXIS_ATTRIBUTE_KEY
+BACKEND_ATTRIBUTE = axis_attribute_key()
 INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.input_tokens"
 OUTPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.output_tokens"
 CACHE_READ_INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.cache_read.input_tokens"
 CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE = "gen_ai.usage.cache_creation.input_tokens"
 BILLABLE_BASE_INPUT_TOKENS_ATTRIBUTE = "agent_tracer.usage.billable_base_input_tokens"
 
-AGENT_JOB_KIND = {
-    "recipe-scan": "recipe.scan",
-    "title-suggestion": "title.suggestion",
-    "task-cleanup": "task.cleanup",
-}
+AGENT_JOB_KIND = JOB_KIND_BY_AGENT_NAME
 GEN_AI_OPERATION = {
     "invoke_agent": "invoke_agent",
     "chat": "chat",
@@ -44,7 +41,7 @@ def build_invoke_agent_attributes(
         "gen_ai.agent.name": agent_name,
         "gen_ai.request.model": model,
         JOB_KIND_ATTRIBUTE: AGENT_JOB_KIND.get(agent_name),
-        BACKEND_ATTRIBUTE: AGENT_BACKEND,
+        BACKEND_ATTRIBUTE: agent_axis(),
     }
     return {key: value for key, value in attrs.items() if value is not None}
 
@@ -70,14 +67,15 @@ def apply_usage_attributes(span: Any, usage: UsageDTO | None) -> None:
 
 def build_client_attributes(
     model: str,
+    response_model: str | None = None,
     error_subtype: str | None = None,
 ) -> dict[str, str | int]:
-    """모델 호출 메트릭의 저카디널리티 속성을 만든다."""
+    """모델 호출 메트릭의 저카디널리티 속성을 만들며 답한 모델을 모르면 요청한 모델로 적는다."""
     attrs: dict[str, str | int | None] = {
         "gen_ai.operation.name": GEN_AI_OPERATION["chat"],
         "gen_ai.provider.name": GEN_AI_PROVIDER,
         "gen_ai.request.model": model,
-        "gen_ai.response.model": model,
+        "gen_ai.response.model": response_model or model,
         "error.type": error_subtype,
     }
     return {key: value for key, value in attrs.items() if value is not None}

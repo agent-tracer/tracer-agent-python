@@ -109,11 +109,6 @@ def step_content_text(content: object) -> str:
     return "".join(texts)
 
 
-def step_carries_content(step: AgentStepDTO) -> bool:
-    """본문도 도구 호출도 없는 단계는 궤적에 자리를 차지하지 않는다."""
-    return bool(step.content.strip()) or bool(step.toolCalls)
-
-
 def cap_step_content(value: str) -> tuple[str, bool]:
     """실행 단계 콘텐츠를 UTF-8 바이트 상한에 맞춘다."""
     encoded = value.encode("utf-8")

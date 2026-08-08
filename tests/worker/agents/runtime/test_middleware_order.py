@@ -8,6 +8,7 @@ import httpx
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
+from tests.support.contract import shared_contract
 from tracer_agent.worker.agents.chat.langchain_agent import chat_stack
 from tracer_agent.worker.agents.runtime.llm.middleware_stack import AgentMiddlewareStack
 
@@ -23,6 +24,7 @@ def _job_stack(*, fallback: bool = False, serializes_tools: bool = False) -> Age
         fallback_chat=_FALLBACK if fallback else None,
         repairs_structured_output=True,
         serializes_tools=serializes_tools,
+        tool_failure_text="Tool {tool} failed: {reason}.",
     )
 
 
@@ -65,9 +67,10 @@ class Test미들웨어순서:
             assert "FallbackModelMiddleware" not in kinds, name
 
     def test_네_에이전트가_같은_층을_같은_순서로_세운다(self) -> None:
-        # 구조화 복구만 산출 형태에 따라 갈리고 나머지 층과 그 순서는 넷이 함께 쓴다.
+        # 구조화 복구와 도구 실패 되돌림만 산출 형태에 따라 갈리고 나머지 층과 순서는 넷이 함께 쓴다.
+        optional = {"StructuredOutputRepairMiddleware", "ToolFailureMiddleware"}
         for name, kinds in _stacks():
-            assert [one for one in kinds if one != "StructuredOutputRepairMiddleware"] == [
+            assert [one for one in kinds if one not in optional] == [
                 "TurnLimitMiddleware" if name == "chat" else "ModelCallLimitMiddleware",
                 "ContextEditingMiddleware",
                 "StandardAgentMiddleware",
@@ -75,6 +78,15 @@ class Test미들웨어순서:
                 "ToolRetryMiddleware",
                 "ModelRetryMiddleware",
             ], name
+
+    def test_도구_실패를_되돌리는_층이_도구_재시도보다_바깥에_선다(self) -> None:
+        # 재시도가 소진되기 전에 문자열로 바뀌면 일시 오류가 다시 시도되지 않는다.
+        by_name = dict(_stacks())
+        assert "ToolFailureMiddleware" not in by_name["chat"]
+        for name in ("recipe-scan", "task-cleanup", "title-suggestion"):
+            kinds = by_name[name]
+            assert kinds.index("ToolFailureMiddleware") < kinds.index("ToolRetryMiddleware"), name
+            assert kinds.index("StandardAgentMiddleware") < kinds.index("ToolFailureMiddleware"), name
 
     def test_구조화_출력을_요구하는_잡만_산출을_다시_받는다(self) -> None:
         # 대화는 자유 텍스트를 내므로 스키마에 걸려 버려질 산출 자체가 없다.
@@ -86,14 +98,14 @@ class Test미들웨어순서:
                 name
             )
 
-    def test_상한은_알리는_총량보다_마무리_몫만큼_넉넉하다(self) -> None:
-        # 도구를 부른 턴과 산출을 내는 턴이 같은 수를 나눠 쓰므로 딱 맞추면 산출을 낼 자리가 없다.
+    def test_상한은_알리는_총량보다_계약이_적은_백스톱만큼_넉넉하다(self) -> None:
+        headroom = shared_contract("execution.budget.json")["pacing"]["landingReserve"]["providerBackstop"]
+
         for stack in (chat_stack(_TRANSIENT, max_turns=4), _job_stack()):
             limit = next(one for one in stack.build() if isinstance(one, ModelCallLimitMiddleware))
-            assert limit.run_limit == 6
+            assert limit.run_limit == 4 + headroom
 
     def test_대화만_상한에서_그때까지의_답을_남기고_끝낸다(self) -> None:
-        # error로 끊으면 그때까지의 답변과 도구 결과를 통째로 잃어 SDK 백엔드와 결과가 나뉜다.
         assert _kinds(chat_stack(_TRANSIENT, max_turns=4).build())[0] == "TurnLimitMiddleware"
         assert _kinds(_job_stack().build())[0] == "ModelCallLimitMiddleware"
 

@@ -33,3 +33,8 @@ def finalize_directive(*, structured_output: bool) -> str:
 def landing_reserve_calls() -> int:
     """도구를 닫은 뒤에도 마무리 호출 하나가 남으므로 그 몫을 미리 뗀다."""
     return int(_pacing()["landingReserve"]["calls"])
+
+
+def provider_backstop_calls() -> int:
+    """실행을 조이는 것은 종료이고 공급자에게 넘기는 자기 상한은 그 위에 두는 폭주 백스톱이다."""
+    return int(_pacing()["landingReserve"]["providerBackstop"])

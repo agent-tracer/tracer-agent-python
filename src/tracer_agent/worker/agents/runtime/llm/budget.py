@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from itertools import count
+from dataclasses import dataclass
 from typing import Protocol
 
 from langchain_core.messages import AIMessage
+
+from tracer_agent.shared.agents.shared.graph_state import SpendChannels, TurnCeilingState
 
 from ..errors import BudgetExceeded
 from ..pricing import ModelRates
 from .pacing import landing_reserve_calls
 from .trajectory import extract_token_usage, message_identity
-
-_lease_ids = count(1)
 
 
 @dataclass(frozen=True)
@@ -24,25 +23,6 @@ class AgentBudgetLease:
 
     max_turns: int
     max_cost_usd: float
-    # 실행 장부가 예약과 정산을 대조하는 열쇠이며 리스마다 하나뿐이다.
-    lease_id: int = field(default_factory=lambda: next(_lease_ids), compare=False)
-
-
-@dataclass(frozen=True)
-class AgentBudgetSpend:
-    """한 번의 호출이 실제로 쓴 턴과 비용이며 공급자가 보고하지 않으면 None이다."""
-
-    cost_usd: float | None
-    num_turns: int | None
-
-
-@dataclass(frozen=True)
-class _ReservedShare:
-    turns: int
-    usd: float
-
-
-_EMPTY_RESERVED_SHARE = _ReservedShare(turns=0, usd=0.0)
 
 
 def combine_leases(leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
@@ -51,6 +31,52 @@ def combine_leases(leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
         max_turns=sum(lease.max_turns for lease in leases),
         max_cost_usd=sum(lease.max_cost_usd for lease in leases),
     )
+
+
+def reserved_spend(*, cost_usd: float, turns_used: int) -> SpendChannels:
+    """예약 리스로 돈 호출의 정산이며 예약분은 뗄 때 이미 빠졌으므로 팬아웃 풀에서 다시 빼지 않는다."""
+    return {
+        "model_cost_usd": cost_usd,
+        "model_turns_used": turns_used,
+        "pool_cost_usd": 0.0,
+        "pool_turns_used": 0,
+        "floor_cost_usd": 0.0,
+        "floor_turns_used": 0,
+    }
+
+
+def pool_spend(*, cost_usd: float, turns_used: int) -> SpendChannels:
+    """팬아웃 몫으로 돈 호출의 정산이며 풀의 잔량이 그만큼 줄어든다."""
+    return {
+        "model_cost_usd": cost_usd,
+        "model_turns_used": turns_used,
+        "pool_cost_usd": cost_usd,
+        "pool_turns_used": turns_used,
+        "floor_cost_usd": 0.0,
+        "floor_turns_used": 0,
+    }
+
+
+def floor_lease(state: TurnCeilingState, reserved: AgentBudgetLease) -> AgentBudgetLease:
+    """실행당 한 번인 바닥 예약 가운데 아직 쓰지 않은 몫이다."""
+    return AgentBudgetLease(
+        max_turns=max(reserved.max_turns - state.get("floor_turns_used", 0), 0),
+        max_cost_usd=max(reserved.max_cost_usd - state.get("floor_cost_usd", 0.0), 0.0),
+    )
+
+
+def floor_then_pool_spend(floor: AgentBudgetLease, *, cost_usd: float, turns_used: int) -> SpendChannels:
+    """바닥 예약과 풀을 합쳐 돈 호출의 정산이며 예약분을 먼저 채우고 남는 만큼만 풀에서 뺀다."""
+    floor_turns = min(turns_used, floor.max_turns)
+    floor_usd = min(cost_usd, floor.max_cost_usd)
+    return {
+        "model_cost_usd": cost_usd,
+        "model_turns_used": turns_used,
+        "pool_cost_usd": cost_usd - floor_usd,
+        "pool_turns_used": turns_used - floor_turns,
+        "floor_cost_usd": floor_usd,
+        "floor_turns_used": floor_turns,
+    }
 
 
 def lease_shares(
@@ -93,6 +119,13 @@ def _clamp_turns_without_leak(requested: Sequence[int], available: int) -> list[
     for index in rank_descending[:remainder]:
         granted[index] += 1
     return granted
+
+
+def _ceiling(max_cost_usd: float, peak_call_cost_usd: float, landed: bool) -> float:
+    """종료는 도구만 닫으므로 마무리 호출 몫만큼 위까지 열되 그 밖으로는 넘기지 않는다."""
+    if not landed:
+        return max_cost_usd
+    return max_cost_usd + peak_call_cost_usd * landing_reserve_calls()
 
 
 class ModelCallBudget(Protocol):
@@ -141,8 +174,6 @@ class ExecutionBudget:
         self._peak = 0.0
         self._remaining_turns = None if max_turns is None else max(max_turns - turns_used, 0)
         self._remaining_budget_usd = max(max_cost_usd - spent_usd, 0.0)
-        self._reservations: dict[int, _ReservedShare] = {}
-        self._settled: set[int] = set()
 
     @property
     def spent(self) -> float:
@@ -166,10 +197,6 @@ class ExecutionBudget:
         """턴 원장이 아직 아무에게도 떼어 주지 않은 달러다."""
         return self._remaining_budget_usd
 
-    def has_remaining_capacity(self, required_turns: int = 1) -> bool:
-        """요청한 턴과 비용 잔량을 모두 처리할 수 있는지 알린다."""
-        return self._turn_ledger() >= required_turns and self._remaining_budget_usd > 0
-
     def reserve(self, turns: int, budget_share: float = 0.0) -> AgentBudgetLease:
         """뒤의 리스가 침범하지 못하도록 잔량에서 먼저 턴과 몫을 떼어 별도로 가진다."""
         if turns < 0:
@@ -181,88 +208,45 @@ class ExecutionBudget:
         self._remaining_turns = remaining_turns - granted_turns
         granted_usd = self._remaining_budget_usd * budget_share
         self._remaining_budget_usd -= granted_usd
-        lease = AgentBudgetLease(max_turns=granted_turns, max_cost_usd=granted_usd)
-        self._reservations[lease.lease_id] = _ReservedShare(turns=granted_turns, usd=granted_usd)
-        return lease
-
-    def lease(self, share: float) -> AgentBudgetLease:
-        """잔량의 share 몫을 떼어 그 호출의 상한으로 준다."""
-        if not (0.0 < share <= 1.0):
-            raise ValueError(f"share must be in (0, 1], got {share}")
-        return AgentBudgetLease(
-            max_turns=math.floor(self._turn_ledger() * share),
-            max_cost_usd=self._remaining_budget_usd * share,
-        )
-
-    def lease_many(self, requested_turns: Sequence[int], share: float) -> list[AgentBudgetLease]:
-        """잔량의 share 몫을 계약의 나머지 배분 규칙대로 요청 턴에 나눈다."""
-        if not (0.0 < share <= 1.0):
-            raise ValueError(f"share must be in (0, 1], got {share}")
-        if not requested_turns:
-            return []
-        available_turns = math.floor(self._turn_ledger() * share)
-        available_usd = self._remaining_budget_usd * share
-        return lease_shares(requested_turns, available_turns, available_usd)
-
-    def settle(self, lease: AgentBudgetLease, spend: AgentBudgetSpend) -> None:
-        """떼어 준 몫에 실제 지출을 대조해 잔량을 되돌리되 예약분을 두 번 빼지 않는다."""
-        key = lease.lease_id
-        if key in self._settled:
-            raise RuntimeError("budget lease is already settled")
-        self._settled.add(key)
-        reserved = self._reservations.get(key, _EMPTY_RESERVED_SHARE)
-
-        turns_used = spend.num_turns if spend.num_turns is not None else lease.max_turns
-        remaining_turns = self._turn_ledger()
-        self._remaining_turns = max(0, remaining_turns + reserved.turns - turns_used)
-
-        usd_used = spend.cost_usd if spend.cost_usd is not None else lease.max_cost_usd
-        self._remaining_budget_usd = max(0.0, self._remaining_budget_usd + reserved.usd - usd_used)
-
-    def combine(self, leases: Sequence[AgentBudgetLease]) -> AgentBudgetLease:
-        """예약한 바닥과 잔량의 몫을 하나로 묶되 예약분을 두 번 빼지 않는다."""
-        combined = combine_leases(leases)
-        reserved_turns = 0
-        reserved_usd = 0.0
-        for one in leases:
-            reserved = self._reservations.get(one.lease_id, _EMPTY_RESERVED_SHARE)
-            reserved_turns += reserved.turns
-            reserved_usd += reserved.usd
-        if reserved_turns > 0 or reserved_usd != 0:
-            self._reservations[combined.lease_id] = _ReservedShare(turns=reserved_turns, usd=reserved_usd)
-        return combined
+        return AgentBudgetLease(max_turns=granted_turns, max_cost_usd=granted_usd)
 
     def _turn_ledger(self) -> int:
         if self._remaining_turns is None:
             raise RuntimeError("execution budget has no turn ledger configured")
         return self._remaining_turns
 
-    def charge(
-        self,
-        agent_name: str,
-        model_name: str,
-        message: AIMessage,
-        *,
-        loop_spent: float,
-        loop_max_cost_usd: float,
-        loop_landed: bool,
-    ) -> float:
-        """실제 응답 모델 기준 비용을 원자적으로 실행 장부에 더한다."""
+    def price(self, agent_name: str, model_name: str, message: AIMessage) -> float:
+        """실제로 답한 모델의 단가로 이 호출의 비용을 셈하며 단가를 모르면 상한을 지킬 수 없어 끊는다."""
         usage = extract_token_usage(message)
         actual_model, _request_id = message_identity(message)
         priced_model = actual_model or model_name
         cost = self._rates.estimate_cost_usd(priced_model, usage.to_dto()) if usage else None
         if cost is None:
             raise BudgetExceeded(f"{agent_name} cannot enforce its internal budget for model {priced_model}")
-        # 종료한 뒤의 지출은 이미 끝난 실행의 마지막 호출이라 여기서 끊으면 산출물만 잃는다.
-        if not loop_landed:
-            if self._spent + cost > self._max:
-                raise BudgetExceeded(f"{agent_name} exceeded execution model budget ${self._max:.2f}")
-            if loop_spent + cost > loop_max_cost_usd:
-                raise BudgetExceeded(f"{agent_name} exceeded assigned model budget ${loop_max_cost_usd:.2f}")
+        return cost
+
+    def charge(
+        self,
+        agent_name: str,
+        cost: float,
+        *,
+        loop_spent: float,
+        loop_max_cost_usd: float,
+        loop_peak: float,
+        loop_landed: bool,
+    ) -> None:
+        """이미 답한 호출의 비용을 실행 장부에 더하고 상한을 넘겼으면 그 뒤의 호출을 끊는다."""
+        # 여유는 이 호출 전의 최고 호출로 잡아, 비싼 마무리 호출이 스스로 상한을 밀어 올리지 못하게 한다.
+        execution_ceiling = _ceiling(self._max, self._peak, loop_landed)
+        # 아직 아무 호출도 하지 않은 루프는 자기 최고 호출을 모르므로 실행이 본 최고 호출로 여유를 잡는다.
+        loop_ceiling = _ceiling(loop_max_cost_usd, max(loop_peak, self._peak), loop_landed)
+        # 공급자가 이미 답한 호출이라 상한에서 끊더라도 그 비용은 장부에 남는다.
         self._spent += cost
         self._peak = max(self._peak, cost)
-        return cost
+        if self._spent > execution_ceiling:
+            raise BudgetExceeded(f"{agent_name} exceeded execution model budget ${self._max:.2f}")
+        if loop_spent > loop_ceiling:
+            raise BudgetExceeded(f"{agent_name} exceeded assigned model budget ${loop_max_cost_usd:.2f}")
 
     def new_loop(
         self, agent_name: str, model_name: str, *, max_cost_usd: float | None = None
@@ -311,13 +295,15 @@ class SharedToolLoopBudget:
         self._landed = True
 
     def charge(self, message: AIMessage) -> None:
-        cost = self._execution.charge(
-            self._agent,
-            self._model,
-            message,
-            loop_spent=self._spent,
-            loop_max_cost_usd=self._max,
-            loop_landed=self._landed,
-        )
+        cost = self._execution.price(self._agent, self._model, message)
+        peak_before = self._peak
         self._spent += cost
         self._peak = max(self._peak, cost)
+        self._execution.charge(
+            self._agent,
+            cost,
+            loop_spent=self._spent,
+            loop_max_cost_usd=self._max,
+            loop_peak=peak_before,
+            loop_landed=self._landed,
+        )

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 from langchain.tools import tool
+from langchain_core.messages import ToolMessage
 
 from tests.support.agents import mk_recipe_agent
 from tests.support.fakes import FakeToolLoopChat
@@ -38,6 +38,14 @@ def _context() -> RecipeToolContext:
     return mk_recipe_context()
 
 
+def _tool_messages(output: Any) -> list[ToolMessage]:
+    return [
+        message
+        for message in output["messages"]
+        if isinstance(message, ToolMessage) and message.name == "get_task_events"
+    ]
+
+
 def test_재시도_대상은_연결_계열_일시_오류만이다() -> None:
     # 목록을 통째로 고정해 원장과 색인의 오류가 다시 끼어들면 검사가 깨지게 한다.
     assert set(RECIPE_TRANSIENT) == {TracerApiUnavailable, ConnectionError, TimeoutError}
@@ -68,33 +76,48 @@ async def test_일시_오류는_도구_계층에서_재시도해_실행이_이�
     assert isinstance(output.get("structured_response"), RecipeDraft)
 
 
-async def test_소진해도_실패하면_오류가_그대로_올라온다() -> None:
+async def test_소진해도_실패하면_모델이_읽는_결과로_돌아온다() -> None:
     flaky, calls = _flaky_tool(9, TracerApiUnavailable("tracer api down"))
-    chat = FakeToolLoopChat([[{"name": "get_task_events", "args": {"taskId": "t1"}}]])
+    chat = FakeToolLoopChat(
+        [
+            [{"name": "get_task_events", "args": {"taskId": "t1"}}],
+            {"recipes": []},
+        ]
+    )
     agent = mk_recipe_agent(chat, [flaky], RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
-    with pytest.raises(TracerApiUnavailable):
-        await agent.ainvoke(
-            {"messages": [{"role": "user", "content": "go"}]},
-            context=_context(),
-            config={"recursion_limit": 100},
-        )
+    output = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "go"}]},
+        context=_context(),
+        config={"recursion_limit": 100},
+    )
 
-    # 최초 1회 + 재시도 2회로 세 번 시도한 뒤 실패 의미를 보존해 올린다.
+    # 최초 1회 + 재시도 2회로 세 번 시도한 뒤 실패를 모델이 읽는 도구 결과로 바꾼다.
     assert calls[0] == 3
+    assert isinstance(output.get("structured_response"), RecipeDraft)
+    failed = _tool_messages(output)
+    assert [message.status for message in failed] == ["error"]
+    assert "tracer api down" in str(failed[0].content)
 
 
-async def test_도메인_오류는_재시도하지_않는다() -> None:
+async def test_도메인_오류도_재시도_없이_모델이_읽는_결과로_돌아온다() -> None:
     flaky, calls = _flaky_tool(9, ValueError("bad citation"))
-    chat = FakeToolLoopChat([[{"name": "get_task_events", "args": {"taskId": "t1"}}]])
+    chat = FakeToolLoopChat(
+        [
+            [{"name": "get_task_events", "args": {"taskId": "t1"}}],
+            {"recipes": []},
+        ]
+    )
     agent = mk_recipe_agent(chat, [flaky], RECIPE_TRANSIENT, max_turns=5, output=RecipeDraft)
 
-    with pytest.raises(ValueError, match="bad citation"):
-        await agent.ainvoke(
-            {"messages": [{"role": "user", "content": "go"}]},
-            context=_context(),
-            config={"recursion_limit": 100},
-        )
+    output = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "go"}]},
+        context=_context(),
+        config={"recursion_limit": 100},
+    )
 
-    # 검증·도메인 오류는 한 번 시도하고 곧장 올린다.
+    # 검증·도메인 오류는 한 번 시도하고 곧장 모델에게 사유를 전달한다.
     assert calls[0] == 1
+    failed = _tool_messages(output)
+    assert [message.status for message in failed] == ["error"]
+    assert "bad citation" in str(failed[0].content)

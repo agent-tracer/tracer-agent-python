@@ -45,12 +45,14 @@ class StructuredModelCaller[ContextT: StandardAgentContext]:
         *,
         name: str,
         context_schema: type[ContextT],
+        tool_failure_text: str,
         serializes_tools: bool = False,
     ) -> None:
         self._chats = chats
         self._registry = registry
         self._name = name
         self._context_schema = context_schema
+        self._tool_failure_text = tool_failure_text
         self._serializes_tools = serializes_tools
         self._agents = CompiledAgentCache()
 
@@ -73,6 +75,7 @@ class StructuredModelCaller[ContextT: StandardAgentContext]:
                 context_schema=self._context_schema,
                 name=self._name,
                 max_turns=call.max_turns,
+                tool_failure_text=self._tool_failure_text,
                 fallback_chat=self._chats.fallback,
                 serializes_tools=self._serializes_tools,
             ),

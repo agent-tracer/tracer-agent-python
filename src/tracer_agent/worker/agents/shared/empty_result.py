@@ -6,9 +6,10 @@ import json
 from functools import lru_cache
 from typing import Any, get_args
 
+from tracer_agent.shared.agents.shared.contract_root import CONTRACT_ROOT
 from tracer_agent.shared.agents.shared.models import EmptyResultReason
 
-from .contract_prompt_source import CONTRACT_ROOT, ContractPromptUnavailable
+from .contract_prompt_source import ContractPromptUnavailable
 
 _EXECUTION_BUDGET_PATH = CONTRACT_ROOT / "agent" / "shared" / "execution.budget.json"
 # 계획·조사·검증·전달 가운데 한 단계가 실패해 빈 결과로 끝난 실행이 남기는 사유다.

@@ -49,14 +49,13 @@ class Test노드레지스트리:
 
 
 class Test실행그래프의노드:
-    def test_네_에이전트가_자기_위상의_노드를_빠짐없이_등록한다(self) -> None:
-        from tracer_agent.worker.agents.chat.graph import CHAT_NODE_NAMES
+    # 대화는 분기도 팬아웃도 없어 그래프를 세우지 않으므로 위상을 갖는 세 잡만 여기서 대조한다.
+    def test_잡_에이전트가_자기_위상의_노드를_빠짐없이_등록한다(self) -> None:
         from tracer_agent.worker.agents.recipe_scan.graph import RECIPE_SCAN_NODE_NAMES
         from tracer_agent.worker.agents.task_cleanup.graph import TASK_CLEANUP_NODE_NAMES
         from tracer_agent.worker.agents.title_suggestion.graph import TITLE_SUGGESTION_NODE_NAMES
 
         for names in (
-            CHAT_NODE_NAMES,
             RECIPE_SCAN_NODE_NAMES,
             TASK_CLEANUP_NODE_NAMES,
             TITLE_SUGGESTION_NODE_NAMES,

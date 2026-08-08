@@ -8,10 +8,9 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from .prompt_source_port import AgentPrompt, PromptSlot, PromptTemplate
+from tracer_agent.shared.agents.shared.contract_root import CONTRACT_ROOT
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-CONTRACT_ROOT = Path(__file__).resolve().parents[5] / "contract"
+from .prompt_source_port import RUNTIME_PLACEHOLDERS, AgentPrompt, PromptSlot, PromptTemplate
 
 _LANGUAGE_DIRECTIVE = "languageDirective"
 # 조율자가 부를 도구는 값이 아니라 이름이라 상한이 아니라 오케스트레이션 절이 갖는다.
@@ -82,10 +81,12 @@ def _joined(lines: list[str]) -> str:
 
 # 호출마다 달라지는 자리는 조립 시점에 값이 없으므로 그대로 두고 slot 이 채운다.
 def _render(content: str, values: Mapping[str, str]) -> str:
-    try:
-        return Template(content).safe_substitute(values)
-    except KeyError as unknown:
-        raise ContractPromptUnavailable(f"prompt placeholder has no value: {unknown.args[0]}") from unknown
+    rendered = Template(content).safe_substitute(values)
+    # 채우지 못한 자리를 그대로 내보내면 모델이 리터럴 자리표시자를 지시로 읽는다.
+    unresolved = sorted(set(Template(rendered).get_identifiers()) - RUNTIME_PLACEHOLDERS)
+    if unresolved:
+        raise ContractPromptUnavailable(f"prompt placeholders have no value: {', '.join(unresolved)}")
+    return rendered
 
 
 def _directives(fragments: Mapping[str, Any], values: Mapping[str, str]) -> Mapping[str, str]:

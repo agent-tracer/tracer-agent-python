@@ -114,7 +114,8 @@ def test_계약을_읽지_못하면_프롬프트를_세우지_않는다(tmp_path
         ContractPromptSource(tmp_path).resolve("chat")
 
 
-def test_상한이_비어_있으면_그_자리가_채워지지_않은_채_남는다(tmp_path: Path) -> None:
+def test_상한이_비어_있으면_프롬프트를_세우지_않는다(tmp_path: Path) -> None:
+    # 채우지 못한 자리를 그대로 내보내면 모델이 리터럴 ${...} 를 지시로 읽고 아무도 그것을 모른다.
     (tmp_path / "agent" / "recipe-scan").mkdir(parents=True)
     (tmp_path / "agent" / "recipe-scan" / "prompt.json").write_text(
         json.dumps(agent_prompt("recipe-scan")), encoding="utf-8"
@@ -123,10 +124,15 @@ def test_상한이_비어_있으면_그_자리가_채워지지_않은_채_남는
         json.dumps({"version": "v0.0.1"}), encoding="utf-8"
     )
 
-    resolved = ContractPromptSource(tmp_path).resolve("recipe-scan")
-    template = resolved.template("recipe-scan.investigator.system")
+    with pytest.raises(ContractPromptUnavailable, match="recipeCandidateLimit"):
+        ContractPromptSource(tmp_path).resolve("recipe-scan")
 
-    # 계약이 값을 주지 않은 자리는 조립을 멈추지 않고 남으며, 채우려는 자리에서 걸린다.
-    assert "${recipeCandidateLimit}" in template.slot("candidateBudget")
-    with pytest.raises(PromptSlotMissing):
-        template.slot("candidateBudget", unrelated="값")
+
+@pytest.mark.parametrize("agent", AGENTS)
+def test_렌더를_마친_조각에_계약이_모르는_자리가_남지_않는다(agent: str) -> None:
+    resolved = ContractPromptSource().resolve(agent)
+
+    rendered = [slot.content for template in resolved.templates.values() for slot in template.slots.values()]
+    rendered.extend(resolved.language_directives.values())
+    for content in rendered:
+        assert set(_PLACEHOLDER.findall(content)) <= RUNTIME_PLACEHOLDERS

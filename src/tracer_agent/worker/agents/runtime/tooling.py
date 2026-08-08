@@ -51,7 +51,8 @@ class ToolRegistry[ContextT: ToolContext]:
         """모델이 고른 도구를 인자 검증과 스팬 뒤 실행하고 이 호출의 장부에 근거를 남긴다."""
         tool = self._by_name[name]
         args = tool.args_model.model_validate(raw_args)
-        parameters = args.model_dump(exclude_none=True)
+        # 스키마의 기본값까지 실으면 모델이 무엇을 실제로 골랐는지 관측에서 구분할 수 없다.
+        parameters = args.model_dump(exclude_unset=True)
         async with tool_span(name, agent_name=context.tool_owner, parameters=parameters):
             content = await tool.execute(args, context)
         tool.record(args, content, context)

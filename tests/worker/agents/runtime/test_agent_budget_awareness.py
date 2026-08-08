@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.chat.models import ChatRequest
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.agents.runtime.llm.pacing import finalize_directive
@@ -157,12 +157,14 @@ async def _run(chat: GreedyChat, ledger: FakeTracerApi) -> Any:
     req = _request()
     chats = ChatPair(chat, None)  # type: ignore[arg-type]
     return await execute(
-        "task-cleanup",
-        req.model,
-        req.deadlineMs,
+        ExecutionRequest(
+            label="task-cleanup",
+            model=req.model,
+            deadline_ms=req.deadlineMs,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+        ),
         lambda usage: cleanup_mod.TASK_CLEANUP_JOB.run(req, ledger, usage, TASK_CLEANUP_PROMPT, None, chats),  # type: ignore[arg-type],
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
 
 
@@ -184,6 +186,9 @@ async def test_턴_사용량을_매_턴_알려준다() -> None:
     # 실제 종료 게이트는 달러지만 모델의 self-pacing 신호는 턴 단위로 매 턴 갱신된다.
     assert "used 0 of" in chat.notices[0] and "tool-calling turns" in chat.notices[0]
     assert "used 1 of" in chat.notices[1]
+    # 이 실행이 스스로 센 턴이며 SDK 비공개 상태 키가 사라져도 0에 굳지 않는다.
+    used = [int(notice.split("used ")[1].split(" of")[0]) for notice in chat.notices if "used " in notice]
+    assert used == list(range(len(used)))
 
 
 async def test_비용_상한에_닿기_전에_결론을_받아낸다() -> None:

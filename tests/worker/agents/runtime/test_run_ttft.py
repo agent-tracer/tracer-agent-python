@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tests.support.prompts import CONTRACT_VERSION
 from tracer_agent.shared.agents.shared.json_view import JsonObject
-from tracer_agent.worker.agents.runtime.execution.runner import execute
+from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 
 
@@ -15,14 +15,16 @@ async def _observation(execution_id: str, streams: bool) -> object:
         return {}
 
     response = await execute(
-        "chat",
-        "claude-haiku-4-5",
-        5000,
+        ExecutionRequest(
+            label="chat",
+            model="claude-haiku-4-5",
+            deadline_ms=5000,
+            prompt_version=CONTRACT_VERSION,
+            tool_contract_version=CONTRACT_VERSION,
+            execution_id=execution_id,
+            attempt_id="1",
+        ),
         body,
-        execution_id=execution_id,
-        attempt_id="1",
-        prompt_version=CONTRACT_VERSION,
-        tool_contract_version=CONTRACT_VERSION,
     )
     return response.observation
 

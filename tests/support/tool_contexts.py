@@ -11,9 +11,8 @@ from tracer_agent.worker.agents.recipe_scan.tools import RecipeToolContext
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import SharedToolLoopBudget, single_loop_budget
-from tracer_agent.worker.agents.task_cleanup.reader import CleanupLedgerReader
+from tracer_agent.worker.agents.runtime.scoped_event_reader import ScopedEventReader
 from tracer_agent.worker.agents.task_cleanup.tools import CleanupToolContext
-from tracer_agent.worker.agents.title_suggestion.reader import TitleLedgerReader
 from tracer_agent.worker.agents.title_suggestion.tools import TitleToolContext
 
 _MODEL = "claude-sonnet-4-6"
@@ -61,7 +60,7 @@ def mk_cleanup_context(
         budget=_budget(agent_name),
         max_model_turns=max_model_turns,
         tool_owner=agent_name,
-        reader=CleanupLedgerReader(api),  # type: ignore[arg-type]
+        reader=ScopedEventReader(api),  # type: ignore[arg-type]
         batch=batch or CleanupBatch(candidates=[]),
         exposed_candidates={} if exposed_candidates is None else exposed_candidates,
         event_ids_by_task={} if event_ids_by_task is None else event_ids_by_task,
@@ -82,5 +81,5 @@ def mk_title_context(
         budget=_budget(agent_name),
         max_model_turns=max_model_turns,
         tool_owner=agent_name,
-        reader=TitleLedgerReader(api),  # type: ignore[arg-type]
+        reader=ScopedEventReader(api),  # type: ignore[arg-type]
     )

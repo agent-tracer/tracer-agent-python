@@ -53,6 +53,8 @@ class StandardAgentContext:
     budget: ModelCallBudget
     # 모델이 자기 페이싱을 가늠하는 표시용 턴 총량이며 이 값 자체는 종료를 결정하지 않는다.
     max_model_turns: int
+    # 이 호출이 그은 노드 턴이며 SDK의 비공개 상태 키 대신 이 자리가 페이싱 문구의 근거를 갖는다.
+    turns_seen: int = 0
     # 컴파일된 agent를 여러 호출이 함께 써도 직렬화가 이 호출 안에서만 걸리도록 락을 컨텍스트가 갖는다.
     tool_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -80,6 +82,8 @@ class StandardAgentMiddleware(AgentMiddleware[Any, StandardAgentContext, Any]):
         for message in response.result:
             if isinstance(message, AIMessage):
                 self._record(context, message)
+        # 다시 받은 호출은 같은 노드 턴에 접히므로 페이싱이 세는 턴은 이 자리에서만 오른다.
+        context.turns_seen += 1
         return response
 
     @staticmethod
@@ -124,9 +128,7 @@ def _with_budget(request: ModelRequest[StandardAgentContext]) -> ModelRequest[St
     context = request.runtime.context
     messages = request.messages
     if not context.budget.landing:
-        spent = dict(request.state).get("run_model_call_count", 0)
-        used = spent if isinstance(spent, int) else 0
-        notice = progress_notice(used, context.max_model_turns)
+        notice = progress_notice(context.turns_seen, context.max_model_turns)
         return request.override(messages=[*messages, _tail(notice)])
     context.budget.land()
     context.trace.mark_landed()

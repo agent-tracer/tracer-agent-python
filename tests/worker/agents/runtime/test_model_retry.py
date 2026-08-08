@@ -14,7 +14,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.llm.fallback import FallbackModelMiddleware
-from tracer_agent.worker.agents.runtime.llm.retry import model_retry_middleware
+from tracer_agent.worker.agents.runtime.llm.retry import model_retry_middleware, tool_retry_middleware
 
 _PRIMARY = GenericFakeChatModel(messages=iter([]))
 _FALLBACK = GenericFakeChatModel(messages=iter([]))
@@ -80,3 +80,9 @@ async def test_예산_초과와_출력_절단은_재시도되지_않고_대체_�
         await _composed()(_request(), raw_handler)
 
     assert calls == [_PRIMARY]
+
+
+def test_재시도_대기는_지터를_섞는다() -> None:
+    # 팬아웃이 함께 529를 받으면 고정 백오프는 모두를 같은 시각에 다시 부딪히게 한다.
+    assert model_retry_middleware().jitter is True
+    assert tool_retry_middleware(()).jitter is True

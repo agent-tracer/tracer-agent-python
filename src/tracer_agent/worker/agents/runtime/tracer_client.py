@@ -8,8 +8,8 @@ from typing import Any, Protocol
 import httpx
 
 from tracer_agent.shared.agents.shared.json_view import JsonValue
+from tracer_agent.shared.agents.shared.wire import MalformedEnvelope, unwrap_envelope
 
-# 창구가 요청자를 식별하는 헤더다.
 USER_HEADER = "x-monitor-user"
 _CLIENT_ERROR = 400
 _NOT_FOUND = 404
@@ -28,7 +28,7 @@ class TracerApiRejected(Exception):
         self.status_code = status_code
 
 
-# 도구가 재시도로 풀 수 있는 오류만 이 목록에 든다.
+# 창구에 닿지 못한 것만 일시적이며 창구가 거절한 요청은 재시도하지 않는다.
 TRANSIENT_TRACER_ERRORS: tuple[type[Exception], ...] = (
     TracerApiUnavailable,
     ConnectionError,
@@ -92,11 +92,18 @@ def _query(params: Mapping[str, Any] | None) -> dict[str, str]:
 
 
 def _unwrap(response: httpx.Response) -> JsonValue:
+    """계약이 정한 성공 봉투에서 실은 것을 꺼내며 봉투가 아니면 이 창구의 어휘로 옮긴다."""
     try:
         payload = response.json()
     except ValueError as malformed:
         raise TracerApiUnavailable(f"tracer api answered with a non-JSON body: {malformed}") from malformed
-    if not isinstance(payload, dict) or payload.get("ok") is not True or "data" not in payload:
-        raise TracerApiUnavailable("tracer api answered outside the success envelope")
-    data: JsonValue = payload["data"]
+    try:
+        data = unwrap_envelope(payload)
+    except MalformedEnvelope as malformed:
+        raise TracerApiUnavailable(
+            f"tracer api answered outside the success envelope: {malformed}"
+        ) from malformed
+    # 이 창구의 없음은 404가 갖는 뜻이므로 실은 칸이 아예 없는 답을 없음으로 읽지 않는다.
+    if isinstance(payload, dict) and "data" not in payload:
+        raise TracerApiUnavailable("tracer api answered a success envelope that carries no data")
     return data

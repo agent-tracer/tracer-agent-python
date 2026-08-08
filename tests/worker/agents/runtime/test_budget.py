@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-import gc
+from typing import Any
 
 import pytest
 
 from tests.support.contract import agent_cases, shared_contract
 from tests.support.fakes import mk_ai, mk_rates
+from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded
 from tracer_agent.worker.agents.runtime.llm.budget import (
     AgentBudgetLease,
-    AgentBudgetSpend,
     ExecutionBudget,
+    lease_shares,
+    pool_spend,
+    reserved_spend,
     single_loop_budget,
 )
 
@@ -61,9 +64,10 @@ def test_실행의_서로_다른_루프가_하나의_달러_상한을_쓴다() -
     with pytest.raises(BudgetExceeded):
         second.charge(message)
 
+    # 상한에서 끊긴 호출도 공급자가 이미 답했으므로 그 비용이 두 장부에서 사라지지 않는다.
     assert first.delta == pytest.approx(1.0)
-    assert second.delta == pytest.approx(0.0)
-    assert execution.spent == pytest.approx(1.0)
+    assert second.delta == pytest.approx(1.0)
+    assert execution.spent == pytest.approx(2.0)
 
 
 def test_착지한_루프의_결론_호출은_실행_상한에서도_끊기지_않는다() -> None:
@@ -78,6 +82,24 @@ def test_착지한_루프의_결론_호출은_실행_상한에서도_끊기지_�
     assert execution.spent == pytest.approx(2.0)
 
 
+def test_착지한_루프도_마무리_몫을_넘기면_끊긴다() -> None:
+    # 종료한 뒤를 무한히 열면 계약이 landingReserve 로 정한 예약의 뜻이 사라진다.
+    reserve = shared_contract("execution.budget.json")["pacing"]["landingReserve"]["calls"]
+    execution = ExecutionBudget(1.5, mk_rates())
+    loop = execution.new_loop("synthesize", "claude-haiku-4-5")
+    message = mk_ai(usage=_USAGE, response_metadata={"model": "claude-haiku-4-5"})
+
+    loop.charge(message)
+    loop.land()
+    for _ in range(reserve):
+        loop.charge(message)
+    with pytest.raises(BudgetExceeded):
+        loop.charge(message)
+
+    # 호출 하나가 $1.0이므로 상한 $1.5 위로 열리는 여유는 최고 호출의 calls 배뿐이다.
+    assert execution.spent == pytest.approx(1.0 + reserve + 1.0)
+
+
 def test_조사_루프는_배정받은_상한을_넘지_않는다() -> None:
     execution = ExecutionBudget(2.0, mk_rates())
     inspect = execution.new_loop("inspect", "claude-haiku-4-5", max_cost_usd=0.5)
@@ -86,11 +108,11 @@ def test_조사_루프는_배정받은_상한을_넘지_않는다() -> None:
     with pytest.raises(BudgetExceeded):
         inspect.charge(message)
 
-    assert execution.spent == pytest.approx(0.0)
+    assert execution.spent == pytest.approx(1.0)
 
 
-def _recipe_scan_budget_cases() -> dict[str, object]:
-    payload: dict[str, object] = agent_cases("recipe-scan")["executionBudget"]
+def _recipe_scan_budget_cases() -> dict[str, Any]:
+    payload: dict[str, Any] = agent_cases("recipe-scan")["executionBudget"]
     return payload
 
 
@@ -115,7 +137,7 @@ def test_예약이_계약이_적은_액수를_뗀_순서대로_낸다() -> None:
     assert execution.remaining_budget_usd == pytest.approx(case["expect"]["remainingAfterAll"]["budgetUsd"])
 
 
-def _assert_lease(lease: AgentBudgetLease, expect: dict[str, object]) -> None:
+def _assert_lease(lease: AgentBudgetLease, expect: dict[str, Any]) -> None:
     assert lease.max_turns == expect["grantedTurns"]
     assert lease.max_cost_usd == pytest.approx(expect["grantedUsd"])
 
@@ -123,25 +145,28 @@ def _assert_lease(lease: AgentBudgetLease, expect: dict[str, object]) -> None:
 @pytest.mark.parametrize(
     "case", _recipe_scan_budget_cases()["weightAllocation"]["cases"], ids=lambda c: c["name"]
 )
-def test_lease_many가_weight_배열마다_계약이_적은_턴과_달러를_낸다(case: dict[str, object]) -> None:
-    execution = ExecutionBudget(case["availableUsd"], mk_rates(), max_turns=case["availableTurns"])
-
-    leases = execution.lease_many(case["requestedTurns"], 1.0)
+def test_팬아웃_배분이_weight_배열마다_계약이_적은_턴과_달러를_낸다(case: dict[str, Any]) -> None:
+    # 실행이 실제로 부르는 배분 함수이며 팬아웃은 이 결과를 그대로 전문가의 상한으로 싣는다.
+    leases = lease_shares(case["requestedTurns"], case["availableTurns"], case["availableUsd"])
 
     assert [lease.max_turns for lease in leases] == case["expect"]["grantedTurns"]
     assert [lease.max_cost_usd for lease in leases] == pytest.approx(case["expect"]["grantedUsd"])
 
 
-def test_사용량을_모르는_호출을_정산하면_떼어준_몫_전부가_빠진다() -> None:
-    execution = ExecutionBudget(1.0, mk_rates(), max_turns=10)
-    lease = execution.lease(1.0)
-    assert lease.max_turns == 10
-    assert lease.max_cost_usd == pytest.approx(1.0)
+def _pool_state(turns: int, usd: float) -> dict[str, Any]:
+    return {"max_turns": turns, "max_cost_usd": usd}
 
-    execution.settle(lease, AgentBudgetSpend(cost_usd=None, num_turns=None))
 
-    assert execution.remaining_turns == 0
-    assert execution.remaining_budget_usd == pytest.approx(0.0)
+def test_사용량을_모르는_호출은_떼어준_몫_전부를_쓴_것으로_적는다() -> None:
+    # 팬아웃 노드가 실패하면 실제 턴을 모르므로 배분받은 턴 전부를 풀 소모로 낸다.
+    lease = lease_shares([10], 10, 1.0)[0]
+    state = _pool_state(10, 1.0)
+
+    spend = pool_spend(cost_usd=lease.max_cost_usd, turns_used=lease.max_turns)
+    settled = {**state, **spend}
+
+    assert remaining_turns(settled) == 0
+    assert remaining_cost_usd(settled) == pytest.approx(0.0)
 
 
 def test_예약분은_정산에서_두_번_빠지지_않는다() -> None:
@@ -154,12 +179,15 @@ def test_예약분은_정산에서_두_번_빠지지_않는다() -> None:
     assert execution.remaining_turns == case["afterReserve"]["remainingTurns"]
     assert execution.remaining_budget_usd == pytest.approx(case["afterReserve"]["remainingBudgetUsd"])
 
-    execution.settle(
-        lease, AgentBudgetSpend(cost_usd=case["settle"]["costUsd"], num_turns=case["settle"]["numTurns"])
-    )
+    # 예약 리스로 돈 호출은 몫 전부를 쓰고도 팬아웃 풀을 건드리지 않는다.
+    state = _pool_state(execution.remaining_turns, execution.remaining_budget_usd)
+    settled = {
+        **state,
+        **reserved_spend(cost_usd=lease.max_cost_usd, turns_used=lease.max_turns),
+    }
 
-    assert execution.remaining_turns == case["expect"]["remainingTurns"]
-    assert execution.remaining_budget_usd == pytest.approx(case["expect"]["remainingBudgetUsd"])
+    assert remaining_turns(settled) == case["expect"]["remainingTurns"]
+    assert remaining_cost_usd(settled) == pytest.approx(case["expect"]["remainingBudgetUsd"])
 
 
 def test_전문가가_예산을_소진해도_종합과_수리의_몫은_예약대로_남는다() -> None:
@@ -173,48 +201,17 @@ def test_전문가가_예산을_소진해도_종합과_수리의_몫은_예약�
     )
 
     # 전문가 팬아웃이 남은 잔량 전부를 요청해 소진한다.
-    probe_leases = execution.lease_many([10, 10, 10], 1.0)
-    for lease in probe_leases:
-        execution.settle(lease, AgentBudgetSpend(cost_usd=None, num_turns=None))
+    state = _pool_state(execution.remaining_turns, execution.remaining_budget_usd)
+    for lease in lease_shares([10, 10, 10], execution.remaining_turns, execution.remaining_budget_usd):
+        state = {
+            **state,
+            "pool_turns_used": state.get("pool_turns_used", 0) + lease.max_turns,
+            "pool_cost_usd": state.get("pool_cost_usd", 0.0) + lease.max_cost_usd,
+        }
 
-    assert execution.remaining_turns == 0
-    assert execution.remaining_budget_usd == pytest.approx(0.0)
+    assert remaining_turns(state) == 0
+    assert remaining_cost_usd(state) == pytest.approx(0.0)
     # 이미 뗀 리스는 나중의 소진과 무관하게 처음 받은 턴과 달러를 그대로 가진다.
     assert repair_lease.max_turns == reservation["repair"]["turns"]
     assert repair_lease.max_cost_usd > 0
     assert synthesis_floor_lease.max_turns == reservation["synthesisFloor"]["turns"]
-
-
-class Test리스식별자:
-    def test_회수된_리스의_열쇠가_다음_리스를_오염시키지_않는다(self) -> None:
-        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
-        first = budget.reserve(2, 0.2)
-        first_id = first.lease_id
-        budget.settle(first, AgentBudgetSpend(cost_usd=0.1, num_turns=1))
-        del first
-        gc.collect()
-
-        second = budget.reserve(2, 0.2)
-
-        assert second.lease_id != first_id
-        budget.settle(second, AgentBudgetSpend(cost_usd=0.1, num_turns=1))
-
-    def test_같은_몫의_리스_둘이_서로_다른_열쇠를_갖는다(self) -> None:
-        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
-
-        left = budget.reserve(2, 0.2)
-        right = budget.reserve(2, 0.2)
-
-        assert left.lease_id != right.lease_id
-        budget.settle(left, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
-        budget.settle(right, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
-
-    def test_합친_리스가_자기_열쇠로_예약분을_한_번만_되돌린다(self) -> None:
-        budget = ExecutionBudget(1.0, mk_rates(), max_turns=10)
-        floor = budget.reserve(3, 0.0)
-        remaining_before = budget.remaining_turns
-
-        combined = budget.combine([floor, AgentBudgetLease(max_turns=2, max_cost_usd=0.0)])
-        budget.settle(combined, AgentBudgetSpend(cost_usd=0.0, num_turns=0))
-
-        assert budget.remaining_turns == remaining_before + 3

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepToolCall
-from tracer_agent.worker.agents.runtime.telemetry.trajectory_metrics import (
+from tests.support.trajectory_metrics import (
     called_tool_names,
     covers_expected_calls,
     duplicate_tool_calls,
     missing_tool_calls,
 )
+
+from tracer_agent.shared.agents.shared.models import AgentStepDTO, AgentStepToolCall
 
 
 def _call(name: str, **args: Any) -> AgentStepToolCall:

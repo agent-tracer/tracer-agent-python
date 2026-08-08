@@ -110,7 +110,6 @@ class FakeToolLoopChat:
         report: Any = None,
         worker_turns: dict[str, list[Any]] | None = None,
     ) -> None:
-        # turns의 각 항목은 도구 호출 목록(list)이거나 최종 구조화 출력(dict)이다.
         self.turns = list(turns)
         self.plan = plan
         self.report = report

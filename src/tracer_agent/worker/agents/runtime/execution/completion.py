@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -14,22 +13,6 @@ DELIVERY_ATTEMPTS = 3
 DELIVERY_BACKOFF_S = 2.0
 
 _log = logging.getLogger(__name__)
-
-
-async def run_and_deliver(
-    client: httpx.AsyncClient,
-    callback: CompletionCallback | None,
-    execute_request: Callable[[], Awaitable[AgentResponse]],
-    on_result: Callable[[AgentResponse], Awaitable[None]] | None = None,
-) -> None:
-    """실행을 끝까지 수행하고 창구가 있으면 결과를 한 번 전달하며, 전달 전 후처리를 먼저 실행한다."""
-    try:
-        response = await execute_request()
-    except asyncio.CancelledError:
-        return
-    if on_result is not None:
-        await on_result(response)
-    await deliver_completion(client, callback, response)
 
 
 async def deliver_completion(

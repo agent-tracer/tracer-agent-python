@@ -43,7 +43,7 @@ class TestExecutionTrace:
             _ai_with_usage(input_tokens=1000, output_tokens=50, cache_read=200, cache_creation=100)
         )
 
-        assert acc.input_tokens == 700  # 1000 - 200 - 100
+        assert acc.input_tokens == 700
         assert acc.cache_read_tokens == 200
         assert acc.cache_creation_tokens == 100
         assert acc.output_tokens == 50
@@ -70,7 +70,7 @@ class TestExecutionTrace:
         )
 
         assert acc.cache_creation_tokens == 300
-        assert acc.input_tokens == 700  # 1000 - 0 - 300
+        assert acc.input_tokens == 700
 
     def test_여러_턴이_누적된다(self) -> None:
         acc = ExecutionTrace()
@@ -79,7 +79,7 @@ class TestExecutionTrace:
         )
         acc.add_message(_ai_with_usage(input_tokens=900, output_tokens=40, cache_read=800, cache_creation=0))
 
-        assert acc.input_tokens == 700 + 100  # (1000-200-100) + (900-800-0)
+        assert acc.input_tokens == 700 + 100
         assert acc.cache_read_tokens == 1000
         assert acc.cache_creation_tokens == 100
 
@@ -147,7 +147,7 @@ class TestRecordStep:
         acc.record_message(message)
 
         step = acc.steps[0]
-        assert step.inputTokens == 800  # 1000 - 200
+        assert step.inputTokens == 800
         assert step.outputTokens == 50
         assert step.cacheReadTokens == 200
         assert step.stopReason == "end_turn"

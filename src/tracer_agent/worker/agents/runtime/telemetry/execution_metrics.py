@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from opentelemetry import metrics
 
-from tracer_agent.worker.agents.shared.contract_prompt_source import CONTRACT_ROOT
+from tracer_agent.shared.agents.shared.contract_root import CONTRACT_ROOT
 
 _METRICS_PATH = CONTRACT_ROOT / "workflow" / "metrics.yaml"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from tracer_agent.shared.agents.shared.models import (
     AgentRunObservationDTO,
@@ -24,7 +24,6 @@ from ..llm.trajectory import (
     extract_token_usage,
     message_identity,
     message_step,
-    step_carries_content,
 )
 from ..routes import REPAIR
 
@@ -44,6 +43,8 @@ class ExecutionTrace:
     actual_model: str | None = None
     provider_request_id: str | None = None
     first_token_at: float | None = None
+    # 실패로 돌아온 도구 호출이며 관측이 이것을 성공으로 세지 않도록 궤적이 따로 기억한다.
+    failed_tool_calls: set[str] = field(default_factory=set)
 
     def mark_first_token(self) -> None:
         """스트리밍이 첫 조각을 내놓은 시각을 한 번만 남긴다."""
@@ -83,8 +84,10 @@ class ExecutionTrace:
     def record_message(self, message: BaseMessage) -> None:
         """모델 대화 메시지를 반환 가능한 실행 단계로 기록하며 본문도 도구 호출도 없으면 버린다."""
         self._remember_identity(message)
+        if isinstance(message, ToolMessage) and message.status == "error" and message.tool_call_id:
+            self.failed_tool_calls.add(message.tool_call_id)
         step = message_step(message, len(self.steps))
-        if not step_carries_content(step):
+        if not step.carries_content():
             return
         self.steps.append(step)
 
@@ -179,7 +182,9 @@ class ExecutionTrace:
                 errorCodes=[] if error_subtype is None else [error_subtype],
             ),
             modelCalls=[model_call],
-            toolCalls=_tool_observations(self.steps, execution_id, attempt_id, status),
+            toolCalls=_tool_observations(
+                self.steps, execution_id, attempt_id, status, self.failed_tool_calls
+            ),
         )
 
 
@@ -190,8 +195,18 @@ def _last_finish_reason(steps: list[AgentStepDTO]) -> str | None:
     return None
 
 
+# 도구 실패를 사유와 함께 모델에게 전달했을 때 관측이 그 호출에 적는 오류 종류다.
+TOOL_EXECUTION_ERROR = "tool_execution_error"
+# 모델이 부르기만 하고 결과가 궤적에 남지 않은 호출에 관측이 적는 오류 종류다.
+INCOMPLETE_TOOL_CALL = "incomplete_tool_call"
+
+
 def _tool_observations(
-    steps: list[AgentStepDTO], execution_id: str, attempt_id: str, status: ObservationStatus
+    steps: list[AgentStepDTO],
+    execution_id: str,
+    attempt_id: str,
+    status: ObservationStatus,
+    failed: set[str],
 ) -> list[ToolCallObservationDTO]:
     names: dict[str, str] = {}
     completed: set[str] = set()
@@ -202,15 +217,16 @@ def _tool_observations(
         if step.role != "tool" or step.toolCallId is None or not step.toolName:
             continue
         completed.add(step.toolCallId)
+        broke = step.toolCallId in failed
         results.append(
             ToolCallObservationDTO(
                 executionId=execution_id,
                 attemptId=attempt_id,
                 toolCallId=step.toolCallId,
                 toolName=step.toolName,
-                status="succeeded",
+                status="failed" if broke else "succeeded",
                 durationMs=step.durationMs or 0,
-                errorType=None,
+                errorType=TOOL_EXECUTION_ERROR if broke else None,
             )
         )
     for tool_call_id, tool_name in names.items():
@@ -224,7 +240,7 @@ def _tool_observations(
                 toolName=tool_name,
                 status=status,
                 durationMs=0,
-                errorType=None if status == "succeeded" else "incomplete_tool_call",
+                errorType=None if status == "succeeded" else INCOMPLETE_TOOL_CALL,
             )
         )
     return results

@@ -21,7 +21,7 @@ def model_retry_middleware(*, max_retries: int = 2) -> ModelRetryMiddleware:
         on_failure="error",
         backoff_factor=2.0,
         initial_delay=0.5,
-        jitter=False,
+        jitter=True,
     )
 
 
@@ -33,5 +33,5 @@ def tool_retry_middleware(transient_errors: tuple[type[Exception], ...]) -> Tool
         on_failure="error",
         backoff_factor=2.0,
         initial_delay=0.5,
-        jitter=False,
+        jitter=True,
     )
