@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+
 import pytest
 
 from tests.support.fakes import TRACER_API_URL
@@ -10,8 +14,14 @@ from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.ledger import PooledSql
 from tracer_agent.worker.worker import (
     QUEUE_ARGS,
+    WORKER_PROFILES,
+    WorkerProfile,
     _parse_queue,
+    build_chat_worker,
+    build_generate_worker,
+    build_job_worker,
     generate_job_activities,
+    resume_chat_executions,
     short_job_activities,
 )
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities
@@ -54,3 +64,60 @@ def test_기동_인자가_없으면_chat으로_물러선다() -> None:
 def test_모르는_기동_인자를_거절한다() -> None:
     with pytest.raises(SystemExit):
         _parse_queue(["evaluation"])
+
+
+class TestWorkerProfiles:
+    """큐를 더할 때 기동 분기 대신 표 한 줄만 늘어나는지 고정한다."""
+
+    def test_기동_인자가_프로파일_표에서_그대로_나온다(self) -> None:
+        assert tuple(WORKER_PROFILES) == QUEUE_ARGS
+
+    def test_큐마다_자기_자원과_자기_워커를_갖는다(self) -> None:
+        builders = {queue: profile.build for queue, profile in WORKER_PROFILES.items()}
+
+        assert builders == {
+            "chat": build_chat_worker,
+            "jobs": build_job_worker,
+            "generate": build_generate_worker,
+        }
+
+    def test_대기_줄을_다시_얹는_큐는_chat_하나다(self) -> None:
+        resuming = [
+            queue for queue, profile in WORKER_PROFILES.items() if profile.resume is resume_chat_executions
+        ]
+
+        assert resuming == ["chat"]
+
+    async def test_프로파일이_연_자원으로_워커를_세우고_기동_전에_대기_줄을_얹는다(self) -> None:
+        opened: list[str] = []
+        resumed: list[str] = []
+        served: list[str] = []
+
+        @asynccontextmanager
+        async def resources(_settings: Any) -> AsyncIterator[str]:
+            opened.append("open")
+            yield "opened"
+            opened.append("close")
+
+        async def resume(_client: Any, resource: str) -> None:
+            resumed.append(resource)
+
+        def build(_client: Any, resource: str, _settings: Any) -> Any:
+            served.append(resource)
+            return _RecordingWorker(served)
+
+        await WorkerProfile(resources, build, resume).serve(None, None)  # type: ignore[arg-type]
+
+        assert opened == ["open", "close"]
+        assert resumed == ["opened"]
+        assert served == ["opened", "ran"]
+
+
+class _RecordingWorker:
+    """워커 대신 폴링이 시작됐다는 사실만 남기는 대역이다."""
+
+    def __init__(self, served: list[str]) -> None:
+        self._served = served
+
+    async def run(self) -> None:
+        self._served.append("ran")
