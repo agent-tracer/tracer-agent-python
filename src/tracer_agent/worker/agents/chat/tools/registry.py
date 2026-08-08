@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any, cast
 
@@ -14,18 +14,29 @@ from langgraph.runtime import get_runtime
 from pydantic import BaseModel, ValidationError
 
 from tracer_agent.shared.agents.chat.models import ProposedWrite
-from tracer_agent.shared.agents.chat.tools.surface import chat_tool_failure_text, recall_tool_name
+from tracer_agent.shared.agents.chat.tools.surface import (
+    chat_argument_rejection,
+    chat_tool_failure_text,
+    recall_tool_name,
+)
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact, redact_text
 
 from ...runtime.tooling import AgentTool, ToolRegistry
-from ...shared.contract_failures import TOOL_FAILED_KEY
+from ...shared.contract_failures import ARGUMENTS_MISSING_KEY, TOOL_FAILED_KEY
 from ..store import FACTS_FIELD
+from ..writer import ChatProposalResult
 from .context import ChatToolContext
 from .specs import AGENT_READ_TOOL_NAMES, ARGS_MODELS, MEMORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES
 
 # 도구가 실패했을 때 모델이 읽는 문구이며 계약이 문장을 소유한다.
 TOOL_FAILED = chat_tool_failure_text(TOOL_FAILED_KEY)
+
+# 빠진 인자를 채우면 같은 호출이 성립하므로 이 문구는 다시 부르지 말라고 말하지 않는다.
+ARGUMENTS_MISSING = chat_tool_failure_text(ARGUMENTS_MISSING_KEY)
+
+# 창구가 이 어휘로 거절했을 때만 모델에게 고쳐 부르라고 말한다.
+ARGUMENT_REJECTION_CODE = str(chat_argument_rejection()["code"])
 
 # 모델이 계약 밖의 인자를 보냈을 때 그 사유로 쓰는 문구다.
 INVALID_ARGS = "the arguments did not match the tool contract"
@@ -47,6 +58,11 @@ _REGISTRY_VERSIONS = 4
 def chat_tool_failed(tool_name: str, reason: str) -> str:
     """도구가 실패했음을 계약이 소유한 문장으로 모델에게 알린다."""
     return TOOL_FAILED.format(tool=tool_name, reason=reason)
+
+
+def chat_tool_arguments_missing(tool_name: str, action: str, missing: Sequence[str]) -> str:
+    """고치면 성립하는 호출임을 계약이 소유한 문장으로 모델에게 알린다."""
+    return ARGUMENTS_MISSING.format(tool=tool_name, missing=", ".join(missing), action=action)
 
 
 def for_model(text: str) -> str:
@@ -97,13 +113,23 @@ class ChatProposalTool(ChatTool):
         wire = self.wire_args(args)
         result = await context.backends.write.propose(self.name, wire)
         if not result.ok:
-            return chat_tool_failed(self.name, result.reason)
+            return self._rejected(result)
         if not result.confirmation_id:
             return chat_tool_failed(self.name, MISSING_CONFIRMATION_ID)
         context.proposals.append(
             ProposedWrite(confirmationId=result.confirmation_id, toolName=self.name, args=wire)
         )
         return for_model(result.text)
+
+    def _rejected(self, result: ChatProposalResult) -> str:
+        """채우면 성립하는 거절과 그렇지 않은 실패를 계약이 갖는 서로 다른 문구로 낸다."""
+        if result.error_code != ARGUMENT_REJECTION_CODE or result.details is None:
+            return chat_tool_failed(self.name, result.reason)
+        missing = result.details.get("missing")
+        action = result.details.get("action")
+        if not isinstance(missing, list) or not isinstance(action, str):
+            return chat_tool_failed(self.name, result.reason)
+        return chat_tool_arguments_missing(self.name, action, [str(one) for one in missing])
 
 
 class ChatRecallTool(ChatTool):

@@ -15,6 +15,8 @@ from .contract_prompt_source import ContractPromptUnavailable
 TOOL_FAILED_KEY = "toolFailed"
 # 조사 하나가 통째로 실패했을 때 조율자가 읽는 문구의 계약 자리다.
 WORKER_FAILED_KEY = "workerFailed"
+# 채우면 같은 호출이 성립하는 실수여서 포기를 지시하지 않는 문구의 계약 자리다.
+ARGUMENTS_MISSING_KEY = "argumentsMissing"
 
 
 @lru_cache(maxsize=8)

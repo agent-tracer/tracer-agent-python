@@ -10,6 +10,7 @@ import httpx
 from tests.support.chat_api import FakeChatMemoryApi, chat_confirmation_response
 from tests.support.fakes import mk_rates
 from tracer_agent.shared.agents.chat.models import ProposedWrite
+from tracer_agent.shared.agents.chat.tools.surface import chat_argument_rejection
 from tracer_agent.worker.agents.chat.backends import (
     MEMORY_BACKEND_MISSING,
     READ_BACKEND_MISSING,
@@ -26,7 +27,11 @@ from tracer_agent.worker.agents.chat.memory import ChatMemoryClient
 from tracer_agent.worker.agents.chat.reader import ChatReadClient
 from tracer_agent.worker.agents.chat.store import ChatMemoryStore
 from tracer_agent.worker.agents.chat.tools import ChatToolContext, chat_tool_registry
-from tracer_agent.worker.agents.chat.tools.registry import INVALID_ARGS, chat_tool_failed
+from tracer_agent.worker.agents.chat.tools.registry import (
+    INVALID_ARGS,
+    chat_tool_arguments_missing,
+    chat_tool_failed,
+)
 from tracer_agent.worker.agents.chat.writer import ChatWriteClient
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 from tracer_agent.worker.agents.runtime.llm.budget import single_loop_budget
@@ -136,6 +141,35 @@ async def test_창구가_거절하면_계약_문구로_알리고_산출물에_�
         )
 
     assert answered == chat_tool_failed("propose_task_write", "the confirmation API answered 404")
+    assert proposals == []
+
+
+async def test_인자가_빠진_거절에는_포기_지시_대신_고쳐_부르라는_문구가_간다() -> None:
+    rejection = chat_argument_rejection()
+
+    def handle(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            int(rejection["status"]),
+            json={
+                "ok": False,
+                "error": {
+                    "code": rejection["code"],
+                    "message": rejection["message"],
+                    "details": {"action": "archive", "missing": ["taskId"]},
+                },
+            },
+        )
+
+    proposals: list[ProposedWrite] = []
+    client, http = _write_client(httpx.MockTransport(handle))
+    async with http:
+        answered = await _call(
+            "propose_task_write",
+            {"action": "archive", "taskId": "task-1"},
+            _context(_backends(write=client), proposals),
+        )
+
+    assert answered == chat_tool_arguments_missing("propose_task_write", "archive", ["taskId"])
     assert proposals == []
 
 

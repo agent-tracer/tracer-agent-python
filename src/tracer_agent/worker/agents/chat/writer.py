@@ -26,6 +26,9 @@ class ChatProposalResult:
     confirmation_id: str
     # 이 실행에 창구가 아예 없을 때만 사유를 싣고, 창구가 거절한 실패의 사유는 상태가 만든다.
     unavailable: str | None = None
+    # 거절의 어휘와 판정 근거이며 모델이 읽을 문구가 이 둘에서 갈린다.
+    error_code: str = ""
+    details: JsonObject | None = None
 
     @property
     def reason(self) -> str:
@@ -61,8 +64,14 @@ class ChatWriteClient:
             headers=scoped_headers(self._user_id, self._scope_token),
         )
         if response.status_code >= 400:
+            code, details = _rejection(response.text)
             return ChatProposalResult(
-                ok=False, status_code=response.status_code, text=response.text, confirmation_id=""
+                ok=False,
+                status_code=response.status_code,
+                text=response.text,
+                confirmation_id="",
+                error_code=code,
+                details=details,
             )
         text = unwrapped_body(response.text)
         return ChatProposalResult(
@@ -71,6 +80,19 @@ class ChatWriteClient:
             text=text,
             confirmation_id=_confirmation_id(text),
         )
+
+
+def _rejection(text: str) -> tuple[str, JsonObject | None]:
+    """거절 봉투에서 어휘와 판정 근거를 꺼내며 봉투가 아니면 둘 다 비운다."""
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return "", None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return "", None
+    details = error.get("details")
+    return str(error.get("code", "")), details if isinstance(details, dict) else None
 
 
 def _confirmation_id(text: str) -> str:
