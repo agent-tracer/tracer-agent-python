@@ -45,7 +45,6 @@ def attempt_record(
         "attempt": attempt,
         "status": ATTEMPT_FAILED,
         "subtype": error.subtype,
-        # 별칭은 단가표의 키이므로 이 칸과 costUsd가 한 기록 안에서 같은 모델을 가리킨다.
         "model": response.modelUsed,
         "costUsd": cost_usd,
         "durationMs": response.durationMs,

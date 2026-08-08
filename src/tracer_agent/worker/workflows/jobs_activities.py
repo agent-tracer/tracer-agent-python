@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from ...shared.agents.runtime.ledger import SqlSource
 from ...shared.agents.runtime.notification import JobStatusNotifier
@@ -25,7 +26,6 @@ from ...shared.agents.shared.json_view import JsonObject, JsonValue, opt_text
 from ...shared.agents.shared.models import (
     AgentExecutionRequest,
     AgentResponse,
-    AgentStepDTO,
     CompletionCallback,
 )
 from ...shared.workflows.jobs_envelope import JobEnvelopeSource, JobExecutionEnvelope
@@ -41,11 +41,13 @@ from ...shared.workflows.jobs_spec import (
     SETTLE_CANCELED_JOB_ACTIVITY,
     AgentJobRequest,
     AgentJobSettlement,
+    GeneratedAgentJob,
+    JobOutcome,
 )
 from ..agents.recipe_scan.agent import RECIPE_SCAN_JOB
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
 from ..agents.runtime.execution.completion import deliver_completion
-from ..agents.runtime.execution.runner import execute
+from ..agents.runtime.execution.runner import ExecutionRequest, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.job_agent import JobGraphAgent
 from ..agents.runtime.llm.client import ChatPair, make_chat_pair
@@ -55,11 +57,24 @@ from ..agents.shared.prompt_source_port import AgentPrompt
 from ..agents.task_cleanup.agent import TASK_CLEANUP_JOB
 from ..agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
 from .jobs_outcome import job_usage, status_and_error
-from .jobs_writer import JobExecutionWriter, JobOutcome
+from .jobs_writer import JobExecutionWriter
 
 JOB_AGENTS: dict[AgentJobKind, JobGraphAgent[Any, Any]] = {
     job.kind: job for job in (TITLE_SUGGESTION_JOB, TASK_CLEANUP_JOB, RECIPE_SCAN_JOB)
 }
+
+CANCELED_WITHOUT_SETTLEMENT = "canceled without a settlement from this attempt"
+CLOSED_BEFORE_START = "job reached a terminal status before this attempt started"
+
+
+def _blocked(kind: AgentJobKind | None, job_id: str, status: str) -> None:
+    """종료 상태에 이미 닿은 행이 이 전이를 받지 않았다는 사실을 액티비티 문맥과 함께 남긴다."""
+    activity.logger.warning(
+        "agent.job.settle.blocked kind=%s jobId=%s status=%s",
+        "unknown" if kind is None else kind.wire,
+        job_id,
+        status,
+    )
 
 
 class AgentJobActivities:
@@ -97,12 +112,15 @@ class AgentJobActivities:
         execution_id = opt_text(prepared.get("executionId"))
         if execution_id:
             async with self._execution_sql.connect() as sql:
-                await JobLedger(sql).mark_running(execution_id, datetime.now(UTC))
+                running = await JobLedger(sql).mark_running(execution_id, datetime.now(UTC))
+            if not running:
+                _blocked(request.kind, execution_id, "running")
+                raise ApplicationError(CLOSED_BEFORE_START, non_retryable=True)
             await self._notify(request.kind, execution_id, user_id, "running", _task_id_of(prepared))
         return prepared
 
     @activity.defn(name=GENERATE_AGENT_JOB_ACTIVITY)
-    async def generate(self, request: AgentJobRequest) -> JsonObject:
+    async def generate(self, request: AgentJobRequest) -> GeneratedAgentJob:
         """이 시도가 쓸 봉투를 받아 그래프를 실행하며 자격을 이 액티비티 밖으로 내보내지 않는다."""
         payload = await self._resolve_payload(request)
         job = JOB_AGENTS[request.kind]
@@ -114,30 +132,31 @@ class AgentJobActivities:
         finally:
             heartbeat.cancel()
         cost_usd = ModelRates(req.modelRates).estimate_cost_usd(response.modelUsed, response.usage)
-        return {
-            "outcome": _outcome_payload(req, response, cost_usd),
-            "response": response.model_dump(mode="json"),
-        }
+        return GeneratedAgentJob(outcome=_outcome(req, response, cost_usd), response=response)
 
     @activity.defn(name=FINALIZE_AGENT_JOB_ACTIVITY)
     async def finalize(self, settlement: AgentJobSettlement) -> None:
-        """생성이 낸 결과를 원장에 종결로 적고 산출물과 완료를 배달한다."""
-        outcome = _outcome_of(settlement.outcome)
+        """생성이 낸 결과를 원장에 종결로 적고 전이가 받아들여진 실행만 알림과 산출물을 낸다."""
+        outcome = settlement.outcome
+        settled = True
         if outcome.job_id:
             async with self._execution_sql.connect() as sql:
-                await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
-            await self._notify(
-                settlement.kind,
-                outcome.job_id,
-                outcome.user_id,
-                outcome.status,
-                _task_id_of(settlement.payload),
-            )
-        response = AgentResponse.model_validate(settlement.response)
-        if outcome.status == "completed":
+                settled = await JobExecutionWriter(sql).finalize(outcome, datetime.now(UTC))
+            if settled:
+                await self._notify(
+                    settlement.kind,
+                    outcome.job_id,
+                    outcome.user_id,
+                    outcome.status,
+                    _task_id_of(settlement.payload),
+                )
+            else:
+                _blocked(settlement.kind, outcome.job_id, outcome.status)
+        if settled and outcome.status == "completed":
             job = JOB_AGENTS[settlement.kind]
-            await job.settle_outputs(self._tracer(outcome.user_id), outcome.job_id, response.data)
-        await deliver_completion(self._http, _callback_of(settlement.payload), response)
+            await job.settle_outputs(self._tracer(outcome.user_id), outcome.job_id, settlement.response.data)
+        # 완료 콜백은 실행기에게 자기 토큰으로 종료를 알리는 자리이므로 원장 가드가 가르지 않는다.
+        await deliver_completion(self._http, _callback_of(settlement.payload), settlement.response)
 
     @activity.defn(name=FAIL_AGENT_JOB_ACTIVITY)
     async def fail(self, request: AgentJobRequest, message: str) -> None:
@@ -146,18 +165,25 @@ class AgentJobActivities:
         if not execution_id:
             return
         async with self._execution_sql.connect() as sql:
-            await JobLedger(sql).settle(execution_id, "failed", {}, {}, message[:2000], datetime.now(UTC))
+            settled = await JobLedger(sql).settle(
+                execution_id, "failed", {}, {}, message[:2000], datetime.now(UTC)
+            )
+        if not settled:
+            _blocked(request.kind, execution_id, "failed")
+            return
         user_id = opt_text(request.payload.get("userId"))
         if user_id:
             await self._notify(request.kind, execution_id, user_id, "failed", _task_id_of(request.payload))
 
     @activity.defn(name=SETTLE_CANCELED_JOB_ACTIVITY)
     async def settle_canceled(self, execution_id: str) -> None:
-        """실행 액티비티가 못 받은 취소를 원장에서 닫으며, 이미 종결된 행은 조건부 갱신이 그대로 둔다."""
+        """이번 시도가 종결을 내지 못한 채 끊긴 실행을 원장에서 닫으며, 이미 종결된 행은 그대로 둔다."""
         async with self._execution_sql.connect() as sql:
-            await JobLedger(sql).settle(
-                execution_id, "canceled", {}, {}, "canceled before execution started", datetime.now(UTC)
+            settled = await JobLedger(sql).settle(
+                execution_id, "canceled", {}, {}, CANCELED_WITHOUT_SETTLEMENT, datetime.now(UTC)
             )
+        if not settled:
+            _blocked(None, execution_id, "canceled")
 
     async def _notify(
         self, kind: AgentJobKind, job_id: str, user_id: str, status: str, task_id: str | None
@@ -212,19 +238,17 @@ class AgentJobActivities:
             return await job.run(req, tracer, trace, prompt, self._checkpoints, self._make_chats(req))
 
         return await execute(
-            job.kind,
-            req.model,
-            req.deadlineMs,
+            ExecutionRequest(
+                label=job.kind,
+                model=req.model,
+                deadline_ms=req.deadlineMs,
+                prompt_version=prompt.version(),
+                tool_contract_version=prompt.tool_contract_version,
+                job_id=req.jobId,
+                execution_id=req.executionId,
+                attempt_id=req.attemptId,
+            ),
             body,
-            req.jobId,
-            req.idempotencyKey,
-            None,
-            None,
-            req.idempotency_input_hash(),
-            req.executionId,
-            req.attemptId,
-            prompt_version=prompt.version(),
-            tool_contract_version=prompt.tool_contract_version,
         )
 
 
@@ -240,41 +264,20 @@ def _callback_of(payload: JsonObject) -> CompletionCallback | None:
     return None if not isinstance(callback, dict) else CompletionCallback.model_validate(callback)
 
 
-def _outcome_payload(
-    req: AgentExecutionRequest, response: AgentResponse, cost_usd: float | None
-) -> JsonObject:
+def _outcome(req: AgentExecutionRequest, response: AgentResponse, cost_usd: float | None) -> JobOutcome:
     """생성이 낸 결과를 종결이 원장에 적을 값으로 옮기며 자격을 싣지 않는다."""
     status, error = status_and_error(response)
     attempt = _attempt(req.attemptId)
-    return {
-        "jobId": req.executionId or "",
-        "userId": req.userId,
-        "status": status,
-        "attempt": attempt,
-        "result": response.data or {},
-        "usage": job_usage(response, cost_usd, attempt),
-        "error": error,
-        "steps": [step.model_dump(mode="json") for step in response.steps],
-        "observation": (
-            None if response.observation is None else response.observation.model_dump(mode="json")
-        ),
-    }
-
-
-def _outcome_of(payload: JsonObject) -> JobOutcome:
-    """생성이 실어 보낸 종결 값을 원장이 받는 모양으로 되돌린다."""
-    steps = payload.get("steps")
-    observation = payload.get("observation")
     return JobOutcome(
-        job_id=str(payload["jobId"]),
-        user_id=str(payload["userId"]),
-        status=str(payload["status"]),
-        attempt=int(payload["attempt"]),  # type: ignore[arg-type]
-        result=dict(payload["result"]),  # type: ignore[arg-type]
-        usage=dict(payload["usage"]),  # type: ignore[arg-type]
-        error=opt_text(payload.get("error")) or None,
-        steps=[AgentStepDTO.model_validate(step) for step in steps] if isinstance(steps, list) else [],
-        observation=dict(observation) if isinstance(observation, dict) else None,
+        job_id=req.executionId or "",
+        user_id=req.userId,
+        status=status,
+        attempt=attempt,
+        result=response.data or {},
+        usage=job_usage(response, cost_usd, attempt),
+        error=error,
+        steps=response.steps,
+        observation=response.observation,
     )
 
 

@@ -11,7 +11,8 @@ import pytest
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.models import AgentStepDTO
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
-from tracer_agent.worker.workflows.jobs_writer import JobExecutionWriter, JobOutcome
+from tracer_agent.shared.workflows.jobs_spec import JobOutcome
+from tracer_agent.worker.workflows.jobs_writer import JobExecutionWriter
 
 NOW = datetime(2026, 7, 28, 0, 5, tzinfo=UTC)
 

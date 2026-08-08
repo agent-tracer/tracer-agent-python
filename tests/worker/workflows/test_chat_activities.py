@@ -315,6 +315,5 @@ async def test_시도를_열어_초안을_비우면_곧바로_알린다(store: S
             activities.generate, PreparedChatExecution("e1", "t1", "u1", "ko", "claude-haiku-4-5")
         )
 
-    # 이 쓰기가 초안을 비우므로 알리지 않으면 화면이 이전 시도의 글을 재전송 주기까지 그대로 든다.
     assert wakeup.published[0] == "e1"
     assert store.rows("chat_executions")[0]["draft_text"] == ""

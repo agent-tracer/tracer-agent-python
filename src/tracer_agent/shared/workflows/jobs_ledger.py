@@ -70,7 +70,7 @@ SELECT * FROM ai_job_steps
 
 _SELECT_PENDING = """
 SELECT * FROM ai_jobs
- WHERE kind = $1 AND status = 'pending'
+ WHERE user_id = $1 AND kind = $2 AND status = 'pending'
  ORDER BY created_at ASC
 """
 
@@ -78,11 +78,6 @@ _HISTORY_SELECT = "SELECT * FROM ai_jobs"
 _HISTORY_COUNT = "SELECT count(*) AS total FROM ai_jobs"
 
 _SELECT_LATEST_TAIL = " ORDER BY created_at DESC LIMIT 1"
-
-
-def carries_content(step: AgentStepDTO) -> bool:
-    """텍스트도 도구 호출도 없는 스텝은 궤적에 아무 의미도 싣지 못한다."""
-    return bool(step.content.strip()) or bool(step.toolCalls)
 
 
 class JobLedger:
@@ -160,7 +155,7 @@ class JobLedger:
     ) -> None:
         """이번 시도가 남긴 궤적을 시도 회차와 순번으로 나뉘어 적는다."""
         for step in steps:
-            if not carries_content(step):
+            if not step.carries_content():
                 continue
             await self._sql.fetch(
                 _INSERT_STEP,
@@ -190,9 +185,9 @@ class JobLedger:
         """그 잡이 남긴 궤적을 시도와 순번의 오름차순으로 읽는다."""
         return await self._sql.fetch(_SELECT_STEPS, job_id, user_id)
 
-    async def pending(self, kind: str) -> list[SqlRow]:
-        """이 종류의 대기 잡을 접수 시각의 오름차순으로 읽는다."""
-        return await self._sql.fetch(_SELECT_PENDING, kind)
+    async def pending(self, user_id: str, kind: str) -> list[SqlRow]:
+        """이 사용자와 종류의 대기 잡을 접수 시각의 오름차순으로 읽는다."""
+        return await self._sql.fetch(_SELECT_PENDING, user_id, kind)
 
     async def history(
         self, user_id: str, kind: str | None, status: str | None, limit: int, offset: int

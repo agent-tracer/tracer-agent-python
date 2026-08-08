@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 
 from ...shared.agents.runtime.ledger import LedgerSql
-from ...shared.agents.shared.models import AgentStepDTO
 from ...shared.workflows.jobs_ledger import JobLedger
+from ...shared.workflows.jobs_spec import JobOutcome
 
 _INSERT_OBSERVATION = """
 INSERT INTO agent_run_observations (
@@ -31,21 +29,6 @@ RETURNING execution_id
 """
 
 
-@dataclass(frozen=True)
-class JobOutcome:
-    """잡 하나가 남기고 끝나는 종료 상태와 산출과 사용량과 궤적이다."""
-
-    job_id: str
-    user_id: str
-    status: str
-    attempt: int
-    result: dict[str, Any] = field(default_factory=dict)
-    usage: dict[str, Any] = field(default_factory=dict)
-    error: str | None = None
-    steps: list[AgentStepDTO] = field(default_factory=list)
-    observation: dict[str, Any] | None = None
-
-
 class JobExecutionWriter:
     """잡의 종료 전이와 궤적과 관측을 한 트랜잭션으로 적는다."""
 
@@ -57,7 +40,12 @@ class JobExecutionWriter:
         """잡의 종료 상태와 궤적과 관측을 함께 적고 전이가 받아들여졌는지 낸다."""
         async with self._sql.transaction():
             if outcome.observation is not None:
-                await self._sql.fetch(_INSERT_OBSERVATION, outcome.user_id, outcome.observation, now)
+                await self._sql.fetch(
+                    _INSERT_OBSERVATION,
+                    outcome.user_id,
+                    outcome.observation.model_dump(mode="json"),
+                    now,
+                )
             await self._ledger.record_steps(
                 outcome.job_id, outcome.user_id, outcome.attempt, outcome.steps, now
             )

@@ -2,33 +2,40 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Coroutine
 from datetime import timedelta
+from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import is_cancelled_exception
 
-from ...shared.agents.shared.json_view import JsonObject, JsonValue
-from ...shared.workflows.jobs_spec import (
-    AGENT_JOB_WORKFLOW,
-    FAIL_AGENT_JOB_ACTIVITY,
-    FINALIZE_AGENT_JOB_ACTIVITY,
-    GENERATE_AGENT_JOB_ACTIVITY,
-    GENERATE_TASK_QUEUE,
-    JOB_CANCEL_SETTLE_TIMEOUT_S,
-    JOB_FINALIZE_MAX_ATTEMPTS,
-    JOB_FINALIZE_TIMEOUT_S,
-    JOB_GENERATE_MAX_ATTEMPTS,
-    JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
-    JOB_GENERATE_TIMEOUT_S,
-    JOB_HEARTBEAT_TIMEOUT_S,
-    JOB_PREPARE_MAX_ATTEMPTS,
-    JOB_PREPARE_TIMEOUT_S,
-    PREPARE_AGENT_JOB_ACTIVITY,
-    SETTLE_CANCELED_JOB_ACTIVITY,
-    AgentJobRequest,
-    AgentJobSettlement,
-)
+from ...shared.agents.shared.json_view import JsonObject
+
+# 종결 값의 모양은 계약 파일을 읽어 세워지므로 샌드박스가 그 모듈을 다시 실행하지 않게 그대로 들여온다.
+with workflow.unsafe.imports_passed_through():
+    from ...shared.workflows.jobs_spec import (
+        AGENT_JOB_WORKFLOW,
+        FAIL_AGENT_JOB_ACTIVITY,
+        FINALIZE_AGENT_JOB_ACTIVITY,
+        GENERATE_AGENT_JOB_ACTIVITY,
+        GENERATE_TASK_QUEUE,
+        JOB_CANCEL_SETTLE_TIMEOUT_S,
+        JOB_FINALIZE_MAX_ATTEMPTS,
+        JOB_FINALIZE_TIMEOUT_S,
+        JOB_GENERATE_MAX_ATTEMPTS,
+        JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
+        JOB_GENERATE_TIMEOUT_S,
+        JOB_HEARTBEAT_TIMEOUT_S,
+        JOB_PREPARE_MAX_ATTEMPTS,
+        JOB_PREPARE_TIMEOUT_S,
+        PREPARE_AGENT_JOB_ACTIVITY,
+        SETTLE_CANCELED_JOB_ACTIVITY,
+        AgentJobRequest,
+        AgentJobSettlement,
+        GeneratedAgentJob,
+    )
 
 
 @workflow.defn(name=AGENT_JOB_WORKFLOW)
@@ -41,20 +48,23 @@ class AgentJobWorkflow:
         try:
             prepared = await self._prepare(request)
             generated = await self._generate(AgentJobRequest(kind=request.kind, payload=prepared))
-            await self._finalize(
-                AgentJobSettlement(
-                    kind=request.kind,
-                    payload=prepared,
-                    outcome=_object(generated["outcome"]),
-                    response=_object(generated["response"]),
+            # 종결이 취소 뒤에도 끝까지 실행돼야 이번 시도의 궤적과 관측과 사용량이 원장에 남는다.
+            await _closing(
+                self._finalize(
+                    AgentJobSettlement(
+                        kind=request.kind,
+                        payload=prepared,
+                        outcome=generated.outcome,
+                        response=generated.response,
+                    )
                 )
             )
         except BaseException as error:
             # 액티비티가 시작도 못 하고 끝나면 원장 전이가 전혀 안 돌므로 워크플로가 직접 닫는다.
             if is_cancelled_exception(error):
-                await self._settle_canceled(request)
+                await _closing(self._settle_canceled(request))
             else:
-                await self._fail(request, str(error))
+                await _closing(self._fail(request, str(error)))
             raise
 
     async def _prepare(self, request: AgentJobRequest) -> JsonObject:
@@ -66,10 +76,11 @@ class AgentJobWorkflow:
         )
         return prepared
 
-    async def _generate(self, request: AgentJobRequest) -> JsonObject:
-        generated: JsonObject = await workflow.execute_activity(
+    async def _generate(self, request: AgentJobRequest) -> GeneratedAgentJob:
+        generated: GeneratedAgentJob = await workflow.execute_activity(
             GENERATE_AGENT_JOB_ACTIVITY,
             request,
+            result_type=GeneratedAgentJob,
             task_queue=GENERATE_TASK_QUEUE,
             start_to_close_timeout=timedelta(seconds=JOB_GENERATE_TIMEOUT_S),
             schedule_to_close_timeout=timedelta(seconds=JOB_GENERATE_SCHEDULE_TO_CLOSE_S),
@@ -110,8 +121,11 @@ class AgentJobWorkflow:
         )
 
 
-def _object(value: JsonValue) -> JsonObject:
-    """액티비티가 낸 JSON 마디를 객체로 받으며 다른 모양이면 그 단계가 계약을 어긴 것이다."""
-    if not isinstance(value, dict):
-        raise TypeError(f"agent job stage returned {type(value).__name__} where an object was required")
-    return value
+async def _closing(closing: Coroutine[Any, Any, None]) -> None:
+    """원장을 닫는 액티비티는 취소가 이미 걸린 스코프에서도 끝까지 돌아야 한다."""
+    running = asyncio.ensure_future(closing)
+    try:
+        await asyncio.shield(running)
+    except asyncio.CancelledError:
+        await running
+        raise

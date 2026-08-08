@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
-from temporalio.exceptions import is_cancelled_exception
+from temporalio.exceptions import ApplicationError, is_cancelled_exception
 
 from tests.support.fakes import (
     TRACER_API_URL,
@@ -21,11 +21,14 @@ from tests.support.prompts import JOB_PROMPTS
 from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, PooledSql
+from tracer_agent.shared.agents.shared.agent_response import AgentResponse
+from tracer_agent.shared.agents.shared.models import AgentStepDTO
 from tracer_agent.shared.workflows.jobs_envelope import JobExecutionEnvelope
 from tracer_agent.shared.workflows.jobs_input import MAX_SUGGESTIONS_CAP
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
 from tracer_agent.shared.workflows.jobs_ledger import JobLedger
-from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest, AgentJobSettlement
+from tracer_agent.shared.workflows.jobs_spec import AgentJobRequest, AgentJobSettlement, JobOutcome
+from tracer_agent.worker.agents.recipe_scan.outputs import RECIPES_PATH
 from tracer_agent.worker.agents.runtime.llm.client import ChatPair
 from tracer_agent.worker.workflows.jobs_activities import AgentJobActivities, merge_envelope
 
@@ -103,9 +106,7 @@ async def run_job(activities: AgentJobActivities, kind: AgentJobKind, payload: d
     try:
         prepared = await activities.prepare(request)
         generated = await activities.generate(AgentJobRequest(kind, prepared))
-        await activities.finalize(
-            AgentJobSettlement(kind, prepared, generated["outcome"], generated["response"])
-        )
+        await activities.finalize(AgentJobSettlement(kind, prepared, generated.outcome, generated.response))
     except BaseException as error:
         if not is_cancelled_exception(error):
             await activities.fail(request, str(error))
@@ -510,8 +511,8 @@ async def test_종결이_받는_값에_자격이_실리지_않는다(http: Captu
 
     generated = await activities.generate(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
-    assert "apiKey" not in generated["outcome"]
-    assert "apiKey" not in generated["response"]
+    assert "apiKey" not in generated.outcome.model_dump(mode="json")
+    assert "apiKey" not in generated.response.model_dump(mode="json")
 
 
 def _settings_source(rows: dict[str, str]) -> _StaticSql:
@@ -607,3 +608,165 @@ async def test_준비가_제목_제안에는_개수_설정을_싣지_않는다(h
     prepared = await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
 
     assert "maxSuggestions" not in prepared
+
+
+def _recording_tracer() -> tuple[httpx.AsyncClient, list[httpx.Request]]:
+    """추적 창구로 나간 요청을 순서대로 적고 빈 성공 봉투만 답하는 진입점을 낸다."""
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"ok": True, "data": {}})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handle)), seen
+
+
+def _scan_settlement(job_id: str) -> AgentJobSettlement:
+    """생성이 정상 완료로 낸 레시피 스캔 종결 값이다."""
+    data: dict[str, Any] = {"recipes": [{"title": "한 벌", "intent": "고친다"}]}
+    response = AgentResponse(data=data, modelUsed="claude-haiku-4-5", durationMs=10)
+    outcome = JobOutcome(job_id=job_id, user_id="user-1", status="completed", attempt=1, result=data)
+    payload = {"executionId": job_id, "userId": "user-1", "taskId": "task-1"}
+    return AgentJobSettlement(AgentJobKind.RECIPE_SCAN, payload, outcome, response)
+
+
+async def _scan_ledger(job_id: str) -> SqliteLedgerSql:
+    """레시피 스캔 잡 한 행이 대기 중으로 선 원장을 낸다."""
+    execution_sql = SqliteLedgerSql()
+    await JobLedger(execution_sql).claim(
+        job_id, "user-1", "recipe.scan", "temporal", None, None, None, {}, NOW
+    )
+    return execution_sql
+
+
+async def test_살아_있는_잡은_종결이_산출을_배달하고_완료를_알린다() -> None:
+    execution_sql = await _scan_ledger("e10")
+    notifier = CapturingNotifier()
+    tracer, seen = _recording_tracer()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, tracer, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+    )
+
+    await activities.finalize(_scan_settlement("e10"))
+
+    assert execution_sql.rows("ai_jobs")[0]["status"] == "completed"
+    assert [entry[1]["status"] for entry in notifier.published] == ["completed"]
+    assert [request.url.path for request in seen] == [RECIPES_PATH]
+    await tracer.aclose()
+    execution_sql.close()
+
+
+async def test_취소된_잡은_종결이_산출을_배달하지_않고_완료를_알리지_않는다() -> None:
+    execution_sql = await _scan_ledger("e11")
+    await JobLedger(execution_sql).cancel("e11", NOW)
+    notifier = CapturingNotifier()
+    tracer, seen = _recording_tracer()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, tracer, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+    )
+
+    await activities.finalize(_scan_settlement("e11"))
+
+    assert execution_sql.rows("ai_jobs")[0]["status"] == "canceled"
+    assert notifier.published == []
+    assert seen == []
+    await tracer.aclose()
+    execution_sql.close()
+
+
+async def test_취소된_잡도_이번_시도의_궤적은_원장에_남는다() -> None:
+    execution_sql = await _scan_ledger("e12")
+    await JobLedger(execution_sql).cancel("e12", NOW)
+    tracer, _ = _recording_tracer()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, tracer, _StaticSql(execution_sql), JOB_PROMPTS
+    )
+    settlement = _scan_settlement("e12")
+    settlement.outcome.steps = [AgentStepDTO(seq=1, role="assistant", content="한 줄")]
+
+    await activities.finalize(settlement)
+
+    assert [row["content"] for row in execution_sql.rows("ai_job_steps")] == ["한 줄"]
+    await tracer.aclose()
+    execution_sql.close()
+
+
+async def test_이미_실패로_닫힌_잡은_취소_알림을_다시_내지_않는다() -> None:
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e13")
+    await JobLedger(execution_sql).settle("e13", "failed", {}, {}, "무너졌다", NOW)
+    notifier = CapturingNotifier()
+    tracer, _ = _recording_tracer()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, tracer, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+    )
+
+    await activities.fail(
+        AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, {"executionId": "e13", "userId": "user-1"}), "다시"
+    )
+
+    assert execution_sql.rows("ai_jobs")[0]["error"] == "무너졌다"
+    assert notifier.published == []
+    await tracer.aclose()
+    execution_sql.close()
+
+
+async def test_취소로_닫힌_잡은_준비가_실행_중으로_옮기지_못하고_거절한다(
+    http: CapturingCompletionClient,
+) -> None:
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e14")
+    await JobLedger(execution_sql).cancel("e14", NOW)
+    notifier = CapturingNotifier()
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS, None, notifier
+    )
+    payload = {
+        "model": "claude-haiku-4-5",
+        "apiKey": "sk-test",
+        "modelRates": WIRE_MODEL_RATES,
+        "limits": WIRE_LIMITS,
+        "taskId": "task-1",
+        "userId": "user-1",
+        "language": "ko",
+        "context": _TITLE_CONTEXT,
+        "executionId": "e14",
+    }
+
+    with pytest.raises(ApplicationError) as rejected:
+        await activities.prepare(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload))
+
+    assert rejected.value.non_retryable is True
+    assert execution_sql.rows("ai_jobs")[0]["status"] == "canceled"
+    assert notifier.published == []
+    execution_sql.close()
+
+
+async def test_이미_실행_중인_잡은_준비가_다시_돌아도_시도를_이어_센다(
+    http: CapturingCompletionClient,
+) -> None:
+    execution_sql = SqliteLedgerSql()
+    await claim(execution_sql, "e15")
+    activities = AgentJobActivities(  # type: ignore[arg-type]
+        TRACER_API_URL, http, _StaticSql(execution_sql), JOB_PROMPTS
+    )
+    payload = {
+        "model": "claude-haiku-4-5",
+        "apiKey": "sk-test",
+        "modelRates": WIRE_MODEL_RATES,
+        "limits": WIRE_LIMITS,
+        "taskId": "task-1",
+        "userId": "user-1",
+        "language": "ko",
+        "context": _TITLE_CONTEXT,
+        "executionId": "e15",
+    }
+    request = AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, payload)
+
+    await activities.prepare(request)
+    await activities.prepare(request)
+
+    row = execution_sql.rows("ai_jobs")[0]
+    assert row["status"] == "running"
+    assert row["attempts"] == 2
+    execution_sql.close()

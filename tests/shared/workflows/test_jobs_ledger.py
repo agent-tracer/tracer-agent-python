@@ -222,3 +222,13 @@ async def test_남의_잡_궤적은_읽히지_않는다(store: SqliteLedgerSql) 
     await ledger.record_steps("j1", "u1", 1, [AgentStepDTO(seq=0, role="assistant", content="mine")], NOW)
 
     assert await ledger.steps("j1", "u2") == []
+
+
+async def test_대기_조회는_그_사용자의_행만_읽는다(store: SqliteLedgerSql) -> None:
+    ledger = JobLedger(store)
+    await claim(ledger)
+    await ledger.claim("j2", "u2", "title.suggestion", "temporal", None, None, None, {}, NOW)
+
+    rows = await ledger.pending("u1", "title.suggestion")
+
+    assert [row["id"] for row in rows] == ["j1"]

@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import httpx
 
 from ..agents.shared.json_view import JsonValue
+from ..agents.shared.wire import MalformedEnvelope, unwrap_envelope
 
 ANCHOR_PATH = "/api/v1/events/{event_id}"
 TASK_ANCHOR_PATH = "/api/v1/tasks/{task_id}"
@@ -99,6 +100,7 @@ def _data(response: httpx.Response) -> JsonValue:
         body = response.json()
     except ValueError as malformed:
         raise AnchorUnavailable("anchor is not JSON") from malformed
-    if not isinstance(body, dict) or body.get("ok") is not True:
-        raise AnchorUnavailable("anchor answered outside the success envelope")
-    return body.get("data")
+    try:
+        return unwrap_envelope(body)
+    except MalformedEnvelope as malformed:
+        raise AnchorUnavailable("anchor answered outside the success envelope") from malformed

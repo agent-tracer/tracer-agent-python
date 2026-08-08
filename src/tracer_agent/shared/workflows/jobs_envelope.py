@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-
-import httpx
-from temporalio.exceptions import ApplicationError
+from typing import ClassVar, Protocol
 
 from ..agents.shared.json_view import JsonObject
+from .envelope_client import ENVELOPE_TIMEOUT_S, InternalEnvelopeClient
+
+__all__ = [
+    "ENVELOPE_PATH",
+    "ENVELOPE_TIMEOUT_S",
+    "ENVELOPE_UNAVAILABLE",
+    "JobEnvelopeClient",
+    "JobEnvelopeSource",
+    "JobExecutionEnvelope",
+]
 
 # 배포 단위 사이에서만 오가는 창구이며 edge가 바깥에 열지 않는다.
 ENVELOPE_PATH = "/internal/jobs/{kind}/envelope"
-ENVELOPE_TIMEOUT_S = 20.0
 ENVELOPE_UNAVAILABLE = "job.envelope-unavailable"
 
 
@@ -36,68 +42,38 @@ class JobEnvelopeSource(Protocol):
         ...
 
 
-class JobEnvelopeClient:
+class JobEnvelopeClient(InternalEnvelopeClient):
     """잡 종류와 사용자로 실행 시도 하나가 쓸 봉투를 만들어 주는 agent-api 창구다."""
 
-    def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
-        self._client = client
-        self._base_url = base_url.rstrip("/")
+    error_type: ClassVar[str] = ENVELOPE_UNAVAILABLE
+    label: ClassVar[str] = "job envelope"
 
     async def issue(self, kind: str, user_id: str) -> JobExecutionEnvelope:
-        """이 잡 종류와 사용자가 쓸 모델과 자격과 단가와 한도를 받아 실행 봉투로 낸다."""
-        path = ENVELOPE_PATH.format(kind=kind)
-        try:
-            response = await self._client.post(
-                f"{self._base_url}{path}", json={"userId": user_id}, timeout=ENVELOPE_TIMEOUT_S
-            )
-        except httpx.HTTPError as unreachable:
-            raise ApplicationError(
-                f"job envelope unreachable: {unreachable}", type=ENVELOPE_UNAVAILABLE
-            ) from unreachable
-        if response.status_code >= 400:
-            raise ApplicationError(
-                f"job envelope HTTP {response.status_code}: {response.text[:500]}",
-                type=ENVELOPE_UNAVAILABLE,
-                # 같은 실행으로 다시 물어도 같은 답이 오는 거절이라 다시 실행하지 않는다.
-                non_retryable=response.status_code < 500,
-            )
-        return _envelope(_data(response))
+        """이 잡 종류와 사용자가 쓸 모델과 자격과 한도를 받아 실행 봉투로 낸다."""
+        data = await self._post(ENVELOPE_PATH.format(kind=kind), {"userId": user_id})
+        return self._envelope(data)
 
-
-def _data(response: httpx.Response) -> JsonObject:
-    try:
-        body = response.json()
-    except ValueError as malformed:
-        raise ApplicationError(
-            "job envelope is not JSON", type=ENVELOPE_UNAVAILABLE, non_retryable=True
-        ) from malformed
-    data = body.get("data") if isinstance(body, dict) else None
-    if not isinstance(data, dict):
-        raise ApplicationError("job envelope has no data", type=ENVELOPE_UNAVAILABLE, non_retryable=True)
-    return data
-
-
-def _envelope(data: JsonObject) -> JobExecutionEnvelope:
-    model = data.get("model")
-    fallback_model = data.get("fallbackModel")
-    api_key = data.get("apiKey")
-    model_rates = data.get("modelRates")
-    limits = data.get("limits")
-    deadline_ms = data.get("deadlineMs")
-    if (
-        not isinstance(model, str)
-        or not isinstance(api_key, str)
-        or not isinstance(model_rates, dict)
-        or not isinstance(limits, dict)
-        or not isinstance(deadline_ms, int)
-        or not (fallback_model is None or isinstance(fallback_model, str))
-    ):
-        raise ApplicationError("job envelope is malformed", type=ENVELOPE_UNAVAILABLE, non_retryable=True)
-    return JobExecutionEnvelope(
-        model=model,
-        fallback_model=fallback_model,
-        api_key=api_key,
-        model_rates=model_rates,
-        limits=limits,
-        deadline_ms=deadline_ms,
-    )
+    def _envelope(self, data: JsonObject) -> JobExecutionEnvelope:
+        model = data.get("model")
+        fallback_model = data.get("fallbackModel")
+        api_key = data.get("apiKey")
+        model_rates = data.get("modelRates")
+        limits = data.get("limits")
+        deadline_ms = data.get("deadlineMs")
+        if (
+            not isinstance(model, str)
+            or not isinstance(api_key, str)
+            or not isinstance(model_rates, dict)
+            or not isinstance(limits, dict)
+            or not isinstance(deadline_ms, int)
+            or not (fallback_model is None or isinstance(fallback_model, str))
+        ):
+            raise self._failed("is malformed", final=True)
+        return JobExecutionEnvelope(
+            model=model,
+            fallback_model=fallback_model,
+            api_key=api_key,
+            model_rates=model_rates,
+            limits=limits,
+            deadline_ms=deadline_ms,
+        )

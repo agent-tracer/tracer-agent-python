@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterable
 from typing import Any
 
 import pytest
 from temporalio import workflow
+from temporalio.exceptions import ApplicationError
 
 from tracer_agent.shared.workflows.chat_spec import (
     CHAT_ENQUEUE_SIGNAL,
     CHAT_EXECUTION_WORKFLOW,
     CHAT_THREAD_WORKFLOW,
     NEXT_EXECUTION_ACTIVITY,
+    PREPARE_ACTIVITY,
+    THREAD_BUSY_FAILURE,
+    THREAD_BUSY_MAX_ROUNDS,
+    THREAD_MAX_CHILDREN,
     ChatExecutionRequest,
     ChatThreadRequest,
 )
@@ -115,3 +121,62 @@ async def test_같은_실행이_연달아_실패하면_회차를_접는다(monke
 
     # 실패한 실행이 원장에 대기로 남아도 같은 회차에서 다시 실행하지 않는다.
     assert driver.started == ["e1"]
+
+
+class _ContinuedAsNew(Exception):
+    """continue_as_new 가 실행을 끊는 자리를 대역이 대신 세운다."""
+
+
+class ContinueDriver(ThreadDriver):
+    """상한을 넘길 만큼 대기 줄을 채우고 새 실행으로 넘어간 요청을 보관한다."""
+
+    def __init__(self, queued: Iterable[str]) -> None:
+        super().__init__(queued)
+        self.continued: list[Any] = []
+
+    def continue_as_new(self, request: Any) -> None:
+        self.continued.append(request)
+        raise _ContinuedAsNew
+
+
+async def test_상한만큼_실행한_스레드는_새_실행으로_넘어간다(monkeypatch: pytest.MonkeyPatch) -> None:
+    driver = ContinueDriver(queued=[f"e{index}" for index in range(THREAD_MAX_CHILDREN + 5)])
+    drive(monkeypatch, driver)
+    monkeypatch.setattr(workflow, "continue_as_new", driver.continue_as_new)
+
+    with pytest.raises(_ContinuedAsNew):
+        await ChatThreadWorkflow().run(ChatThreadRequest("t1"))
+
+    assert len(driver.started) == THREAD_MAX_CHILDREN
+    assert [request.thread_id for request in driver.continued] == ["t1"]
+
+
+class BusyDriver:
+    """준비를 언제나 잠긴 스레드로 거절하고 실행이 남긴 종결 사유를 보관한다."""
+
+    def __init__(self) -> None:
+        self.prepared = 0
+        self.failed: list[str] = []
+
+    async def execute_activity(self, name: str, arg: Any, **_options: Any) -> Any:
+        if name == PREPARE_ACTIVITY:
+            self.prepared += 1
+            raise ApplicationError("thread busy", type=THREAD_BUSY_FAILURE)
+        self.failed.append(arg.execution_id)
+        return None
+
+    async def sleep(self, _seconds: float) -> None:
+        return None
+
+
+async def test_회차를_다_쓰면_잠긴_스레드를_더_기다리지_않는다(monkeypatch: pytest.MonkeyPatch) -> None:
+    driver = BusyDriver()
+    monkeypatch.setattr(workflow, "execute_activity", driver.execute_activity)
+    monkeypatch.setattr(asyncio, "sleep", driver.sleep)
+
+    with pytest.raises(ApplicationError) as raised:
+        await ChatExecutionWorkflow().run(ChatExecutionRequest("e1", "t1"))
+
+    assert raised.value.type == THREAD_BUSY_FAILURE
+    assert driver.prepared == THREAD_BUSY_MAX_ROUNDS
+    assert driver.failed == ["e1"]

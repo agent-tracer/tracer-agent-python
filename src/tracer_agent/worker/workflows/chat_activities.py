@@ -34,7 +34,7 @@ from ..agents.chat.agent import AGENT_NAME, run_chat
 from ..agents.chat.execution_writer import ChatExecutionWriter
 from ..agents.chat.prompts import build_system_prompt
 from ..agents.runtime.checkpoint import GraphCheckpointProvider
-from ..agents.runtime.execution.runner import AgentBody, execute
+from ..agents.runtime.execution.runner import AgentBody, ExecutionRequest, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.llm.client import ChatPair
 from ..agents.shared.prompt_source_port import AgentPrompt
@@ -101,29 +101,30 @@ class ChatExecutionActivities:
         envelope = await self._envelopes.issue(prepared.execution_id, attempt)
         request = turn_request(prepared, envelope.fields)
         await self._begin_attempt(prepared, attempt, envelope.draft_token_hash)
-        traces: list[ExecutionTrace] = []
+        # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓸 궤적을 이 액티비티가 소유한다.
+        trace = ExecutionTrace()
         heartbeat = asyncio.ensure_future(_heartbeat())
         try:
             response = await execute(
-                AGENT_NAME,
-                request.model,
-                request.deadlineMs,
-                _body(traces, request, self._http, self._checkpoints, self._prompt, self._make_chats),
-                None,
-                None,
-                f"{prepared.execution_id}:{attempt}",
-                execution_id=prepared.execution_id,
-                attempt_id=str(attempt),
-                prompt_version=self._prompt.version(),
-                tool_contract_version=self._prompt.tool_contract_version,
+                ExecutionRequest(
+                    label=AGENT_NAME,
+                    model=request.model,
+                    deadline_ms=request.deadlineMs,
+                    prompt_version=self._prompt.version(),
+                    tool_contract_version=self._prompt.tool_contract_version,
+                    execution_id=prepared.execution_id,
+                    attempt_id=str(attempt),
+                ),
+                _body(request, self._http, self._checkpoints, self._prompt, self._make_chats),
+                trace,
             )
         except asyncio.CancelledError:
             # 취소된 턴도 그때까지 모델이 쓴 답변과 궤적을 남겨야 화면에 보인 것이 사라지지 않는다.
-            return canceled_turn(prepared, attempt, request, _trace(traces), self._prompt)
+            return canceled_turn(prepared, attempt, request, trace, self._prompt)
         finally:
             heartbeat.cancel()
         if response.observation is not None and response.observation.status == "cancelled":
-            return canceled_turn(prepared, attempt, request, _trace(traces), self._prompt)
+            return canceled_turn(prepared, attempt, request, trace, self._prompt)
         if response.error is not None and response.observation is not None:
             async with self._sql.connect() as sql:
                 await ChatExecutionWriter(sql).record_observation(
@@ -199,10 +200,6 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _trace(traces: list[ExecutionTrace]) -> ExecutionTrace:
-    return traces[0] if traces else ExecutionTrace()
-
-
 async def _heartbeat() -> None:
     while True:
         await asyncio.sleep(HEARTBEAT_INTERVAL_S)
@@ -210,7 +207,6 @@ async def _heartbeat() -> None:
 
 
 def _body(
-    traces: list[ExecutionTrace],
     request: ChatRequest,
     http_client: httpx.AsyncClient,
     checkpoints: GraphCheckpointProvider,
@@ -220,8 +216,6 @@ def _body(
     chats = None if make_chats is None else make_chats(request)
 
     async def run(trace: ExecutionTrace) -> JsonObject:
-        # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓰는 궤적을 보관해 둔다.
-        traces.append(trace)
         return await run_chat(request, http_client, trace, prompt, checkpoints, chats)
 
     return run

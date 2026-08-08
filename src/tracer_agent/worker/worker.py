@@ -6,7 +6,7 @@ import asyncio
 import logging
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -19,6 +19,7 @@ from ..shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
 from ..shared.agents.runtime.notification import JobStatusNotifier
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
+from ..shared.agents.shared.job_kinds import JOB_AGENT_NAMES
 from ..shared.config import Settings, get_settings
 from ..shared.workflows.chat_spec import (
     CHAT_EXECUTION_UPDATES_TOPIC,
@@ -54,11 +55,9 @@ JOB_HTTP_TIMEOUT_S = 30.0
 # 진행 중인 턴을 끊지 않고 마치도록 모델 호출 상한만큼 종료를 기다린다.
 SHUTDOWN_GRACE_S = 15 * 60.0
 
-JOB_AGENT_NAMES = ("title-suggestion", "recipe-scan", "task-cleanup")
 
 WorkerQueue = str
 JobActivity = Callable[..., Awaitable[Any]]
-QUEUE_ARGS = (CHAT_QUEUE_KEY, JOBS_QUEUE_KEY, GENERATE_QUEUE_KEY)
 
 
 @dataclass
@@ -130,7 +129,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
 def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Settings) -> Worker:
     """chat 워크플로 둘과 액티비티 넷만 소비하는 워커를 만든다."""
     activities = ChatExecutionActivities(
-        PooledSql(opened.ledger),
+        PooledSql(opened.ledger, settings.agent_db_acquire_timeout_s),
         opened.http_client,
         opened.checkpoints,
         ChatEnvelopeClient(opened.http_client, settings.agent_api_url),
@@ -158,7 +157,7 @@ def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobAc
     return AgentJobActivities(
         settings.tracer_api_url,
         opened.http_client,
-        PooledSql(opened.execution),
+        PooledSql(opened.execution, settings.agent_db_acquire_timeout_s),
         {name: source.resolve(name) for name in JOB_AGENT_NAMES},
         envelopes=JobEnvelopeClient(opened.http_client, settings.agent_api_url),
         notifier=JobStatusNotifier(opened.notifications, JOB_UPDATED_NOTIFICATION),
@@ -202,22 +201,39 @@ def build_generate_worker(client: Client, opened: JobWorkerResources, settings: 
     )
 
 
-async def _serve_chat(settings: Settings, client: Client) -> None:
-    async with chat_resources(settings) as opened:
-        dispatch = TemporalExecutionDispatch(TemporalClientProvider(_ready(client)))
-        swept = await resume_active_executions(PooledSql(opened.ledger), dispatch)
-        _log.info("chat.workflow.resumed recovered=%d resumed=%d", swept.recovered, swept.resumed)
-        await build_chat_worker(client, opened, settings).run()
+async def resume_chat_executions(client: Client, opened: Any) -> None:
+    """워커가 서기 전에 접수만 되고 시그널이 닿지 못한 실행을 다시 워크플로에 얹는다."""
+    dispatch = TemporalExecutionDispatch(TemporalClientProvider(_ready(client)))
+    swept = await resume_active_executions(PooledSql(opened.ledger), dispatch)
+    _log.info("chat.workflow.resumed recovered=%d resumed=%d", swept.recovered, swept.resumed)
 
 
-async def _serve_jobs(settings: Settings, client: Client) -> None:
-    async with job_resources(settings) as opened:
-        await build_job_worker(client, opened, settings).run()
+async def _nothing_to_resume(_client: Client, _opened: Any) -> None:
+    """다시 얹을 대기 줄을 갖지 않는 큐다."""
 
 
-async def _serve_generate(settings: Settings, client: Client) -> None:
-    async with job_resources(settings) as opened:
-        await build_generate_worker(client, opened, settings).run()
+@dataclass(frozen=True)
+class WorkerProfile:
+    """큐 하나가 여는 자원과 그 자원으로 세우는 워커와 기동 전에 할 일을 한 칸에 담는다."""
+
+    resources: Callable[[Settings], AbstractAsyncContextManager[Any]]
+    build: Callable[[Client, Any, Settings], Worker]
+    resume: Callable[[Client, Any], Awaitable[None]] = _nothing_to_resume
+
+    async def serve(self, settings: Settings, client: Client) -> None:
+        """이 큐의 자원을 열어 워커를 세우고 종료 신호가 올 때까지 폴링한다."""
+        async with self.resources(settings) as opened:
+            await self.resume(client, opened)
+            await self.build(client, opened, settings).run()
+
+
+# 큐를 더할 때 이 표에 한 줄을 더하며 기동 분기를 고치지 않는다.
+WORKER_PROFILES: dict[WorkerQueue, WorkerProfile] = {
+    CHAT_QUEUE_KEY: WorkerProfile(chat_resources, build_chat_worker, resume_chat_executions),
+    JOBS_QUEUE_KEY: WorkerProfile(job_resources, build_job_worker),
+    GENERATE_QUEUE_KEY: WorkerProfile(job_resources, build_generate_worker),
+}
+QUEUE_ARGS = tuple(WORKER_PROFILES)
 
 
 async def serve(queue: WorkerQueue) -> None:
@@ -229,12 +245,7 @@ async def serve(queue: WorkerQueue) -> None:
     open_sdk_metrics()
     client = await settings.connect_temporal()
     try:
-        if queue == JOBS_QUEUE_KEY:
-            await _serve_jobs(settings, client)
-        elif queue == GENERATE_QUEUE_KEY:
-            await _serve_generate(settings, client)
-        else:
-            await _serve_chat(settings, client)
+        await WORKER_PROFILES[queue].serve(settings, client)
     finally:
         shutdown_observability()
 

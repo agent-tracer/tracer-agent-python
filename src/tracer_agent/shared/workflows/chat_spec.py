@@ -48,7 +48,7 @@ FAIL_TIMEOUT_S = 60.0
 
 # 대화 간격보다 짧으면 매 턴이 차가운 워크플로 시작 비용을 내므로 이만큼 기다린다.
 THREAD_IDLE_S = 120.0
-# 이력이 무한정 자라지 않도록 이만큼 실행한 스레드는 남은 대기 줄과 함께 새 실행으로 넘어간다.
+# Temporal 이력이 무한정 자라지 않도록 스레드 하나가 한 실행에서 여는 자식 수에 두는 상한이다.
 THREAD_MAX_CHILDREN = 100
 
 STOP_COMPLETED = "completed"

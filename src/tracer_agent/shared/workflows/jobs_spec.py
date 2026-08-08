@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import BaseModel, Field
+
 from ..agents.shared.json_view import JsonObject
+from ..agents.shared.models import AgentResponse, AgentRunObservationDTO, AgentStepDTO
 from ..config import task_queue
 from .jobs_kinds import AgentJobKind
 
@@ -57,11 +60,33 @@ class AgentJobRequest:
     payload: JsonObject
 
 
+class JobOutcome(BaseModel):
+    """잡 하나가 남기고 끝나는 종료 상태와 산출과 사용량과 궤적이다."""
+
+    job_id: str
+    user_id: str
+    status: str
+    attempt: int
+    result: JsonObject = Field(default_factory=dict)
+    usage: JsonObject = Field(default_factory=dict)
+    error: str | None = None
+    steps: list[AgentStepDTO] = Field(default_factory=list)
+    observation: AgentRunObservationDTO | None = None
+
+
+@dataclass
+class GeneratedAgentJob:
+    """생성이 끝낸 실행의 종결 값과 응답이며 종결 단계가 그대로 받는다."""
+
+    outcome: JobOutcome
+    response: AgentResponse
+
+
 @dataclass
 class AgentJobSettlement:
     """생성이 끝낸 실행을 종결이 원장에 적는 데 필요한 값이며 자격을 싣지 않는다."""
 
     kind: AgentJobKind
     payload: JsonObject
-    outcome: JsonObject
-    response: JsonObject
+    outcome: JobOutcome
+    response: AgentResponse

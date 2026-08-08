@@ -10,6 +10,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..agents.recipe_scan.models import scan_anchor_conditions, scan_anchor_requirements
+from ..agents.shared.job_kinds import AgentJobKind
+from ..agents.shared.json_view import JsonObject
 from ..agents.shared.models import TrimmedStr
 from .jobs_anchor import ScanAnchorSource
 
@@ -49,6 +51,14 @@ class JobInput(BaseModel):
         """받아들일 수 없는 사유를 내며 앵커를 요구하지 않는 잡은 아무 사유도 내지 않는다."""
         return None
 
+    def task_id(self) -> str | None:
+        """원장의 task_id 칸에 실을 값이며 태스크에 매이지 않은 잡은 아무것도 내지 않는다."""
+        return None
+
+    def activity_payload(self, base: JsonObject) -> JsonObject:
+        """접수가 세운 공통 칸 위에 이 종류만 싣는 칸을 얹어 액티비티 입력을 짓는다."""
+        return dict(base)
+
 
 class RecipeScanJobInput(JobInput):
     """recipe-scan 접수가 받는 도메인 입력이며 태스크 소유권은 워커의 도구가 다시 검증한다."""
@@ -66,11 +76,24 @@ class RecipeScanJobInput(JobInput):
         eligible = anchor.eligible(scan_anchor_requirements(), scan_anchor_conditions(self.trigger))
         return None if eligible else INELIGIBLE_SCAN_ANCHOR
 
+    def task_id(self) -> str | None:
+        return self.taskId
+
+    def activity_payload(self, base: JsonObject) -> JsonObject:
+        language = {} if self.language is None else {"language": self.language}
+        return {**base, "taskId": self.taskId, **language, "userPrompt": self.userPrompt}
+
 
 class TitleSuggestionJobInput(JobInput):
     """title-suggestion 접수가 받는 도메인 입력이며 대화 컨텍스트는 워커가 직접 조립한다."""
 
     taskId: TrimmedStr = Field(min_length=1, max_length=64)
+
+    def task_id(self) -> str | None:
+        return self.taskId
+
+    def activity_payload(self, base: JsonObject) -> JsonObject:
+        return {**base, "taskId": self.taskId}
 
 
 class TaskCleanupFilters(BaseModel):
@@ -86,52 +109,36 @@ class TaskCleanupJobInput(JobInput):
 
     filters: TaskCleanupFilters = Field(default_factory=TaskCleanupFilters)
 
+    def activity_payload(self, base: JsonObject) -> JsonObject:
+        requested = self.filters.maxSuggestions
+        return {**base, **({} if requested is None else {"maxSuggestions": requested})}
+
 
 # 잡 종류마다 다른 접수 입력 모델이며 워커가 스스로 채우는 문맥·후보 배치는 여기 싣지 않는다.
 INPUT_MODEL_BY_KIND: dict[str, type[JobInput]] = {
-    "recipe.scan": RecipeScanJobInput,
-    "title.suggestion": TitleSuggestionJobInput,
-    "task.cleanup": TaskCleanupJobInput,
+    AgentJobKind.RECIPE_SCAN.wire: RecipeScanJobInput,
+    AgentJobKind.TITLE_SUGGESTION.wire: TitleSuggestionJobInput,
+    AgentJobKind.TASK_CLEANUP.wire: TaskCleanupJobInput,
 }
 
 
-def task_id_of(job_input: BaseModel) -> str | None:
-    """태스크에 매인 잡 종류만 원장의 task_id 칸에 실을 값을 갖는다."""
-    task_id = getattr(job_input, "taskId", None)
-    return task_id if isinstance(task_id, str) else None
-
-
 def build_payload(
-    job_input: BaseModel,
+    job_input: JobInput,
     user_id: str,
     execution_id: str,
     idempotency_key: str | None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """잡 종류에 맞는 액티비티 입력을 지으며 문맥과 후보 배치와 설정에서 오는 칸은 준비가 채운다."""
-    base = {
-        "userId": user_id,
-        "executionId": execution_id,
-        "idempotencyKey": idempotency_key,
-    }
-    if isinstance(job_input, RecipeScanJobInput):
-        return {
-            **base,
-            "taskId": job_input.taskId,
-            **({"language": job_input.language} if job_input.language is not None else {}),
-            "userPrompt": job_input.userPrompt,
-        }
-    if isinstance(job_input, TitleSuggestionJobInput):
-        return {**base, "taskId": job_input.taskId}
-    assert isinstance(job_input, TaskCleanupJobInput)
-    requested = job_input.filters.maxSuggestions
-    return {**base, **({"maxSuggestions": requested} if requested is not None else {})}
+    return job_input.activity_payload(
+        {"userId": user_id, "executionId": execution_id, "idempotencyKey": idempotency_key}
+    )
 
 
 # 같은 멱등키의 두 접수가 같은 입력인지 구분하는 칸이며 종류마다 이 순서로 적는다.
 IDEMPOTENCY_KEYS: dict[str, tuple[str, ...]] = {
-    "title.suggestion": ("taskId",),
-    "recipe.scan": ("taskId", "userPrompt", "language", "trigger"),
-    "task.cleanup": ("filters.maxSuggestions",),
+    AgentJobKind.TITLE_SUGGESTION.wire: ("taskId",),
+    AgentJobKind.RECIPE_SCAN.wire: ("taskId", "userPrompt", "language", "trigger"),
+    AgentJobKind.TASK_CLEANUP.wire: ("filters.maxSuggestions",),
 }
 
 

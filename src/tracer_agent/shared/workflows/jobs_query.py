@@ -6,8 +6,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..agents.runtime.dependencies import ExecutionSql, UserId
-from ..agents.shared.wire import SuccessEnvelope, error_envelope, error_responses
-from .jobs_intake import INVALID_REQUEST, JOBS_PATH, NOT_FOUND
+from ..agents.shared.job_kinds import JOB_KINDS
+from ..agents.shared.wire import INVALID_REQUEST, SuccessEnvelope, error_envelope, error_responses, ok
+from .jobs_enqueue import NOT_FOUND
+from .jobs_intake import JOBS_PATH
 from .jobs_ledger import JobLedger
 from .jobs_view import job_dto, job_step_dto
 
@@ -17,8 +19,8 @@ JOB_LATEST_PATH = f"{JOBS_PATH}/latest"
 JOB_PATH = f"{JOBS_PATH}/{{execution_id}}"
 JOB_STEPS_PATH = f"{JOB_PATH}/steps"
 
-# 원장에 남을 수 있는 잡의 종류이며 접수가 받는 것보다 넓다.
-JOB_LEDGER_KINDS: tuple[str, ...] = ("title.suggestion", "recipe.scan", "task.cleanup")
+# 원장에 남을 수 있는 잡의 종류이며 정본은 잡 종류 표 하나다.
+JOB_LEDGER_KINDS: tuple[str, ...] = JOB_KINDS
 JOB_STATUSES: tuple[str, ...] = ("pending", "running", "completed", "failed", "canceled")
 PENDING = "pending"
 
@@ -36,8 +38,8 @@ async def list_pending_jobs(request: Request, source: ExecutionSql, user_id: Use
     if kind not in JOB_LEDGER_KINDS or (status is not None and status != PENDING):
         return error_envelope(*INVALID_REQUEST)
     async with source.connect() as sql:
-        rows = await JobLedger(sql).pending(kind)
-    return _ok({"items": [job_dto(row) for row in rows if row["user_id"] == user_id]})
+        rows = await JobLedger(sql).pending(user_id, kind)
+    return ok({"items": [job_dto(row) for row in rows]})
 
 
 @router.get(JOB_HISTORY_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
@@ -54,7 +56,7 @@ async def list_job_history(request: Request, source: ExecutionSql, user_id: User
         return error_envelope(*INVALID_REQUEST)
     async with source.connect() as sql:
         rows, total = await JobLedger(sql).history(user_id, kind, status, *page)
-    return _ok({"items": [job_dto(row) for row in rows], "total": total})
+    return ok({"items": [job_dto(row) for row in rows], "total": total})
 
 
 @router.get(JOB_LATEST_PATH, response_model=SuccessEnvelope, responses=error_responses(400))
@@ -66,7 +68,7 @@ async def get_latest_job(request: Request, source: ExecutionSql, user_id: UserId
     task_id = request.query_params.get("taskId")
     async with source.connect() as sql:
         row = await JobLedger(sql).latest(user_id, kind, task_id or None)
-    return _ok({"job": None if row is None else job_dto(row)})
+    return ok({"job": None if row is None else job_dto(row)})
 
 
 @router.get(JOB_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
@@ -76,7 +78,7 @@ async def get_job(execution_id: str, source: ExecutionSql, user_id: UserId) -> J
         row = await JobLedger(sql).find(execution_id)
     if row is None or row["user_id"] != user_id:
         return error_envelope(*NOT_FOUND)
-    return _ok({"job": job_dto(row)})
+    return ok({"job": job_dto(row)})
 
 
 @router.get(JOB_STEPS_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
@@ -88,7 +90,7 @@ async def get_job_steps(execution_id: str, source: ExecutionSql, user_id: UserId
         if row is None or row["user_id"] != user_id:
             return error_envelope(*NOT_FOUND)
         steps = await ledger.steps(execution_id, user_id)
-    return _ok([job_step_dto(one) for one in steps])
+    return ok([job_step_dto(one) for one in steps])
 
 
 def _page(limit: str | None, offset: str | None) -> tuple[int, int] | None:
@@ -101,7 +103,3 @@ def _page(limit: str | None, offset: str | None) -> tuple[int, int] | None:
     if not 1 <= parsed_limit <= HISTORY_LIMIT_MAX or parsed_offset < 0:
         return None
     return parsed_limit, parsed_offset
-
-
-def _ok(data: object) -> JSONResponse:
-    return JSONResponse(status_code=200, content={"ok": True, "data": data})

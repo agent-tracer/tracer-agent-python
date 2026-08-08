@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
-import httpx
-from temporalio.exceptions import ApplicationError
+from ...shared.agents.shared.json_view import JsonObject
+from ...shared.workflows.envelope_client import ENVELOPE_TIMEOUT_S, InternalEnvelopeClient
+
+__all__ = [
+    "ENVELOPE_PATH",
+    "ENVELOPE_TIMEOUT_S",
+    "ENVELOPE_UNAVAILABLE",
+    "ChatEnvelopeClient",
+    "ChatEnvelopeSource",
+    "ChatExecutionEnvelope",
+]
 
 # 배포 단위 사이에서만 오가는 창구이며 edge가 바깥에 열지 않는다.
 ENVELOPE_PATH = "/internal/chat/executions/{execution_id}/envelope"
-ENVELOPE_TIMEOUT_S = 20.0
 ENVELOPE_UNAVAILABLE = "chat.envelope-unavailable"
 
 
@@ -30,53 +38,23 @@ class ChatEnvelopeSource(Protocol):
         ...
 
 
-class ChatEnvelopeClient:
+class ChatEnvelopeClient(InternalEnvelopeClient):
     """실행 시도 하나가 쓸 봉투를 만들어 주는 agent-api 창구다."""
 
-    def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
-        self._client = client
-        self._base_url = base_url.rstrip("/")
+    error_type: ClassVar[str] = ENVELOPE_UNAVAILABLE
+    label: ClassVar[str] = "chat envelope"
 
     async def issue(self, execution_id: str, attempt: int) -> ChatExecutionEnvelope:
         """이 시도가 쓸 단가와 한도와 자격을 받아 실행 봉투 조각으로 낸다."""
-        path = ENVELOPE_PATH.format(execution_id=execution_id)
-        try:
-            response = await self._client.post(f"{self._base_url}{path}", timeout=ENVELOPE_TIMEOUT_S)
-        except httpx.HTTPError as unreachable:
-            raise ApplicationError(
-                f"chat envelope unreachable: {unreachable}", type=ENVELOPE_UNAVAILABLE
-            ) from unreachable
-        if response.status_code >= 400:
-            raise ApplicationError(
-                f"chat envelope HTTP {response.status_code}: {response.text[:500]}",
-                type=ENVELOPE_UNAVAILABLE,
-                # 같은 실행으로 다시 물어도 같은 답이 오는 거절이라 다시 실행하지 않는다.
-                non_retryable=response.status_code < 500,
-            )
-        return _envelope(_data(response), attempt, self._base_url)
+        data = await self._post(ENVELOPE_PATH.format(execution_id=execution_id))
+        return self._envelope(data, attempt)
 
-
-def _data(response: httpx.Response) -> dict[str, Any]:
-    try:
-        body = response.json()
-    except ValueError as malformed:
-        raise ApplicationError(
-            "chat envelope is not JSON", type=ENVELOPE_UNAVAILABLE, non_retryable=True
-        ) from malformed
-    data = body.get("data") if isinstance(body, dict) else None
-    if not isinstance(data, dict):
-        raise ApplicationError("chat envelope has no data", type=ENVELOPE_UNAVAILABLE, non_retryable=True)
-    return data
-
-
-def _envelope(data: dict[str, Any], attempt: int, agent_api_base_url: str) -> ChatExecutionEnvelope:
-    draft = data.get("draft")
-    if not isinstance(draft, dict):
-        raise ApplicationError(
-            "chat envelope has no draft grant", type=ENVELOPE_UNAVAILABLE, non_retryable=True
-        )
-    fields = {key: value for key, value in data.items() if key != "draft"}
-    # 되읽기와 확인 창구는 에이전트의 것이므로 실행기가 자기 배포 단위의 주소로 그것을 부른다.
-    fields["agentApiBaseUrl"] = agent_api_base_url
-    fields["draftCallback"] = {"url": draft["url"], "token": draft["token"], "attempt": attempt}
-    return ChatExecutionEnvelope(fields=fields, draft_token_hash=str(draft["tokenHash"]))
+    def _envelope(self, data: JsonObject, attempt: int) -> ChatExecutionEnvelope:
+        draft = data.get("draft")
+        if not isinstance(draft, dict):
+            raise self._failed("has no draft grant", final=True)
+        fields = {key: value for key, value in data.items() if key != "draft"}
+        # 되읽기와 확인 창구는 에이전트의 것이므로 실행기가 자기 배포 단위의 주소로 그것을 부른다.
+        fields["agentApiBaseUrl"] = self._base_url
+        fields["draftCallback"] = {"url": draft["url"], "token": draft["token"], "attempt": attempt}
+        return ChatExecutionEnvelope(fields=fields, draft_token_hash=str(draft["tokenHash"]))
