@@ -2,6 +2,19 @@
 
 Chat 에이전트는 대화 이력, tracer 조회, agent job 조회, 장기기억 도구를 사용해 최신 사용자 요청에 답한다. 쓰기 도구는 직접 변경하지 않고 confirmation proposal을 생성하며, 답변과 제안 목록을 실행 원장과 스트림에 기록한다.
 
+## 구성 요소
+
+| 구성 요소 | 책임 |
+| --- | --- |
+| `ChatThreadWorkflow` | 스레드 하나의 대기 줄을 읽어 턴을 자식 워크플로로 연다 |
+| `ChatExecutionWorkflow` | 준비 → 생성 → 종결·실패 순서를 관리한다 |
+| `ChatExecutionActivities` | 다음 실행 조회와 준비·생성·종결·실패 액티비티를 소유한다 |
+| `ChatTurnSteps` | 턴 하나의 단계를 궤적과 단계별 상한과 함께 실행한다 |
+| `ChatTurnBackends` | 실행 봉투 하나에서 읽기·기억·쓰기 창구를 세운다 |
+| `ChatTools` | 계약이 연 도구를 인자 검증과 스팬과 함께 모델에게 세운다 |
+| `DraftPublisher` | 누적 답변과 단계 진행을 실행 창구로 흘려보낸다 |
+| `ChatSummaryProjection` | 재생 창 바깥에 남는 이력을 요약 한 칸으로 접는다 |
+
 ## 토폴로지와 워크플로
 
 대화는 분기도 팬아웃도 갖지 않으므로 바깥 그래프를 세우지 않는다. `agent.py`의 `run_chat`이 세 단계를 차례로 실행하고, 모델의 도구 반복은 `converse` 안쪽 LangChain agent 실행이 맡는다.
@@ -76,6 +89,8 @@ sequenceDiagram
 
 `confirm` 도구는 `ChatWriteClient.propose`를 호출하고 반환된 `confirmationId`를 `ProposedWrite`로 누적한다. `remember_fact`도 예외가 아니라 확인 대기 행만 세우므로 모델은 기억을 제안했다고만 말한다. 모든 쓰기 동작은 사용자 승인 전까지 외부 상태를 변경하지 않는다.
 
+`action`이 요구하는 인자는 도구마다 다르므로 인자 스키마 하나로는 그 자리를 가르지 못한다. 창구는 대기 행을 세우기 전에 `contract/agent/chat/tool.json`의 `requiredByAction`으로 거절하고, `ChatProposalTool`은 그 거절만 도구 실패와 나누어 계약의 `failures.argumentsMissing`을 모델에게 낸다. 채우면 같은 호출이 성립하는 실수에 `failures.toolFailed`의 포기 지시를 보내면 모델이 할 수 있는 일을 접는다.
+
 ## 프롬프트 구성
 
 `build_system_prompt`는 공통 `SAFETY_POLICY` 뒤에 Agent Tracer 역할, 도구 실행 의미, grounding rules, memory rule을 배치한다. `build_context_prompt`는 언어 지시와 memory·summary를 별도 메시지로 만든다.
@@ -119,7 +134,7 @@ chat.assistant.system
 
 층의 순서는 네 에이전트가 함께 쓰는 `AgentMiddlewareStack`이 갖고, `chat_stack`은 대화가 무엇을 세우고 무엇을 세우지 않는지만 정한다. 대화가 실제로 받는 층은 다음과 같다.
 
-1. `TurnLimitMiddleware(exit_behavior="end")` — `max_turns` 위에 계약의 `landingReserve.providerBackstop` 만큼 얹은 값을 호출 상한으로 삼고, 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
+1. `TurnLimitMiddleware(exit_behavior="end")` — `max_turns` 위에 계약의 `landingReserve.calls` 만큼 얹은 값을 호출 상한으로 삼고, 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
 2. `context_editing_middleware()` — 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 보존한다
 3. `StandardAgentMiddleware(serialize_tools=True)` — 공유 장부를 사용하는 도구 호출을 직렬화한다
 4. `PromptCacheMiddleware(ttl="1h")` — 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다

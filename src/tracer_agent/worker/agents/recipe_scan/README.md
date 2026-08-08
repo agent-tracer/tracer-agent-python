@@ -94,6 +94,10 @@ sequenceDiagram
 `http/tracer-dependency.openapi.yaml`의 `RecipeDraft`와
 `conformance/cases/tracer.outputs.json`의 `drafts.recipe`가 소유한다.
 
+이 자리는 요청 payload를 받지 않아 답변 언어에 닿지 못하므로 초안이 그 칸을 싣지 않는다.
+계약이 optional로 두어 본문은 유효하고, 두 축이 갈린 사실과 좁히는 조건은
+`divergence.json`의 `recipe.draft.language`가 갖는다.
+
 ## 도구 타입
 
 | 도구 | 주요 인자 | 역할 | 근거 기록 |
