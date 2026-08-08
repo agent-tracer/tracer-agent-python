@@ -8,11 +8,11 @@ import hmac
 import json
 import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-SCOPE_TOKEN_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "shared" / "scope.token.json"
+from .contract_root import CONTRACT_ROOT
+
+SCOPE_TOKEN_PATH = CONTRACT_ROOT / "agent" / "shared" / "scope.token.json"
 
 
 @lru_cache(maxsize=1)
@@ -33,13 +33,22 @@ def margin_ms() -> int:
     return int(_rule()["lifetime"]["marginMs"])
 
 
-def _secret() -> str | None:
-    declared = _rule()["secret"]
-    raw = os.environ.get(str(declared["variable"]))
+def secret_variable() -> str:
+    """계약이 정한 서명 비밀의 환경변수 이름이다."""
+    return str(_rule()["secret"]["variable"])
+
+
+def read_secret() -> str | None:
+    """런타임 경계에서 서명 비밀을 한 번 읽으며 비어 있으면 아무것도 내지 않는다."""
+    raw = os.environ.get(secret_variable())
     if raw is None:
         return None
-    trimmed = raw.strip() if bool(declared["trim"]) else raw
+    trimmed = raw.strip() if bool(_rule()["secret"]["trim"]) else raw
     return trimmed if trimmed else None
+
+
+def _secret() -> str | None:
+    return read_secret()
 
 
 def _b64url(raw: bytes) -> str:

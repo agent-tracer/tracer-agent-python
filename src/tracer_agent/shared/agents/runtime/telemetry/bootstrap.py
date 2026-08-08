@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-import importlib
 import os
 from collections.abc import Callable
-from typing import Any
+
+from opentelemetry import metrics as metrics_api
+from opentelemetry import trace as trace_api
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from ...shared.env import env_flag
 
@@ -16,33 +24,17 @@ def configure_observability() -> Callable[[], None]:
     if not otlp_endpoint or env_flag("OTEL_SDK_DISABLED"):
         return _noop
 
-    try:
-        resource_mod = importlib.import_module("opentelemetry.sdk.resources")
-        trace_api = importlib.import_module("opentelemetry.trace")
-        trace_sdk = importlib.import_module("opentelemetry.sdk.trace")
-        trace_export = importlib.import_module("opentelemetry.sdk.trace.export")
-        otlp_trace = importlib.import_module("opentelemetry.exporter.otlp.proto.http.trace_exporter")
-        metrics_api = importlib.import_module("opentelemetry.metrics")
-        metrics_sdk = importlib.import_module("opentelemetry.sdk.metrics")
-        metrics_export = importlib.import_module("opentelemetry.sdk.metrics.export")
-        otlp_metric = importlib.import_module("opentelemetry.exporter.otlp.proto.http.metric_exporter")
-    except ModuleNotFoundError:
-        return _noop
-
-    service_name = os.getenv("OTEL_SERVICE_NAME", "agents")
-    resource = resource_mod.Resource.create({"service.name": service_name})
-    tracer_provider = trace_sdk.TracerProvider(resource=resource)
+    resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "agents")})
+    tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(
-        trace_export.BatchSpanProcessor(otlp_trace.OTLPSpanExporter(endpoint=f"{otlp_endpoint}/v1/traces"))
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{otlp_endpoint}/v1/traces"))
     )
     trace_api.set_tracer_provider(tracer_provider)
 
-    meter_provider = metrics_sdk.MeterProvider(
+    meter_provider = MeterProvider(
         resource=resource,
         metric_readers=[
-            metrics_export.PeriodicExportingMetricReader(
-                otlp_metric.OTLPMetricExporter(endpoint=f"{otlp_endpoint}/v1/metrics")
-            )
+            PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=f"{otlp_endpoint}/v1/metrics"))
         ],
     )
     metrics_api.set_meter_provider(meter_provider)
@@ -55,12 +47,13 @@ def configure_observability() -> Callable[[], None]:
     return shutdown
 
 
-def _instrument_process_metrics(meter_provider: Any) -> None:
+def _instrument_process_metrics(meter_provider: MeterProvider) -> None:
+    """프로세스 지표 계측은 선택 의존이므로 없으면 세우지 않는다."""
     try:
-        system_metrics = importlib.import_module("opentelemetry.instrumentation.system_metrics")
+        from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
     except ModuleNotFoundError:
         return
-    system_metrics.SystemMetricsInstrumentor().instrument(meter_provider=meter_provider)
+    SystemMetricsInstrumentor().instrument(meter_provider=meter_provider)
 
 
 def _noop() -> None:

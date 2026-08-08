@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
+
+from .agents.runtime.ledger import DEFAULT_ACQUIRE_TIMEOUT_S
 
 # 배포가 이 환경변수로 큐 접두사를 주며, 나란히 시작한 두 구현체는 다른 값을 받아 서로 다른 큐를 본다.
 TASK_QUEUE_PREFIX_ENV = "AGENT_TASK_QUEUE_PREFIX"
@@ -28,8 +29,7 @@ class MonitorProfile(StrEnum):
 
 def task_queue(key: str) -> str:
     """계약이 정한 큐 키 앞에 배포가 준 접두사를 붙여 큐의 완전한 이름을 만든다."""
-    prefix = os.environ.get(TASK_QUEUE_PREFIX_ENV, "").strip() or DEFAULT_TASK_QUEUE_PREFIX
-    return f"{prefix}-{key}"
+    return get_settings().task_queue(key)
 
 
 class Settings(BaseSettings):
@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     monitor_profile: MonitorProfile = MonitorProfile.PRD
     # 저장된 자격을 감추고 되돌리는 키를 이 값에서 유도하며 prd는 이것 없이 자격을 다루지 않는다.
     monitor_settings_encryption_key: SecretStr | None = None
+    # 나란히 뜬 두 구현체가 서로 다른 큐를 보도록 배포가 주는 접두사다.
+    task_queue_prefix: str = Field(default=DEFAULT_TASK_QUEUE_PREFIX, validation_alias=TASK_QUEUE_PREFIX_ENV)
 
     tracer_agent_host: str = "0.0.0.0"
     tracer_agent_port: int = 8800
@@ -48,6 +50,8 @@ class Settings(BaseSettings):
     agent_db_name: str = "agent"
     agent_db_user: str = "root"
     agent_db_password: str = "root"
+    # 풀이 마른 순간을 영구 정지가 아니라 관측되는 실패로 드러내는 획득 여유다.
+    agent_db_acquire_timeout_s: float = DEFAULT_ACQUIRE_TIMEOUT_S
 
     kafka_brokers: str = "redpanda:29092"
     temporal_address: str = "temporal:7233"
@@ -98,6 +102,11 @@ class Settings(BaseSettings):
             namespace=self.temporal_namespace,
             data_converter=pydantic_data_converter,
         )
+
+    def task_queue(self, key: str) -> str:
+        """계약이 정한 큐 키 앞에 이 배포의 접두사를 붙여 큐의 완전한 이름을 만든다."""
+        prefix = self.task_queue_prefix.strip() or DEFAULT_TASK_QUEUE_PREFIX
+        return f"{prefix}-{key}"
 
     def agent_dsn(self) -> str:
         """앱 계정으로 실행 원장에 연결되는 접속 문자열을 만든다."""

@@ -5,23 +5,28 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-_CONTRACT_ROOT = Path(__file__).resolve().parents[5] / "contract"
-SETTINGS_EXECUTION_PATH = _CONTRACT_ROOT / "agent" / "shared" / "settings.execution.json"
-LANGUAGES_PATH = _CONTRACT_ROOT / "agent" / "shared" / "languages.json"
+from ..shared.contract_root import CONTRACT_ROOT
+
+SETTINGS_EXECUTION_PATH = CONTRACT_ROOT / "agent" / "shared" / "settings.execution.json"
+LANGUAGES_PATH = CONTRACT_ROOT / "agent" / "shared" / "languages.json"
 
 LANGUAGE_FIELD = "language"
 MAX_SUGGESTIONS_FIELD = "maxSuggestions"
 
 
 @lru_cache(maxsize=1)
+def _settings_execution() -> Mapping[str, Any]:
+    """설정과 실행 입력을 잇는 계약 조각 전체다."""
+    declared: Mapping[str, Any] = json.loads(SETTINGS_EXECUTION_PATH.read_text(encoding="utf-8"))
+    return declared
+
+
 def _inputs() -> Mapping[str, Any]:
     """설정이 실행 입력에 실리는 자리를 계약에서 읽는다."""
-    declared: Mapping[str, Any] = json.loads(SETTINGS_EXECUTION_PATH.read_text(encoding="utf-8"))
-    return dict(declared["inputs"])
+    inputs: Mapping[str, Any] = _settings_execution()["inputs"]
+    return inputs
 
 
 @lru_cache(maxsize=1)
@@ -68,7 +73,7 @@ def normalize_max_suggestions(raw: str | None, cap: int) -> int:
     return min(max(parsed, 1), cap)
 
 
+@lru_cache(maxsize=1)
 def model_kinds() -> tuple[str, ...]:
     """설정이 고른 모델이 실리는 잡 종류다."""
-    declared: Mapping[str, Any] = json.loads(SETTINGS_EXECUTION_PATH.read_text(encoding="utf-8"))
-    return tuple(str(kind) for kind in declared["envelope"]["model"]["kinds"])
+    return tuple(str(kind) for kind in _settings_execution()["envelope"]["model"]["kinds"])

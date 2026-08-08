@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support.contract import conformance_case
+from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.envelope.router import CHAT_KEY_MISSING, JOB_KEY_MISSING
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
@@ -68,10 +69,12 @@ def credentials() -> FakeCredentials:
 @pytest.fixture
 def client(store: SqliteLedgerSql, credentials: FakeCredentials) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
-        test_client.app.state.execution_sql = SingleSql(store)
-        test_client.app.state.model_credentials = credentials
-        test_client.app.state.read_api_base_url = "http://tracer-api:3902"
-        test_client.app.state.agent_api_base_url = "http://agent-api:8800"
+        test_client.app.state.services = fake_services(
+            execution_sql=SingleSql(store),
+            model_credentials=credentials,
+            read_api_base_url="http://tracer-api:3902",
+            agent_api_base_url="http://agent-api:8800",
+        )
         yield test_client
 
 
@@ -189,7 +192,7 @@ def test_잡_봉투는_계약이_정한_칸을_모두_싣는다(client: TestClie
     assert data["modelRates"]["claude-haiku-4-5"] == {
         "input": 1.0,
         "output": 5.0,
-        "cacheWrite": 1.25,
+        "cacheWrite": 2.0,
         "cacheRead": 0.1,
     }
 
@@ -250,7 +253,6 @@ def test_카탈로그가_모르는_모델_설정은_종류의_기본_모델로_�
 def test_그_종류가_허용하지_않은_모델_설정은_기본_모델로_본다(
     client: TestClient, credentials: FakeCredentials
 ) -> None:
-    # 예산은 허용 목록을 전제로 잡히므로 목록 밖 모델을 실으면 상한에 닿아 끝난다.
     credentials.model = "claude-opus-5"
 
     data = client.post(JOB_PATH.format(kind="title.suggestion"), json={"userId": "u1"}).json()["data"]

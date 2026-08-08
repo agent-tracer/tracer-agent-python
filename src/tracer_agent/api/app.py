@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -32,6 +33,7 @@ from ..shared.workflows.jobs_dispatch import TemporalJobDispatch
 from ..shared.workflows.jobs_intake import router as job_intake_router
 from ..shared.workflows.jobs_query import router as job_query_router
 from .credentials import SettingModelCredentials
+from .services import AgentServices
 from .surface import SURFACE_PATH, get_served_surface
 
 # 배포 단위 사이의 창구를 부를 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
@@ -42,45 +44,50 @@ READINESS_PROBE = "SELECT 1"
 UNREADY_STATUS = 503
 
 
+_log = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     settings.configure_langsmith()
     shutdown_observability = configure_observability()
-    application.state.executions = LedgerPoolProvider(settings.agent_dsn())
-    application.state.execution_sql = PooledSql(application.state.executions)
+    executions = LedgerPoolProvider(settings.agent_dsn())
+    execution_sql = PooledSql(executions, settings.agent_db_acquire_timeout_s)
     encryption_key = settings.monitor_settings_encryption_key
-    application.state.setting_cipher = SettingCipher(
+    cipher = SettingCipher(
         None if encryption_key is None else encryption_key.get_secret_value(),
         settings.monitor_profile,
     )
-    application.state.model_credentials = SettingModelCredentials(
-        application.state.execution_sql, application.state.setting_cipher
-    )
-    application.state.read_api_base_url = settings.tracer_api_url
-    application.state.agent_api_base_url = settings.agent_api_url
-    application.state.execution_updates = UpdatePublisher(
-        settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC
-    )
-    application.state.execution_watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
-    application.state.chat_tool_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
-    application.state.chat_tool_executor = HttpChatToolExecutor(
-        application.state.chat_tool_http, settings.tracer_api_url, settings.agent_api_url
-    )
+    updates = UpdatePublisher(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
+    watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
+    chat_tool_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
+    anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
     temporal_client = TemporalClientProvider(settings.connect_temporal)
-    application.state.execution_dispatch = TemporalExecutionDispatch(temporal_client)
-    application.state.job_dispatch = TemporalJobDispatch(temporal_client)
-    application.state.anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
-    application.state.scan_anchors = ScanAnchorClient(application.state.anchor_http, settings.tracer_api_url)
+    application.state.services = AgentServices(
+        execution_sql=execution_sql,
+        setting_cipher=cipher,
+        model_credentials=SettingModelCredentials(execution_sql, cipher),
+        chat_tool_executor=HttpChatToolExecutor(
+            chat_tool_http, settings.tracer_api_url, settings.agent_api_url
+        ),
+        execution_dispatch=TemporalExecutionDispatch(temporal_client),
+        job_dispatch=TemporalJobDispatch(temporal_client),
+        scan_anchors=ScanAnchorClient(anchor_http, settings.tracer_api_url),
+        read_api_base_url=settings.tracer_api_url,
+        agent_api_base_url=settings.agent_api_url,
+        execution_updates=updates,
+        execution_watch=watch,
+    )
     try:
         yield
     finally:
         shutdown_observability()
-        await application.state.anchor_http.aclose()
-        await application.state.chat_tool_http.aclose()
-        await application.state.execution_watch.close()
-        await application.state.execution_updates.close()
-        await application.state.executions.close()
+        await anchor_http.aclose()
+        await chat_tool_http.aclose()
+        await watch.close()
+        await updates.close()
+        await executions.close()
 
 
 async def health() -> dict[str, str]:
@@ -89,11 +96,13 @@ async def health() -> dict[str, str]:
 
 async def readiness(request: Request) -> JSONResponse:
     """의존에 닿아 요청을 처리할 수 있는지 신원 없이 알리며 봉투를 씌우지 않는다."""
-    source: SqlSource = request.app.state.execution_sql
+    source: SqlSource = request.app.state.services.execution_sql
     try:
         async with source.connect() as sql:
             await sql.fetch(READINESS_PROBE)
     except Exception:
+        # 사유를 감추는 것은 응답이지 로그가 아니다.
+        _log.warning("agent api readiness probe failed", exc_info=True)
         return JSONResponse(status_code=UNREADY_STATUS, content={"status": "unready"})
     return JSONResponse(status_code=200, content={"status": "ok"})
 

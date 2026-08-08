@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from tracer_agent.shared.agents.shared import scope_token
-
-from ..shared.model_tiering import allowed_models
-from .catalog import ExecutionCatalog, wire_limits, wire_model_rates
+from ..shared import scope_token
+from ..shared.model_tiering import CHAT_KIND, allowed_models
+from .catalog import ExecutionCatalog, wire_model_rates
 from .grants import DraftGrant
 from .tools import chat_tool_descriptions
 
@@ -28,10 +27,10 @@ def chat_envelope(
 ) -> dict[str, Any]:
     """대화 한 시도가 쓸 카탈로그 값과 자격과 draft 창구를 봉투로 낸다."""
     return {
-        "model": model or catalog.default_model,
+        "model": _model(CHAT_KIND, catalog, model),
         "apiKey": api_key,
         "modelRates": wire_model_rates(),
-        "limits": wire_limits(catalog),
+        "limits": catalog.wire_limits(),
         "deadlineMs": catalog.deadline_ms,
         "readApiBaseUrl": read_api_base_url,
         # 서명 비밀을 배포가 주지 않으면 자격을 만들 수 없어 자기신고 헤더로만 식별된다.
@@ -60,14 +59,14 @@ def job_envelope(
         "fallbackModel": catalog.fallback_model,
         "apiKey": api_key,
         "modelRates": wire_model_rates(),
-        "limits": wire_limits(catalog),
+        "limits": catalog.wire_limits(),
         "deadlineMs": catalog.deadline_ms,
     }
 
 
 # 예산은 허용 목록을 전제로 잡히므로 목록 밖 모델을 실으면 상한에 닿아 끝난다.
 def _model(kind: str, catalog: ExecutionCatalog, chosen: str | None) -> str:
-    """설정이 고른 모델이며 그 종류가 허용하지 않은 값이면 기본 모델을 쓴다."""
+    """상류가 고른 모델이며 그 종류가 허용하지 않은 값이면 기본 모델을 쓴다."""
     if chosen is None or chosen not in allowed_models(kind):
         return catalog.default_model
     return chosen

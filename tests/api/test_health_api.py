@@ -7,6 +7,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi.testclient import TestClient
 
+from tests.support.services import fake_services
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 
@@ -38,7 +39,7 @@ def test_준비_프로브가_원장에_닿으면_봉투_없이_ok를_낸다(clie
 
 
 def test_준비_프로브가_원장에_닿지_못하면_503을_낸다(client: TestClient) -> None:
-    client.app.state.execution_sql = UnreachableSql()
+    client.app.state.services = fake_services(execution_sql=UnreachableSql())
 
     res = client.get("/health/ready")
 

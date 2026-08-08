@@ -6,11 +6,13 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# 사용자 설정에서 모델 자격을 찾는 키다.
 API_KEY_SETTING = "anthropic.api_key"
 
-# 사용자 설정에서 잡이 쓸 모델을 찾는 키다.
 MODEL_SETTING = "anthropic.model"
+
+# 자격이 없어 실행을 세울 수 없다는 거절이며 접수와 봉투 창구가 같은 글자를 낸다.
+CHAT_KEY_MISSING = (400, "chat.llm-key-missing", "Model credential is not configured")
+JOB_KEY_MISSING = (400, "job.llm-key-missing", "Model credential is not configured")
 
 
 class ModelCredentialSource(Protocol):

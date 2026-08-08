@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-_CONTRACT_ROOT = Path(__file__).resolve().parents[5] / "contract"
-AGENT_API_SPEC_PATH = _CONTRACT_ROOT / "http" / "agent-api.openapi.yaml"
-METRICS_PATH = _CONTRACT_ROOT / "workflow" / "metrics.yaml"
+from .contract_root import CONTRACT_ROOT
+
+AGENT_API_SPEC_PATH = CONTRACT_ROOT / "http" / "agent-api.openapi.yaml"
+METRICS_PATH = CONTRACT_ROOT / "workflow" / "metrics.yaml"
 
 AgentAxis = Literal["python"]
 
@@ -45,12 +44,30 @@ def axis_label_name() -> str:
     return str(_axis_label()["labelName"])
 
 
-def _grounded(axis: AgentAxis) -> AgentAxis:
+@lru_cache(maxsize=1)
+def agent_axis() -> AgentAxis:
+    """이 서비스를 실행한 축이며 계약이 선언하지 않은 이름이면 거절한다."""
+    axis: AgentAxis = "python"
     if axis not in declared_axes():
         raise UndeclaredAgentAxisError(f"AgentAxis does not declare {axis!r}")
     return axis
 
 
-AGENT_BACKEND: AgentAxis = _grounded("python")
-AXIS_ATTRIBUTE_KEY = axis_attribute_key()
-AXIS_LABEL_NAME = axis_label_name()
+if TYPE_CHECKING:
+    AGENT_BACKEND: AgentAxis
+    AXIS_ATTRIBUTE_KEY: str
+    AXIS_LABEL_NAME: str
+
+_LAZY: dict[str, Any] = {
+    "AGENT_BACKEND": agent_axis,
+    "AXIS_ATTRIBUTE_KEY": axis_attribute_key,
+    "AXIS_LABEL_NAME": axis_label_name,
+}
+
+
+def __getattr__(name: str) -> Any:
+    """계약 조각을 읽는 값은 모듈을 실을 때가 아니라 처음 물을 때 정해진다."""
+    read = _LAZY.get(name)
+    if read is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return read()

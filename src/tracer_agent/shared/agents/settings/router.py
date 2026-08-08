@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -13,7 +13,14 @@ from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql, UserId
 from ..runtime.ledger import SqlSource
-from ..shared.wire import SuccessEnvelope, error_responses, read_body, validation_details
+from ..shared.wire import (
+    INVALID_REQUEST,
+    SuccessEnvelope,
+    error_envelope,
+    error_responses,
+    read_body,
+    validation_details,
+)
 from .catalog import knows_model, model_options
 from .models import (
     MODEL_SETTING_KEY,
@@ -28,14 +35,13 @@ from .store import AppSettingStore
 SETTINGS_PATH = "/api/agent/settings"
 SETTING_MODELS_PATH = f"{SETTINGS_PATH}/models"
 SETTING_PATH = f"{SETTINGS_PATH}/{{key}}"
-INVALID_REQUEST = (400, "validation_error", "Invalid request")
 
 router = APIRouter()
 
 
 def get_setting_cipher(request: Request) -> SettingCipher:
     """앱 수명이 세운 설정 자격의 봉인기를 낸다."""
-    cipher: SettingCipher = request.app.state.setting_cipher
+    cipher: SettingCipher = request.app.state.services.setting_cipher
     return cipher
 
 
@@ -47,7 +53,7 @@ async def list_settings(source: ExecutionSql, cipher: Cipher, user_id: UserId) -
     """그 사용자가 저장해 둔 설정을 키마다 하나씩 낸다."""
     async with _store(source, cipher) as store:
         stored = await store.list_by_scope(user_id)
-    items = [setting_view(one.key, one.value, one.updated_at) for one in stored]
+    items = [one.view() for one in stored]
     return JSONResponse(status_code=200, content={"ok": True, "data": {"items": items}})
 
 
@@ -64,17 +70,17 @@ async def put_setting(
 ) -> JSONResponse:
     """설정 하나를 쓰며 모델 설정은 단가를 아는 값만 받는다."""
     if not is_setting_key(key):
-        return _error_envelope(*INVALID_REQUEST)
+        return error_envelope(*INVALID_REQUEST)
     body = await read_body(request)
     if body is None:
-        return _error_envelope(*INVALID_REQUEST)
+        return error_envelope(*INVALID_REQUEST)
     try:
         payload = PutSettingPayload.model_validate(body)
     except ValidationError as invalid:
-        return _error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
+        return error_envelope(*INVALID_REQUEST, details=validation_details(invalid))
     if key == MODEL_SETTING_KEY and not knows_model(payload.value):
         unpriced = [{"loc": ["value"], "type": UNPRICED_MODEL_TYPE, "model": payload.value}]
-        return _error_envelope(*INVALID_REQUEST, details=unpriced)
+        return error_envelope(*INVALID_REQUEST, details=unpriced)
 
     updated_at = datetime.now(UTC)
     async with _store(source, cipher) as store:
@@ -88,7 +94,7 @@ async def put_setting(
 async def delete_setting(key: str, source: ExecutionSql, cipher: Cipher, user_id: UserId) -> JSONResponse:
     """설정 하나를 지우고 지울 것이 있었는지 낸다."""
     if not is_setting_key(key):
-        return _error_envelope(*INVALID_REQUEST)
+        return error_envelope(*INVALID_REQUEST)
     async with _store(source, cipher) as store:
         deleted = await store.remove(user_id, key)
     return JSONResponse(status_code=200, content={"ok": True, "data": {"key": key, "deleted": deleted}})
@@ -98,10 +104,3 @@ async def delete_setting(key: str, source: ExecutionSql, cipher: Cipher, user_id
 async def _store(source: SqlSource, cipher: SettingCipher) -> AsyncIterator[AppSettingStore]:
     async with source.connect() as sql:
         yield AppSettingStore(sql, cipher)
-
-
-def _error_envelope(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
-    error: dict[str, Any] = {"code": code, "message": message}
-    if details is not None:
-        error["details"] = details
-    return JSONResponse(status_code=status, content={"ok": False, "error": error})

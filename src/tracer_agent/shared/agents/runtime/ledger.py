@@ -22,6 +22,13 @@ type SqlRow = dict[str, Any]
 MIN_POOL_SIZE = 1
 MAX_POOL_SIZE = 8
 
+# 드라이버의 기본 획득은 무한 대기이므로 이 여유가 마른 풀을 영구 정지가 아니라 거절로 드러낸다.
+DEFAULT_ACQUIRE_TIMEOUT_S = 5.0
+
+
+class LedgerUnavailable(Exception):
+    """빌릴 연결이 정해진 여유 안에 나지 않아 이 호출이 원장에 닿지 못했다."""
+
 
 # 드라이버는 jsonb를 문자열로 내주므로 연결마다 해석 코덱을 걸어야 목록과 사전으로 읽힌다.
 async def _decode_json(connection: Any) -> None:
@@ -99,10 +106,18 @@ async def _asyncpg_transaction(connection: LedgerConnection) -> AsyncIterator[No
 
 
 @asynccontextmanager
-async def acquire_sql(pool: LedgerPool) -> AsyncIterator[LedgerSql]:
-    """풀에서 연결 하나를 빌려 문장 실행 표면으로 감싼 뒤 반납한다."""
-    async with pool.acquire() as connection:
+async def acquire_sql(
+    pool: LedgerPool, timeout_s: float = DEFAULT_ACQUIRE_TIMEOUT_S
+) -> AsyncIterator[LedgerSql]:
+    """풀에서 연결 하나를 빌려 문장 실행 표면으로 감싼 뒤 반납하며 여유를 넘긴 대기는 거절로 낸다."""
+    try:
+        connection = await pool.acquire(timeout=timeout_s)
+    except TimeoutError as dry:
+        raise LedgerUnavailable(f"원장 연결을 {timeout_s}초 안에 빌리지 못했다") from dry
+    try:
         yield AsyncpgSql(connection)
+    finally:
+        await pool.release(connection)
 
 
 class SqlSource(Protocol):
@@ -116,8 +131,11 @@ class SqlSource(Protocol):
 class PooledSql:
     """연결 풀에서 호출 한 건이 쓸 문장 실행 표면을 빌려 준다."""
 
-    def __init__(self, provider: LedgerPoolProvider) -> None:
+    def __init__(
+        self, provider: LedgerPoolProvider, acquire_timeout_s: float = DEFAULT_ACQUIRE_TIMEOUT_S
+    ) -> None:
         self._provider = provider
+        self._acquire_timeout_s = acquire_timeout_s
 
     def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
         """문장 실행 표면 하나를 빌리고 쓰임이 끝나면 반납한다."""
@@ -125,5 +143,5 @@ class PooledSql:
 
     @asynccontextmanager
     async def _connect(self) -> AsyncIterator[LedgerSql]:
-        async with acquire_sql(await self._provider.pool()) as sql:
+        async with acquire_sql(await self._provider.pool(), self._acquire_timeout_s) as sql:
             yield sql

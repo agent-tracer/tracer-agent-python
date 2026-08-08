@@ -72,14 +72,14 @@ def _cleanup_state() -> TaskCleanupState:
             "batch": {"candidates": []},
         }
     )
-    return initial_task_cleanup_state(req)
+    return initial_task_cleanup_state(req, max_cost_usd=1.5, max_turns=9)
 
 
 def _title_state() -> TitleSuggestionState:
     req = TitleSuggestionRequest.model_validate(
         {**_ENVELOPE, "jobId": "job-1", "taskId": "task-1", "context": _TITLE_CONTEXT}
     )
-    return initial_title_suggestion_state(req)
+    return initial_title_suggestion_state(req, max_cost_usd=1.5, max_turns=9)
 
 
 _STATES: tuple[tuple[str, dict[str, Any], type[Any]], ...] = (
@@ -110,11 +110,14 @@ def test_초기_상태는_수리를_아직_쓰지_않은_것으로_시작한다(
             assert state["repair_attempted"] is False, name
 
 
-def test_스캔의_잔량은_예약을_뗀_뒤의_값을_그대로_받는다() -> None:
-    # 요청의 한도를 그대로 실으면 repair·survey·synthesisFloor 예약분을 팬아웃이 다시 나눠 쓴다.
-    state = _recipe_state()
-
-    assert state["max_cost_usd"] == 1.5
-    assert state["max_turns"] == 9
-    assert WIRE_LIMITS["budgetUsd"] != state["max_cost_usd"]
-    assert WIRE_LIMITS["maxTurns"] != state["max_turns"]
+def test_잔량은_예약을_뗀_뒤의_값을_그대로_받는다() -> None:
+    # 요청의 한도를 그대로 실으면 예약분을 팬아웃과 조사가 다시 나눠 쓴다.
+    for name, state in (
+        ("recipe-scan", dict(_recipe_state())),
+        ("task-cleanup", dict(_cleanup_state())),
+        ("title-suggestion", dict(_title_state())),
+    ):
+        assert state["max_cost_usd"] == 1.5, name
+        assert state["max_turns"] == 9, name
+        assert WIRE_LIMITS["budgetUsd"] != state["max_cost_usd"], name
+        assert WIRE_LIMITS["maxTurns"] != state["max_turns"], name

@@ -15,7 +15,7 @@ DEFAULT_USER_ID = "local"
 
 def get_execution_sql(request: Request) -> SqlSource:
     """앱 수명이 연 실행 원장 연결원을 낸다."""
-    source: SqlSource = request.app.state.execution_sql
+    source: SqlSource = request.app.state.services.execution_sql
     return source
 
 

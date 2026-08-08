@@ -6,12 +6,12 @@ import json
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import lru_cache
-from pathlib import Path
 from string import ascii_letters, digits
 from typing import Any
 
-# 계약 저장소는 배포 이미지의 서비스 루트에 함께 실린다.
-REDACTION_PATH = Path(__file__).resolve().parents[5] / "contract" / "agent" / "shared" / "redaction.json"
+from .contract_root import CONTRACT_ROOT
+
+REDACTION_PATH = CONTRACT_ROOT / "agent" / "shared" / "redaction.json"
 
 # 계약이 자격의 몸통에 허용한 글자는 영문자와 숫자와 세 구분자다.
 _BODY_CHARACTERS = frozenset(ascii_letters + digits + "-_.")

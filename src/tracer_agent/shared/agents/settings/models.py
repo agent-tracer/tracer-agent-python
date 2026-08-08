@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, get_args
+from typing import Any, Literal, Protocol, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,3 +71,11 @@ def setting_view(key: str, value: str, updated_at: datetime) -> dict[str, Any]:
         "hasValue": True,
         "updatedAt": iso(updated_at),
     }
+
+
+class SettingViewable(Protocol):
+    """창구가 내는 모양으로 스스로를 성형할 수 있는 설정 하나다."""
+
+    def view(self) -> dict[str, Any]:
+        """이 설정을 창구가 내는 모양으로 낸다."""
+        ...

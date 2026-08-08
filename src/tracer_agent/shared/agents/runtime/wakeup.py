@@ -58,7 +58,6 @@ class UpdatePublisher:
                 PUBLISH_TIMEOUT_S,
             )
         except Exception as error:
-            # 알리지 못한 구독자는 다음 조회에서 따라잡으므로 실행을 여기서 끊지 않는다.
             _log.warning("update wakeup publish failed: %s", error)
             return False
         return True

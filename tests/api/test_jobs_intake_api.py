@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.chat_surface import SingleSql
 from tests.support.contract import conformance_case
 from tests.support.fakes import FakeScanAnchors
+from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
 
 PATH = "/api/agent/jobs"
@@ -24,20 +24,6 @@ CREDENTIAL_REJECTION = next(
     for rejection in _INTAKE["rejections"]
     if rejection["code"] == _INTAKE["credentialCheck"]["rejection"]
 )
-
-
-class SingleSql:
-    """테스트 하나가 쓰는 메모리 원장을 접수 창구에 그대로 빌려 준다."""
-
-    def __init__(self, store: SqliteLedgerSql) -> None:
-        self._store = store
-
-    def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
-        return self._lend()
-
-    @asynccontextmanager
-    async def _lend(self) -> AsyncIterator[LedgerSql]:
-        yield self._store
 
 
 class FakeJobDispatch:
@@ -98,10 +84,12 @@ def client(
     store: SqliteLedgerSql,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
-        test_client.app.state.job_dispatch = dispatch
-        test_client.app.state.model_credentials = credentials
-        test_client.app.state.scan_anchors = scan_anchors
-        test_client.app.state.execution_sql = SingleSql(store)
+        test_client.app.state.services = fake_services(
+            job_dispatch=dispatch,
+            model_credentials=credentials,
+            scan_anchors=scan_anchors,
+            execution_sql=SingleSql(store),
+        )
         yield test_client
 
 

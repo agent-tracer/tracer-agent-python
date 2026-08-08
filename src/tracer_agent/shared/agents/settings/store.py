@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from ..runtime.ledger import LedgerSql
-from .models import is_sensitive_setting_key, is_setting_key
+from .models import is_sensitive_setting_key, is_setting_key, setting_view
 from .secret import SettingCipher, is_encrypted_secret
 
 _SELECT_BY_SCOPE = """
@@ -36,6 +37,10 @@ class StoredSetting:
     key: str
     value: str
     updated_at: datetime
+
+    def view(self) -> dict[str, Any]:
+        """이 설정을 창구가 내는 모양으로 낸다."""
+        return setting_view(self.key, self.value, self.updated_at)
 
 
 class AppSettingStore:
@@ -78,7 +83,6 @@ class PlainSettingReader:
 
     async def read(self, scope: str, key: str) -> str | None:
         """그 범위가 저장해 둔 값이며 없으면 None 이다."""
-        # 이 자리는 SettingCipher 를 갖지 않으므로 암호화해 저장한 값은 읽지 못하게 막는다.
         if is_sensitive_setting_key(key):
             raise ValueError(f"sensitive setting needs a cipher to read: {key}")
         rows = await self._sql.fetch(_SELECT_ONE, scope, key)

@@ -11,18 +11,22 @@ from pydantic import ValidationError
 
 from ..runtime.dependencies import ExecutionSql
 from ..shared.model_tiering import CHAT_KIND
-from ..shared.wire import SuccessEnvelope, error_envelope, error_responses, read_body, validation_details
+from ..shared.wire import (
+    EXECUTION_NOT_FOUND,
+    INVALID_REQUEST,
+    SuccessEnvelope,
+    error_envelope,
+    error_responses,
+    read_body,
+    validation_details,
+)
 from .catalog import CATALOG, JOB_KINDS
 from .grants import issue_draft_grant
 from .issue import chat_envelope, job_envelope
-from .models import JobEnvelopeBody, ModelCredentialSource
+from .models import CHAT_KEY_MISSING, JOB_KEY_MISSING, JobEnvelopeBody, ModelCredentialSource
 
 CHAT_ENVELOPE_PATH = "/internal/chat/executions/{execution_id}/envelope"
 JOB_ENVELOPE_PATH = "/internal/jobs/{kind}/envelope"
-INVALID_REQUEST = (400, "validation_error", "Invalid request")
-EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
-CHAT_KEY_MISSING = (400, "chat.llm-key-missing", "Model credential is not configured")
-JOB_KEY_MISSING = (400, "job.llm-key-missing", "Model credential is not configured")
 
 _SELECT_EXECUTION = "SELECT user_id, model FROM chat_executions WHERE id = $1"
 
@@ -31,19 +35,19 @@ router = APIRouter()
 
 def get_model_credentials(request: Request) -> ModelCredentialSource:
     """앱 수명이 세운 사용자별 모델 자격의 출처를 낸다."""
-    credentials: ModelCredentialSource = request.app.state.model_credentials
+    credentials: ModelCredentialSource = request.app.state.services.model_credentials
     return credentials
 
 
 def get_read_api_base_url(request: Request) -> str:
     """실행기가 추적 자료를 읽을 때 부를 주소를 낸다."""
-    base_url: str = request.app.state.read_api_base_url
+    base_url: str = request.app.state.services.read_api_base_url
     return base_url
 
 
 def get_agent_api_base_url(request: Request) -> str:
     """실행기가 이 서비스로 되돌아올 때 부를 주소를 낸다."""
-    base_url: str = request.app.state.agent_api_base_url
+    base_url: str = request.app.state.services.agent_api_base_url
     return base_url
 
 

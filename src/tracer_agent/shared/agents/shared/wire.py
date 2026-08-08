@@ -13,6 +13,22 @@ from .json_view import JsonObject, JsonValue
 
 OK_STATUS = 200
 
+# 스키마를 만족하지 않는 요청의 거절이며 접수와 조회의 모든 창구가 같은 글자를 낸다.
+INVALID_REQUEST = (400, "validation_error", "Invalid request")
+# 남의 실행을 존재조차 알리지 않는 거절이며 대화 표면과 봉투 창구가 같은 글자를 낸다.
+EXECUTION_NOT_FOUND = (404, "not_found", "Chat execution not found")
+
+
+class MalformedEnvelope(ValueError):
+    """상류가 계약이 정한 성공 봉투로 답하지 않아 실은 것을 꺼낼 수 없다."""
+
+
+def unwrap_envelope(payload: JsonValue) -> JsonValue:
+    """계약이 정한 성공 봉투에서 실은 것을 꺼낸다."""
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise MalformedEnvelope("payload is not a success envelope")
+    return payload.get("data")
+
 
 class WireError(BaseModel):
     """실패 사유이며 판정 근거가 있을 때만 details 를 싣는다."""

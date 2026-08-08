@@ -15,6 +15,7 @@ from tests.support.chat_surface import (
     SingleSql,
 )
 from tests.support.fakes import FakeScanAnchors
+from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
@@ -55,10 +56,12 @@ def client(
     scan_anchors: FakeScanAnchors,
 ) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
-        test_client.app.state.execution_sql = SingleSql(store)
-        test_client.app.state.chat_tool_executor = executor
-        test_client.app.state.execution_updates = updates
-        test_client.app.state.execution_dispatch = dispatch
-        test_client.app.state.execution_watch = SilentWatch()
-        test_client.app.state.scan_anchors = scan_anchors
+        test_client.app.state.services = fake_services(
+            execution_sql=SingleSql(store),
+            chat_tool_executor=executor,
+            execution_updates=updates,
+            execution_dispatch=dispatch,
+            execution_watch=SilentWatch(),
+            scan_anchors=scan_anchors,
+        )
         yield test_client

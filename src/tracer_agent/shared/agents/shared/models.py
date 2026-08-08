@@ -75,7 +75,7 @@ class AgentExecutionEnvelope(BaseModel):
     deadlineMs: int = 120_000
     idempotencyKey: str | None = Field(
         default=None,
-        description="같은 키의 성공한 실행 결과를 단일 프로세스의 제한된 시간 동안 재사용한다.",
+        description="접수가 원장에서 같은 잡을 가려낸 열쇠이며 실행기는 이 키로 결과를 재사용하지 않는다.",
     )
     fallbackModel: str | None = Field(
         default=None,
@@ -169,6 +169,10 @@ class AgentStepDTO(BaseModel):
     nodeName: str | None = None
     eventKind: OrchestrationEventKind | None = None
     durationMs: int | None = None
+
+    def carries_content(self) -> bool:
+        """본문도 도구 호출도 없는 단계는 궤적에 아무 의미도 싣지 못한다."""
+        return bool(self.content.strip()) or bool(self.toolCalls)
 
 
 class AgentErrorDTO(BaseModel):

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql
@@ -50,8 +51,7 @@ def store() -> Iterator[SqliteLedgerSql]:
 @pytest.fixture
 def client(store: SqliteLedgerSql, cipher: SettingCipher) -> Iterator[TestClient]:
     with TestClient(app_module.create_app()) as test_client:
-        test_client.app.state.execution_sql = SingleSql(store)
-        test_client.app.state.setting_cipher = cipher
+        test_client.app.state.services = fake_services(execution_sql=SingleSql(store), setting_cipher=cipher)
         yield test_client
 
 
