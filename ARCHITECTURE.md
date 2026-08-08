@@ -6,7 +6,7 @@
 에이전트별 도구·프롬프트·미들웨어의 상세는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)와
 그 아래 에이전트별 `README.md`가 갖는다. 이 문서는 그 문서들이 나누어 설명하는 위상을 한 장에 모은다.
 
-경로는 두 뿌리를 기준으로 적는다. `chat/graph.py` 처럼 에이전트 이름으로 시작하는 경로와 `runtime/` 으로 시작하는
+경로는 두 뿌리를 기준으로 적는다. `chat/agent.py` 처럼 에이전트 이름으로 시작하는 경로와 `runtime/` 으로 시작하는
 경로는 `src/tracer_agent/worker/agents/` 아래이고, `contract/` 로 시작하는 경로는 계약 submodule 아래다.
 나머지는 저장소 뿌리에서 시작한다.
 
@@ -17,12 +17,12 @@ LangGraph 를 쓰는 이유는 비결정적 판단과 결정적 판단을 다른
 
 1. 모델은 구조화된 값만 낸다. `DispatchPlan`·`RecipeDraft`·`CleanupDraft`·`TitleSuggestionDraft` 가 그 값이며
    경로 이름을 모델이 고르지 않는다.
-2. 경로는 언제나 코드가 고른다. 팬아웃 여부와 재파견 허용과 검증 뒤 분기는 `graph.py` 의 조건부 간선과
+2. 경로는 언제나 코드가 고른다. 팬아웃 여부와 재파견 허용과 검증 뒤 분기는 잡 셋의 `graph.py` 조건부 간선과
    `runtime/routing.py` 의 판정기가 소유한다.
 3. 코드가 지울 수 있는 결함은 수리 사유가 될 수 없다. 중복과 상한 초과와 자리표시자는 정규화가 지우고,
    모델을 다시 부르는 것은 근거가 어긋나거나 수가 모자랄 때뿐이다.
-4. 결정적 사실의 정본은 한 곳이다. 예산은 `ExecutionBudget`, 도구의 표면은 계약의 `surface`,
-   실패 문구는 계약의 `failures` 가 갖는다.
+4. 결정적 사실의 정본은 한 곳이다. 예산 집행은 `ExecutionBudget`, 그 실행이 이미 쓴 지출은 그래프
+   상태의 지출 채널, 도구의 표면은 계약의 `surface`, 실패 문구는 계약의 `failures` 가 갖는다.
 
 ## 전체 토폴로지
 
@@ -35,7 +35,8 @@ flowchart LR
     API["FastAPI 접수<br/>src/tracer_agent/api"]:::code
     LEDGER[("agent-db 실행 원장")]:::ext
     TW["Temporal 워크플로·액티비티<br/>worker/workflows"]:::code
-    OG["정적 StateGraph<br/>에이전트별 graph.py"]:::code
+    OG["정적 StateGraph<br/>잡 셋의 graph.py"]:::code
+    CS["단계 실행<br/>chat/agent.py"]:::code
     IA["create_agent 도구 루프<br/>runtime/llm/model_caller.py"]:::llm
     MW["미들웨어 스택<br/>runtime/llm"]:::code
     TOOLS["ToolRegistry<br/>runtime/tooling.py"]:::code
@@ -46,10 +47,14 @@ flowchart LR
     API -- "원장 기록" --> LEDGER
     API -- "시그널" --> TW
     TW -- "실행 사실 재조회" --> LEDGER
-    TW -- "run_* 호출" --> OG
-    OG --> IA --> MW -- "모델 호출" --> MODEL
+    TW -- "잡의 run 호출" --> OG
+    TW -- "run_chat 호출" --> CS
+    OG --> IA
+    CS --> IA
+    IA --> MW -- "모델 호출" --> MODEL
     IA -- "도구 호출" --> TOOLS -- "사용자 범위 HTTP" --> EXT
     OG -- "재개" --> CKPT
+    IA -- "대화의 도구 루프 재개" --> CKPT
 ```
 
 접수는 원장에 사실을 적고 워크플로에 포인터만 보낸다. 워크플로는 그 포인터를 믿지 않고 원장을 다시 조회한다.
@@ -64,15 +69,16 @@ flowchart LR
     classDef llm fill:#FDF0DC,stroke:#B45309,color:#7C3E0A
     classDef code fill:#E7EEFC,stroke:#2563EB,color:#1E3A8A
 
-    S((START)) --> LC["load_context<br/>재생 이력·요약·사실"]:::code
+    S((run_chat)) --> LC["load_context<br/>재생 이력·요약·사실"]:::code
     LC --> CV["converse<br/>도구 루프와 스트리밍 초안"]:::llm
     CV --> ST["settle<br/>최종 답 선택과 가림"]:::code
-    ST --> E((END))
+    ST --> E((ChatResult))
 ```
 
 `load_context` 는 연결 계열 오류만 세 번까지 다시 시도하고, `converse` 는 실행 데드라인의 대부분을 상한으로 받는다.
 `settle` 은 모델도 도구도 부르지 않고 마지막 어시스턴트 발화와 확인 대기 행만 결과 계약으로 좁힌다.
-위상은 `chat/graph.py`, 노드는 `chat/nodes/` 가 갖는다.
+대화는 분기도 팬아웃도 갖지 않으므로 그래프를 세우지 않는다. 단계를 차례로 부르는 자리는 `chat/agent.py`,
+단계 하나하나는 `chat/steps/` 가 갖는다.
 
 ### recipe-scan
 
@@ -243,17 +249,20 @@ flowchart LR
     L2 --> L3["구조화 복구"]:::code
     L3 --> L4["실행 표준화<br/>비용·궤적·착륙"]:::code
     L4 --> L5["프롬프트 캐시 경계"]:::code
-    L5 --> L6["도구 재시도"]:::code
-    L6 --> L7["대체 모델"]:::code
-    L7 --> L8["모델 재시도"]:::code
-    L8 --> M[("모델")]:::ext
+    L5 --> L6["도구 실패 되돌림"]:::code
+    L6 --> L7["도구 재시도"]:::code
+    L7 --> L8["대체 모델"]:::code
+    L8 --> L9["모델 재시도"]:::code
+    L9 --> M[("모델")]:::ext
 ```
 
 구조화 복구가 실행 표준화보다 바깥에 서므로 스키마에 걸려 버려진 산출도 장부를 지나 예산과 궤적에 남는다.
 캐시 경계는 실행 표준화보다 안쪽에 서야 턴마다 바뀌는 꼬리가 붙은 뒤에 그 앞으로 경계를 놓을 수 있다.
+도구 실패 되돌림은 도구 재시도보다 바깥에 서야 재시도가 소진된 뒤에만 실패가 모델이 읽는 결과로 바뀐다.
 스택을 세우는 자리는 `runtime/llm/middleware_stack.py` 의 `AgentMiddlewareStack` 하나이며, 에이전트는 산출 형태와
-상한 처리 방식만 정하고 층의 순서를 다시 적지 않는다. 구조화 복구는 구조화 출력을 요구하는 세 잡만 세우고
-대화는 자유 텍스트를 내므로 그 층이 없다. 순서 의존과 네 에이전트가 같은 층을 세운다는 사실은
+상한 처리 방식만 정하고 층의 순서를 다시 적지 않는다. 갈리는 층은 둘이다. 구조화 복구는 구조화 출력을 요구하는
+세 잡만 세우고 대화는 자유 텍스트를 내므로 그 층이 없다. 도구 실패 되돌림도 세 잡만 세우고, 대화는 도구가
+계약의 실패 문구를 스스로 돌려주므로 그 층을 받지 않는다. 순서 의존과 갈리는 층이 무엇인지는
 `tests/worker/agents/runtime/test_middleware_order.py` 가 고정한다.
 
 ## 예산과 재개
@@ -266,7 +275,7 @@ flowchart TB
     classDef ext fill:#F1F3F5,stroke:#8B95A1,color:#3D4653
 
     B["ExecutionBudget<br/>runtime/llm/budget.py"]:::code
-    ST["BudgetSnapshotState<br/>shared/agents/shared/graph_state.py"]:::code
+    ST["지출 채널<br/>shared/agents/shared/graph_state.py"]:::code
     CK[("체크포인트")]:::ext
     TP["Temporal 재시도"]:::code
 
@@ -276,9 +285,12 @@ flowchart TB
     CK -- "앞선 시도의 달러와 턴" --> B
 ```
 
-네 에이전트 상태가 `BudgetSnapshotState` 를 함께 상속하므로 두 칸이 언제나 누적으로 합쳐진다. 팬아웃이 몫을
-나눌 때 보는 잔량은 `remaining_cost_usd` 와 `remaining_turns` 한 쌍이 계산하며, 넘겨 쓴 실행의 잔량을 0에서
-멈추는 규칙도 그 자리에 있다. 상한을 함께 싣는 상태는 `CostCeilingState` 와 `TurnCeilingState` 로 구분한다.
+네 에이전트 상태가 `BudgetSnapshotState` 를 함께 상속하므로 이 실행의 총 지출 두 칸이 언제나 누적으로 합쳐지고
+재개가 그 두 칸만 읽는다. 세 잡은 그 위에 `SpendChannels` 로 팬아웃 잔량 풀과 바닥 예약의 소모를 따로 세며, 노드는
+자기 리스의 종류에 맞는 정산 규약 하나로 그 채널에 적는다. 팬아웃이 몫을 나눌 때 보는 잔량은 `remaining_cost_usd` 와
+`remaining_turns` 한 쌍이 풀 채널에서만 계산하므로 예약 리스로 돈 지출이 풀을 두 번 깎지 않으며, 넘겨 쓴 실행의
+잔량을 0에서 멈추는 규칙도 그 자리에 있다. 상한을 함께 싣는 상태는 `CostCeilingState` 와 `TurnCeilingState` 로
+구분한다.
 초기 상태는 상태를 선언한 모듈의 `initial_*_state` 가 세우므로 채널이 늘면 그 자리가 함께 갱신된다.
 재시도는 앞선 시도의 지출을 안고 시작하므로 상한이 실행 하나에 한 번만 열린다.
 예산이 다음 호출을 감당할 수 없으면 실행 표준화가 조사 도구를 거두고 마무리 지시만 남겨 결론을 받는다.
@@ -336,6 +348,11 @@ flowchart LR
 자격은 생성 액티비티가 실행 직전에 봉투로 받는다. 준비의 산출이 워크플로 이력에 남으므로 자격을 그 자리에 싣지 않는다.
 단계별 큐와 시간 상한과 재시도 상한은 계약의 `workflow/queues.yaml` 이 갖는다.
 워크플로는 `worker/workflows/jobs_workflows.py`, 액티비티는 `jobs_activities.py` 가 갖는다.
+
+접수는 자격 심사와 원장 기록과 워크플로 기동을 세 단계로 갈라 원장 연결을 쥔 채 다른 창구를 부르지 않는다.
+그 세 단계는 `shared/workflows/jobs_enqueue.py` 의 `admit`·`claim`·`start` 가 갖는다. 원장의 상태 전이는
+모두 조건부 갱신이라 종료 상태에 이미 닿은 잡은 준비가 실행 중으로 옮기지 못하고, 준비는 그 거절을 읽어
+재시도하지 않는 오류로 끊는다. 종결·실패·취소 정산도 같은 값을 읽어 막힌 전이 뒤에는 산출과 알림을 내지 않는다.
 
 ## 오류의 갈래
 
