@@ -1,6 +1,6 @@
 # Python 에이전트 실행 구조
 
-이 문서는 `src/tracer_agent/worker/agents`에 구현된 Python 에이전트의 공통 실행 구조를 정리한다. Python 구현은 LangGraph를 사용하므로 정적 그래프, 노드 registry, 실행 context, LangChain agent, 미들웨어, 도구 registry의 경계를 분리해 관리한다.
+이 문서는 `src/tracer_agent/worker/agents`에 구현된 Python 에이전트의 공통 실행 구조를 정리한다. 잡 셋은 LangGraph 정적 그래프를 세우므로 그래프, 노드 registry, 실행 context, LangChain agent, 미들웨어, 도구 registry의 경계를 분리해 관리한다. 대화는 분기도 팬아웃도 갖지 않아 바깥 그래프를 세우지 않고 `chat/agent.py`가 단계를 차례로 부른다.
 
 ## 먼저 확인할 결론
 
@@ -16,13 +16,14 @@ flowchart LR
     DISPATCH --> RECIPE[RecipeScanJob.run]
     DISPATCH --> CLEANUP[TaskCleanupJob.run]
     DISPATCH --> TITLE[TitleSuggestionJob.run]
-    CHAT --> GRAPH[compiled LangGraph]
-    RECIPE --> GRAPH
+    CHAT --> STEPS[ChatTurnSteps]
+    RECIPE --> GRAPH[compiled LangGraph]
     CLEANUP --> GRAPH
     TITLE --> GRAPH
     GRAPH --> CTX[ValidationGraphContext]
     CTX --> NODE[node registry]
-    NODE --> AGENT[LangChain create_agent]
+    STEPS --> AGENT[LangChain create_agent]
+    NODE --> AGENT
     AGENT --> MW[LangChain middleware]
     MW --> MODEL[BaseChatModel]
     MW --> TOOLS[ToolRegistry]
@@ -106,11 +107,12 @@ Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이
 
 | 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
 | --- | --- | --- | --- |
-| 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | `maxTurns + 2` 를 호출 상한으로 적용한다 |
+| 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | `maxTurns` 위에 계약의 `landingReserve.providerBackstop` 만큼 얹은 값을 호출 상한으로 적용한다 |
 | 컨텍스트 편집 | `context_editing_middleware()` | 전체 | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
 | 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
 | 프롬프트 캐시 | `PromptCacheMiddleware(ttl="1h")` | 전체 | 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다 |
 | 산출 복구 | `StructuredOutputRepairMiddleware` | 잡 셋 | 공급자가 강제하지 않는 제약에 걸린 산출을 사유와 함께 한 번 되먹인다 |
+| 도구 실패 되돌림 | `ToolFailureMiddleware` | 잡 셋 | 재시도가 소진된 도구 실패를 계약의 실패 문구를 담은 도구 결과로 낮춘다 |
 | 도구 재시도 | `ToolRetryMiddleware` | 전체 | 선언된 일시 오류를 최대 2회 재시도한다 |
 | 대체 모델 | `FallbackModelMiddleware` | 요청에 fallback 모델이 있는 경우 | 과부하·속도 제한·연결 오류에서만 대체 모델을 1회 호출한다 |
 | 모델 재시도 | `model_retry_middleware()` | 전체 | 과부하·속도 제한·연결 오류를 같은 모델로 재시도한다 |
@@ -121,7 +123,8 @@ flowchart LR
     LIMIT --> EDIT[Context editing]
     EDIT --> STANDARD[StandardAgentMiddleware]
     STANDARD --> CACHE[Prompt cache boundary]
-    CACHE --> TOOL_RETRY[Tool retry]
+    CACHE --> TOOL_FAILURE[Tool failure fallback]
+    TOOL_FAILURE --> TOOL_RETRY[Tool retry]
     TOOL_RETRY --> FALLBACK{provider transient error?}
     FALLBACK -- 아니오 --> MODEL_RETRY[Same-model retry]
     FALLBACK -- 예 --> ALT[Fallback model]
@@ -135,6 +138,8 @@ flowchart LR
 `FallbackModelMiddleware`는 예산 초과·출력 절단·취소를 fallback 대상으로 바꾸지 않으며, 요청 자체가 틀린 오류도 대체 모델에서 같은 답이 오므로 넘기지 않는다. `model_retry_middleware`도 정의된 공급자 일시 오류 범위 밖의 예외를 재시도하지 않는다. 이 경계는 예산·출력·취소 상태가 상위 실행기로 전달되도록 한다.
 
 `TurnLimitMiddleware`는 상한에 닿은 대화 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다. 남기면 최종 답변을 고르는 자리가 그 문구를 답으로 본다.
+
+`ToolFailureMiddleware`는 도구 하나의 실패가 그래프를 뚫고 나가 이미 모은 조사를 통째로 잃지 않게 막는다. 실행 전체를 멈추는 신호(취소·예산 초과·출력 절단·데드라인)는 도구 하나의 실패로 낮추지 않고 그대로 올린다. 대화는 도구가 계약의 실패 문구를 스스로 돌려주므로 이 층을 세우지 않는다.
 
 모델이 답의 밀도를 스스로 정하도록 실행 표준화가 호출마다 쓴 턴과 총량을 메시지 꼬리에 붙이고, 예산이 다하면 조사 도구를 거두고 마무리 지시만 남긴다. 두 문구는 `runtime/llm/pacing.py`가 계약의 `agent/shared/execution.budget.json`에서 읽으므로 구현체가 문장을 소유하지 않는다.
 
@@ -223,6 +228,8 @@ flowchart TD
 
 잡의 생성 액티비티가 다시 태워지면 `prior_spend`가 체크포인트에서 앞선 시도의 달러와 턴을 읽어 `ExecutionBudget`에 실어 준다. 상한은 실행 하나에 한 번만 열리므로 예약과 배분은 남은 잔량에서 이루어진다.
 
+그래프 상태는 지출을 세 쌍의 채널로 나눠 싣는다(`shared/agents/shared/graph_state.py`). `model_cost_usd`·`model_turns_used`는 이 실행의 총 지출이고 재개가 그 두 칸만 읽는다. `pool_cost_usd`·`pool_turns_used`는 예약을 뗀 뒤 팬아웃이 나눠 쓰는 잔량의 소모이며 `remaining_cost_usd`·`remaining_turns`가 그 쌍만 본다. `floor_cost_usd`·`floor_turns_used`는 `synthesisFloor` 예약에서 이미 쓴 몫이라 redispatch로 다시 들어온 종합이 그 예약을 새로 받지 않는다. 노드는 자기 리스의 종류에 따라 `reserved_spend`·`pool_spend`·`floor_then_pool_spend` 가운데 하나로 정산하며 세 잡이 같은 규약을 쓴다.
+
 세 잡 종류가 `agentJobWorkflow` 하나를 함께 쓰고 단계마다 자기 액티비티를 갖는다.
 준비는 도메인 문맥만 모으고 자격은 생성 액티비티가 실행 직전에 봉투로 받는다. 준비의 산출은
 워크플로 이력에 남으므로 자격이 그 자리에 실리면 이력이 자격을 갖게 된다.
@@ -244,6 +251,9 @@ Chat도 스레드 워크플로와 실행 워크플로를 따로 두고 준비·�
 | HTTP 봉투와 본문 해석 | `shared/agents/shared/wire.py` |
 | 시각 표현과 되읽기 | `shared/agents/shared/instant.py` |
 | 도구 재시도·모델 재시도 미들웨어 | `runtime/llm/retry.py` |
+| 소진된 도구 실패를 결과로 낮추는 층 | `runtime/llm/tool_failure.py` |
+| 팬아웃 전에 떼는 예약과 빈 결과 사유 | `worker/agents/shared/execution_reservation.py`, `empty_result.py` |
+| 계약 판을 찾는 뿌리 | `shared/agents/shared/contract_root.py` |
 | 재개 열쇠와 앞선 시도의 지출 | `runtime/durable_graph.py` |
 | 실행 하나의 그래프와 설정과 이어받은 지출 | `runtime/graph_session.py` |
 | 잡 하나의 조립·실행·배달 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |

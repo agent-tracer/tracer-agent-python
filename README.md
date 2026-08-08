@@ -1,6 +1,6 @@
 # tracer-agent-python
 
-에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 LangGraph를 실행합니다. 실행 원장은 이 서비스가 소유하며, 실행에 필요한 기록은 추적 API를 HTTP로 읽고 산출물도 같은 경로로 되돌려 보냅니다.
+에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 에이전트를 실행합니다. 실행 원장은 이 서비스가 소유하며, 실행에 필요한 기록은 추적 API를 HTTP로 읽고 산출물도 같은 경로로 되돌려 보냅니다.
 
 같은 계약을 만족하는 TypeScript 구현이 따로 있고 배포에서 어느 이미지를 올리느냐로 둘 중 하나가 선택됩니다. TypeScript 구현이 계약의 정본이며, 두 구현체 사이에 지금 남아 있는 차이는 계약 저장소의 `conformance/cases/divergence.json`이 갖습니다. 계약을 함께 만족한다는 사실이 모든 동작이 같다는 뜻은 아닙니다.
 
@@ -8,10 +8,9 @@
 
 - LangGraph와 LangChain 기반 대화 실행과 체크포인트
 - Temporal 기반 chat·jobs·generate 워커 분리
-- recipe scan, task cleanup, rule generation, title suggestion 에이전트
+- chat, recipe scan, task cleanup, title suggestion 에이전트
 - 대화 도구 확인·초안·재생·장기기억 API
 - 잡 접수·취소·이력·단계 조회 API
-- 로컬 실행기가 잡을 가져가고 되돌리는 리스 창구
 - 자격 증명이 답과 초안과 도구 결과로 새지 않도록 가리는 절차
 - 설정 표면
 - OpenTelemetry와 선택적 LangSmith 연동
@@ -54,7 +53,7 @@ flowchart LR
 | 구성 요소 | 책임과 경계 |
 | --- | --- |
 | FastAPI | 계약의 에이전트 API 경로와 `/health`, `/health/ready`, `/internal/surface`를 제공합니다 |
-| chat 워커 | LangGraph 상태와 체크포인트, 대화 복구를 처리합니다 |
+| chat 워커 | 대화 턴의 단계와 체크포인트, 대화 복구를 처리합니다 |
 | jobs 워커 | 짧은 잡 액티비티와 상태 정산을 처리합니다 |
 | generate 워커 | 모델을 호출하는 긴 액티비티를 분리해 처리합니다 |
 | `agent-db` | 이 서비스가 소유하는 실행 원장입니다 |
@@ -158,8 +157,8 @@ tracer-agent-python/
 │   └── worker/
 │       ├── agents/               대화·레시피·정리·제목 구현
 │       └── workflows/            Temporal 워크플로와 액티비티
-├── tests/{api,worker,shared,support}
-├── scripts/                      주석·내부 의존 검사
+├── tests/{api,worker,shared,support,quality}
+├── scripts/                      주석·내부 의존·커밋 메시지 검사와 그래프 그리기
 ├── pyproject.toml                프로젝트·Ruff·mypy·pytest 설정
 ├── uv.lock
 └── Dockerfile
@@ -173,9 +172,11 @@ LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소
 
 새 엔드포인트·워크플로·도구·프롬프트·DB 필드를 더할 때는 계약을 먼저 확인하고 테스트와 적합성 케이스와 구현을 함께 갱신합니다. 구현 차이는 임의의 예외 목록으로 숨기지 않고 `divergence.json`과 함께 갱신합니다.
 
+아직 착수하지 않은 구조 변경의 설계와 되돌릴 수 있는 마이그레이션 순서는 [미룬 구조 변경과 마이그레이션 순서](STRUCTURE-MIGRATION.md)가 갖습니다. 계약 저장소나 TypeScript 축이 먼저 움직여야 닫히는 항목은 [계약 저장소나 TypeScript 축을 함께 고쳐야 닫히는 항목](CONTRACT-BACKLOG.md)이 갖습니다.
+
 ## 에이전트 구현 문서
 
-네 에이전트의 노드 토폴로지와 검증 꼬리, 도구 표면, 프롬프트 계층, 미들웨어 순서, 예산과 재개, 대화·잡 워크플로를 한 장에 모은 그림은 [실행 토폴로지와 워크플로](ARCHITECTURE.md)에서 확인한다. 노드 간 이동, 프롬프트 원문·번역, 구조화 출력의 상세는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
+잡 셋의 노드 토폴로지와 검증 꼬리, 대화 턴의 단계, 도구 표면, 프롬프트 계층, 미들웨어 순서, 예산과 재개, 대화·잡 워크플로를 한 장에 모은 그림은 [실행 토폴로지와 워크플로](ARCHITECTURE.md)에서 확인한다. 노드 간 이동, 프롬프트 원문·번역, 구조화 출력의 상세는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
 
 ## 관련 저장소
 
