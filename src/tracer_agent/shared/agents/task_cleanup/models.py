@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..shared.dispatch_depth import DispatchDepth, depth_share
 from ..shared.graph_state import SpendChannels, TurnCeilingState, fresh_spend_channels
-from ..shared.models import AgentExecutionRequest, Language, TrimmedStr
+from ..shared.models import AgentExecutionRequest, Language, NonEmptyStr, TrimmedStr
 
 # 저장 계약의 판별자와 같은 값이어야 하는 정리 제안의 종류다.
 CleanupSuggestionKind = Literal["archive"]
@@ -224,7 +224,7 @@ class CleanupDraftSuggestion(BaseModel):
     kind: CleanupSuggestionKind = Field(description='The suggestion kind, always "archive"')
     taskId: TrimmedStr = Field(min_length=1)
     rationale: TrimmedStr = Field(min_length=1, max_length=500)
-    evidenceEventIds: list[TrimmedStr] = Field(
+    evidenceEventIds: list[NonEmptyStr] = Field(
         default_factory=list,
         max_length=MAX_EVIDENCE_EVENT_IDS,
         description="Event IDs get_task_events returned for this task and that back the rationale",

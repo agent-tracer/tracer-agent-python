@@ -19,6 +19,7 @@ from ..shared.models import (
     EmptyResultReason,
     Language,
     ModelFacing,
+    NonEmptyStr,
     TrimmedStr,
 )
 
@@ -212,13 +213,17 @@ def salvage_probe_report(probe: ProbeName, raw: object) -> ProbeReport | None:
 RecipeVerifyTool = Literal["command", "file-read", "file-write", "web"]
 
 
+# 계약이 항목마다 길이 상한을 두므로 목록이 아니라 항목 타입이 그 상한을 갖는다.
+CommandMatch = Annotated[NonEmptyStr, Field(max_length=200)]
+
+
 class RecipeVerifyCommand(ModelFacing):
     """이 명령을 돌렸는지로 스텝 이행을 관측하는 신호다."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["command"]
-    commandMatches: list[TrimmedStr] = Field(min_length=1, max_length=20)
+    commandMatches: list[CommandMatch] = Field(min_length=1, max_length=20)
 
 
 class RecipeVerifyPattern(ModelFacing):
@@ -251,7 +256,7 @@ class RecipeStep(ModelFacing):
     action: TrimmedStr = Field(min_length=1, max_length=200)
     rationale: TrimmedStr | None = Field(default=None, max_length=300)
     # 모든 단계가 이벤트로 관측되지는 않으므로 근거를 요구하지 않고 적힌 것만 대조한다.
-    evidence: list[TrimmedStr] = Field(default_factory=list, max_length=50)
+    evidence: list[NonEmptyStr] = Field(default_factory=list, max_length=50)
     verify: RecipeVerify | None = None
 
 
@@ -264,27 +269,27 @@ class RecipeTouchedFile(ModelFacing):
 
 class RecipeSlice(ModelFacing):
     taskId: TrimmedStr = Field(min_length=1)
-    turnIds: list[TrimmedStr] = Field(default_factory=list, max_length=50)
-    eventIds: list[TrimmedStr] = Field(default_factory=list, max_length=200)
+    turnIds: list[NonEmptyStr] = Field(default_factory=list, max_length=50)
+    eventIds: list[NonEmptyStr] = Field(default_factory=list, max_length=200)
 
 
 class RecipeCorrection(ModelFacing):
     whatAgentDid: TrimmedStr = Field(min_length=1, max_length=500)
     howCorrected: TrimmedStr = Field(min_length=1, max_length=500)
-    evidence: list[TrimmedStr] = Field(min_length=1, max_length=50)
+    evidence: list[NonEmptyStr] = Field(min_length=1, max_length=50)
 
 
 class RecipePitfall(ModelFacing):
     pitfall: TrimmedStr = Field(min_length=1, max_length=500)
     whyNonObvious: TrimmedStr = Field(min_length=1, max_length=500)
-    evidence: list[TrimmedStr] = Field(min_length=1, max_length=50)
+    evidence: list[NonEmptyStr] = Field(min_length=1, max_length=50)
 
 
 class RecipeRecovery(ModelFacing):
     symptom: TrimmedStr = Field(min_length=1, max_length=500)
     action: TrimmedStr = Field(min_length=1, max_length=500)
     # 근거 없는 복구는 검증할 수 없는 주장이라 corrections·pitfalls와 같은 근거를 요구한다.
-    evidence: list[TrimmedStr] = Field(min_length=1, max_length=50)
+    evidence: list[NonEmptyStr] = Field(min_length=1, max_length=50)
     stepOrder: int | None = Field(default=None, ge=1, le=50)
 
 
@@ -306,7 +311,7 @@ class RecipeCandidate(ModelFacing):
     corrections: list[RecipeCorrection] = Field(default_factory=list, max_length=20)
     pitfalls: list[RecipePitfall] = Field(default_factory=list, max_length=20)
     recovery: list[RecipeRecovery] = Field(default_factory=list, max_length=10)
-    governing_rules: list[TrimmedStr] = Field(default_factory=list, max_length=50)
+    governing_rules: list[NonEmptyStr] = Field(default_factory=list, max_length=50)
     # 계약이 minLength 1을 두므로 공백만 남은 값이 개정 대상 검사를 비켜 가지 못하게 한다.
     revises_recipe_id: TrimmedStr | None = Field(default=None, min_length=1, max_length=200)
     steps: list[RecipeStep] = Field(default_factory=list, max_length=20)

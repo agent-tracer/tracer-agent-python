@@ -21,6 +21,8 @@ def _drop_docstring(schema: dict[str, Any]) -> None:
 
 
 TrimmedStr = Annotated[str, BeforeValidator(_strip)]
+# 계약이 항목마다 최소 길이를 두는 목록의 항목 타입이며 공백만 남은 값을 근거로 세지 않는다.
+NonEmptyStr = Annotated[str, BeforeValidator(_strip), Field(min_length=1)]
 Language = Literal["auto", "ko", "en", "ja", "zh"]
 
 
