@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact
 from tracer_agent.shared.agents.title_suggestion.models import (
     TitleSuggestionDraft,
     TitleSuggestionRequest,
@@ -114,7 +115,8 @@ class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionSt
 
     def result_of(self, final: dict[str, Any]) -> JsonObject:
         result: TitleSuggestionDraft = final["result"] or TitleSuggestionDraft()
-        return dumped(result)
+        # 원장과 조회가 이 한 벌을 나눠 쓰므로 가림도 이 자리에 선다.
+        return cast("JsonObject", redact(dumped(result), stage=RedactionStage.OUTPUT))
 
 
 TITLE_SUGGESTION_JOB = TitleSuggestionJob()

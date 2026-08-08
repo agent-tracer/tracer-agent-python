@@ -12,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 from pydantic import ValidationError
 
+from tests.support.contract import shared_contract
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES
 from tracer_agent.shared.agents.recipe_scan.models import (
     DispatchPlan,
@@ -20,6 +21,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
     RecipeDraft,
     RecipeScanRequest,
     RecipeScanState,
+    slot_of,
 )
 
 _COMPLETION = {"url": "http://worker:8810/runs/complete", "token": "done-1"}
@@ -73,6 +75,40 @@ def test_도메인_봉투를_보존한다() -> None:
 def test_조사할_것이_없다는_빈_계획을_허용한다() -> None:
     assert DispatchPlan.model_validate({}).probes == []
     assert DispatchPlan.model_validate({"probes": []}).probes == []
+
+
+SLOT_FIELD = shared_contract("dispatch.plan.json")["uniqueness"]["keys"]["recipe-scan"]
+
+
+def _assignment(slot: str, depth: str, question: str) -> dict[str, str]:
+    """계약이 자리로 정한 필드에만 값을 실어 세운 배정 하나다."""
+    return {SLOT_FIELD: slot, "depth": depth, "question": question}
+
+
+def test_한_계획이_같은_자리를_두_번_담지_않는다() -> None:
+    # 나머지 칸이 달라도 계약이 자리로 정한 필드가 같으면 겹친 배정이다.
+    twice = [
+        _assignment("timeline", "deep", "무엇이 있었나"),
+        _assignment("timeline", "shallow", "또 무엇이"),
+    ]
+
+    with pytest.raises(ValidationError):
+        DispatchPlan.model_validate({"probes": twice})
+    with pytest.raises(ValidationError):
+        RecipeDraft.model_validate({"redispatch": twice})
+
+
+def test_자리가_서로_다른_계획은_그대로_선다() -> None:
+    plan = DispatchPlan.model_validate(
+        {
+            "probes": [
+                _assignment("timeline", "deep", "무엇이"),
+                _assignment("rules", "shallow", "어떤 규칙이"),
+            ]
+        }
+    )
+
+    assert [slot_of(assignment) for assignment in plan.probes] == ["timeline", "rules"]
 
 
 PROBES = ("timeline", "rules", "repetition")

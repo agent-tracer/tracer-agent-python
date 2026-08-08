@@ -77,6 +77,14 @@ sequenceDiagram
 
 `MAX_REDISPATCH_ROUNDS`를 넘는 재배정은 허용하지 않는다. 기준 task는 후보의 `contributing_slices`에 포함되어야 하며, 동일 turn의 중복 인용은 검증에서 거부한다.
 
+`result_of`는 직렬화한 산출을 계약의 `agent/shared/redaction.json` `stages.output` 자리로 통과시킨다.
+그 한 벌이 잡 원장과 조회 표면과 레시피 창구 배달로 함께 나가므로 가림도 그 자리 하나에 선다.
+
+한 계획이 같은 축을 두 번 담으면 `DispatchPlan`과 `RecipeDraft.redispatch`가 그 계획을 거부한다.
+축을 가리키는 필드와 그 규칙은 계약의 `agent/shared/dispatch.plan.json` `uniqueness`가 소유한다.
+거부된 계획은 `StandardAgentMiddleware`가 궤적에 실은 뒤 구조화 복구가 사유와 함께 한 번 되돌려
+주므로, 겹친 배정은 관측에 남고 조율자는 남은 축을 덮는 계획을 다시 낼 기회를 얻는다.
+
 ## 저장 창구로 보내는 draft
 
 `outputs.py`의 `_DRAFT_FIELDS`가 후보의 snake_case 칸을 저장 창구가 받는 camelCase 칸으로
