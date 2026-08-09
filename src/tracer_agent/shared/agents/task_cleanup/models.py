@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..shared.dispatch_depth import DispatchDepth, depth_share
+from ..shared.dispatch_depth import DispatchDepth, depth_share, worker_report_limit
 from ..shared.graph_state import SpendChannels, TurnCeilingState, fresh_spend_channels
 from ..shared.models import AgentExecutionRequest, Language, NonEmptyStr, TrimmedStr
 
@@ -105,8 +105,8 @@ class EventPage(BaseModel):
 MAX_INSPECT_TURNS = 4
 # 조율자가 고른 깊이를 예산 배분의 몫으로 옮기는 계약의 자리다.
 INSPECT_DEPTH_KEY = "inspectDepth"
-MAX_INSPECT_EXCERPTS = 6
-MAX_INSPECT_REASON_CHARS = 400
+MAX_INSPECT_EXCERPTS = worker_report_limit("task-cleanup", "maxCitedEventIds")
+MAX_INSPECT_REASON_CHARS = worker_report_limit("task-cleanup", "maxReasonChars")
 CLEANUP_REVIEWER_ROLE = "cleanup-candidate-reviewer"
 
 # 조율자가 결정 대신 후보를 다시 조회하게 할 수 있는 라운드 수이며 무한 루프를 이 값으로 막는다.

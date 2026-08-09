@@ -28,3 +28,11 @@ def depth_shares(agent_id: str, key: str) -> Mapping[str, int]:
 def depth_share(agent_id: str, key: str, depth: str) -> int:
     """배정 하나가 예산 배분에서 받는 몫이다."""
     return depth_shares(agent_id, key)[depth]
+
+
+@lru_cache(maxsize=4)
+def worker_report_limit(agent_id: str, field: str) -> int:
+    """전문가 하나가 올리는 보고의 상한을 계약에서 읽는다."""
+    declared: Any = json.loads((_CONTRACT_ROOT / "agent" / agent_id / "tool.json").read_text("utf-8"))
+    # 칸 이름이 바뀌면 여기서 끊겨야 하므로 없는 칸을 기본값으로 메우지 않는다.
+    return int(declared["orchestration"]["workerReport"][field])

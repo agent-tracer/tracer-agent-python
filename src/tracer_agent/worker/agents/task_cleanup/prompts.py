@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from tracer_agent.shared.agents.task_cleanup.models import (
+    MAX_INSPECT_EXCERPTS,
+    MAX_INSPECT_REASON_CHARS,
     CleanupBatch,
     CleanupCandidate,
     InspectReport,
@@ -95,6 +97,9 @@ def _inspect(prompt: AgentPrompt) -> str:
             "You judge one cleanup candidate by reading what actually happened in it.",
             "",
             prompt.template("task-cleanup.inspect.system").slot("reviewerCharter"),
+            "",
+            f"Keep the reason under {MAX_INSPECT_REASON_CHARS} characters and cite at most "
+            f"{MAX_INSPECT_EXCERPTS} event IDs. A report over either limit is rejected.",
         ]
     )
 

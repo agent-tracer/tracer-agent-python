@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from tests.support.prompts import TASK_CLEANUP_PROMPT
 from tracer_agent.shared.agents.task_cleanup.models import (
+    MAX_INSPECT_EXCERPTS,
+    MAX_INSPECT_REASON_CHARS,
     CandidateReason,
     CleanupBatch,
     CleanupCandidate,
@@ -103,3 +105,11 @@ def test_수리_지시문은_검증_오류를_그대로_싣는다() -> None:
     print("\n───────── task-cleanup :: repair (수리 지시문) ─────────")
     print(directive)
     assert "- task-7은 이번 배치의 후보가 아니다" in directive
+
+
+def test_검토자가_지켜야_하는_수가_프롬프트에_실린다() -> None:
+    # 구조화 출력의 max_length 는 공급자가 강제하지 않으므로 프롬프트에 없는 상한은 모델이 지킬 수단이 없다.
+    system = _PROMPTS.inspect_system
+
+    assert str(MAX_INSPECT_REASON_CHARS) in system
+    assert str(MAX_INSPECT_EXCERPTS) in system
