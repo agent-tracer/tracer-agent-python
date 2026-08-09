@@ -51,6 +51,7 @@ from ..agents.runtime.execution.runner import ExecutionRequest, execute
 from ..agents.runtime.execution.trace import ExecutionTrace
 from ..agents.runtime.job_agent import JobGraphAgent
 from ..agents.runtime.llm.client import ChatPair, make_chat_pair
+from ..agents.runtime.outputs import JobOutputTargets
 from ..agents.runtime.pricing import ModelRates
 from ..agents.runtime.tracer_client import TracerApiClient, TracerApiPort
 from ..agents.shared.prompt_source_port import AgentPrompt
@@ -83,6 +84,7 @@ class AgentJobActivities:
     def __init__(
         self,
         tracer_api_url: str,
+        agent_api_url: str,
         http_client: httpx.AsyncClient,
         execution_sql: SqlSource,
         prompts: Mapping[str, AgentPrompt],
@@ -92,6 +94,7 @@ class AgentJobActivities:
         make_chats: Callable[[AgentExecutionRequest], ChatPair] = make_chat_pair,
     ) -> None:
         self._tracer_api_url = tracer_api_url
+        self._agent_api_url = agent_api_url
         self._http = http_client
         self._execution_sql = execution_sql
         self._prompts = prompts
@@ -124,11 +127,12 @@ class AgentJobActivities:
         """이 시도가 쓸 봉투를 받아 그래프를 실행하며 자격을 이 액티비티 밖으로 내보내지 않는다."""
         payload = await self._resolve_payload(request)
         job = JOB_AGENTS[request.kind]
-        tracer = self._tracer(str(payload["userId"]))
+        user_id = str(payload["userId"])
+        tracer = self._tracer(user_id)
         req = await job.prepare(payload, tracer)
         heartbeat = asyncio.ensure_future(_heartbeat())
         try:
-            response = await self._run_once(job, req, tracer)
+            response = await self._run_once(job, req, tracer, self._agent_api(user_id))
         finally:
             heartbeat.cancel()
         cost_usd = ModelRates(req.modelRates).estimate_cost_usd(
@@ -157,7 +161,7 @@ class AgentJobActivities:
         if settled and outcome.status == "completed":
             job = JOB_AGENTS[settlement.kind]
             await job.settle_outputs(
-                self._tracer(outcome.user_id),
+                JobOutputTargets(self._execution_sql, self._tracer(outcome.user_id)),
                 outcome.job_id,
                 settlement.response.data,
                 settlement.payload,
@@ -207,6 +211,10 @@ class AgentJobActivities:
         """이 실행이 볼 추적 창구를 그 사용자 범위로 묶어 낸다."""
         return TracerApiClient(self._http, self._tracer_api_url, user_id)
 
+    def _agent_api(self, user_id: str) -> TracerApiPort:
+        """레시피 검색은 이 축이 소유한 원장을 보므로 자기 API 를 그 사용자 범위로 묶어 낸다."""
+        return TracerApiClient(self._http, self._agent_api_url, user_id)
+
     async def _carry_settings(self, kind: AgentJobKind, user_id: str, payload: JsonObject) -> JsonObject:
         """계약이 설정에서 채우라고 적은 칸 가운데 요청이 비워 둔 것만 채운다."""
         carried: dict[str, JsonValue] = {}
@@ -236,13 +244,19 @@ class AgentJobActivities:
         return merge_envelope(request.payload, envelope)
 
     async def _run_once(
-        self, job: JobGraphAgent[Any, Any], req: AgentExecutionRequest, tracer: TracerApiPort
+        self,
+        job: JobGraphAgent[Any, Any],
+        req: AgentExecutionRequest,
+        tracer: TracerApiPort,
+        agent_api: TracerApiPort,
     ) -> AgentResponse:
         """그래프 하나를 실행 궤적과 데드라인 안에서 실행해 이 시도의 응답을 낸다."""
         prompt = self._prompts[job.kind]
 
         async def body(trace: ExecutionTrace) -> dict[str, JsonValue]:
-            return await job.run(req, tracer, trace, prompt, self._checkpoints, self._make_chats(req))
+            return await job.run(
+                req, tracer, trace, prompt, self._checkpoints, self._make_chats(req), agent_api
+            )
 
         return await execute(
             ExecutionRequest(

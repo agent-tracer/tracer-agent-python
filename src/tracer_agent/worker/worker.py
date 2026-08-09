@@ -164,6 +164,7 @@ def job_activities(opened: JobWorkerResources, settings: Settings) -> AgentJobAc
     source = ContractPromptSource()
     return AgentJobActivities(
         settings.tracer_api_url,
+        settings.agent_api_url,
         opened.http_client,
         PooledSql(opened.execution, settings.agent_db_acquire_timeout_s),
         {name: source.resolve(name) for name in JOB_AGENT_NAMES},

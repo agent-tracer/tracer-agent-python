@@ -17,8 +17,38 @@ from ..ledger import LedgerSql, SqlRow, UniqueViolation
 # 사전식 비교가 곧 시간 비교가 되도록 원장의 모든 시각을 UTC 한 형식으로만 적는다.
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 
-TIMESTAMP_COLUMNS = frozenset({"created_at", "updated_at", "started_at", "completed_at", "resolved_at"})
-JSON_COLUMNS = frozenset({"usage", "tool_calls", "validation", "model_calls", "input", "result", "args"})
+TIMESTAMP_COLUMNS = frozenset(
+    {
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "resolved_at",
+        "deleted_at",
+        "observed_last_event_at",
+    }
+)
+JSON_COLUMNS = frozenset(
+    {
+        "usage",
+        "tool_calls",
+        "validation",
+        "model_calls",
+        "input",
+        "result",
+        "args",
+        "use_when",
+        "inputs",
+        "outputs",
+        "corrections",
+        "pitfalls",
+        "recovery",
+        "governing_rules",
+        "steps",
+        "touched_files",
+        "contributing_slices",
+    }
+)
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
 
@@ -202,6 +232,82 @@ CREATE TABLE agent_run_observations (
     repair_attempted INTEGER NOT NULL, validation TEXT NOT NULL, model_calls TEXT NOT NULL,
     tool_calls TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (execution_id, attempt_id)
+);
+
+CREATE TABLE recipes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    title TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    description TEXT NOT NULL,
+    use_when TEXT NOT NULL DEFAULT '[]',
+    summary_md TEXT NOT NULL,
+    request TEXT NOT NULL DEFAULT '',
+    inputs TEXT NOT NULL DEFAULT '[]',
+    outputs TEXT NOT NULL DEFAULT '[]',
+    corrections TEXT NOT NULL DEFAULT '[]',
+    pitfalls TEXT NOT NULL DEFAULT '[]',
+    recovery TEXT NOT NULL DEFAULT '[]',
+    governing_rules TEXT NOT NULL DEFAULT '[]',
+    steps TEXT NOT NULL DEFAULT '[]',
+    touched_files TEXT NOT NULL DEFAULT '[]',
+    contributing_slices TEXT NOT NULL DEFAULT '[]',
+    rationale TEXT,
+    language TEXT,
+    rev INTEGER NOT NULL DEFAULT 1,
+    parent_recipe_id TEXT,
+    source_job_id TEXT,
+    user_edited INTEGER NOT NULL DEFAULT 0,
+    last_edited_by TEXT NOT NULL DEFAULT 'agent',
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    deleted_at TEXT
+);
+
+CREATE TABLE recipe_applications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    recipe_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    injected_via TEXT NOT NULL,
+    outcome TEXT,
+    note TEXT,
+    anchor_event_id TEXT,
+    anchor_seq INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE task_cleanup_suggestions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    current_value TEXT,
+    proposed_value TEXT,
+    rationale TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    observed_last_event_at TEXT
+);
+
+CREATE UNIQUE INDEX cleanup_pending_task_kind_unique
+    ON task_cleanup_suggestions (user_id, task_id, kind) WHERE status = 'pending';
+
+CREATE TABLE search_outbox (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    target TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (target = 'recipe')
 );
 """
 

@@ -1,4 +1,4 @@
-"""recipe-scan이 추적 창구의 검색을 읽는 사용자 범위 진입점을 소유한다."""
+"""recipe-scan이 사건과 태스크는 추적에서, 레시피는 자기 축에서 검색하는 진입점을 소유한다."""
 
 from __future__ import annotations
 
@@ -8,21 +8,22 @@ from ..runtime.tracer_client import TracerApiPort
 
 EVENT_SEARCH_PATH = "/api/v1/events/search"
 TASK_SEARCH_PATH = "/api/v1/tasks/search"
-RECIPE_SEARCH_PATH = "/api/v1/recipes/search"
-RECIPES_PATH = "/api/v1/recipes"
+RECIPE_SEARCH_PATH = "/api/agent/recipes/search"
 # 검색 창구는 이벤트 적중 뒤에 메모 적중을 이어 붙이며 메모만 이 표식을 갖는다.
 MEMO_HIT_TYPE = "memo"
 
 _EVENT_KEYS = ("taskId", "seq", "kind", "title", "body", "toolName", "filePaths", "occurredAt")
 _TASK_KEYS = ("title", "status", "taskKind", "updatedAt")
-_RECIPE_KEYS = ("title", "intent", "status", "userEdited", "rev", "updatedAt")
+# 얇은 적중에 없는 칸은 실리지 않으므로 상태는 빈 글자가 되고 사람이 고쳤다는 표시는 거짓이 된다.
+_RECIPE_KEYS = ("title", "intent", "rev", "updatedAt")
 
 
 class RecipeSearchReader:
-    """한 사용자의 검색 창구만 읽도록 생성 시점에 범위가 묶인 검색 진입점이다."""
+    """사건과 태스크는 추적이 소유하고 레시피는 이 축이 소유하므로 창구를 나눠 부른다."""
 
-    def __init__(self, tracer: TracerApiPort) -> None:
+    def __init__(self, tracer: TracerApiPort, agent: TracerApiPort) -> None:
         self._tracer = tracer
+        self._agent = agent
 
     async def search_events(
         self,
@@ -59,22 +60,20 @@ class RecipeSearchReader:
         return [{"id": hit.get("id", ""), **_pick(hit, _TASK_KEYS)} for hit in similar[:limit]]
 
     async def search_recipes(self, q: str, limit: int) -> list[JsonObject]:
-        """수정 대상이 될 수 있는 레시피를 찾아 순위대로 원장 행을 낸다."""
-        found = _items(await self._tracer.get(RECIPE_SEARCH_PATH, {"q": q, "limit": limit}))
-        ranked = [text(hit["recipeId"]) for hit in found if isinstance(hit.get("recipeId"), str)]
-        if not ranked:
-            return []
-        # 검색 창구는 판단에 필요한 값만 내므로 개정 근거가 되는 판은 원장 목록에서 읽는다.
-        owned = {
-            text(recipe["id"]): recipe
-            for recipe in _items(await self._tracer.get(RECIPES_PATH))
-            if isinstance(recipe.get("id"), str)
-        }
-        return [
-            {"id": recipe_id, **_pick(owned[recipe_id], _RECIPE_KEYS)}
-            for recipe_id in ranked
-            if recipe_id in owned
-        ]
+        """수정 대상이 될 수 있는 레시피를 자기 축의 검색 창구에서 순위대로 찾는다."""
+        found = _items(await self._agent.get(RECIPE_SEARCH_PATH, {"q": q, "limit": limit}))
+        return [_slim_recipe(hit) for hit in found]
+
+
+def _slim_recipe(hit: JsonObject) -> JsonObject:
+    """적중 하나를 도구가 내는 얇은 레시피로 옮긴다."""
+    identifier = hit.get("recipeId") if isinstance(hit.get("recipeId"), str) else hit.get("id")
+    return {
+        "id": text(identifier) if isinstance(identifier, str) else "",
+        "status": text(hit["status"]) if isinstance(hit.get("status"), str) else "",
+        "userEdited": hit.get("userEdited") is True,
+        **_pick(hit, _RECIPE_KEYS),
+    }
 
 
 def _items(payload: JsonValue) -> list[JsonObject]:

@@ -72,7 +72,7 @@ def _survey(chat: FakeToolLoopChat, usage: ExecutionTrace) -> SurveyNode:
     deps = RecipeDeps(
         req=req,
         reader=RecipeLedgerReader(FakeTracerApi()),
-        search=RecipeSearchReader(FakeTracerApi()),
+        search=RecipeSearchReader(FakeTracerApi(), FakeTracerApi()),
         usage=usage,
         caller=new_recipe_caller(ChatPair(chat, None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),

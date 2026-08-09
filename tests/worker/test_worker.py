@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from tests.support.fakes import TRACER_API_URL
+from tests.support.fakes import AGENT_API_URL, TRACER_API_URL
 from tests.support.prompts import JOB_PROMPTS
 from tracer_agent.shared.agents.runtime.__fakes__.pool import FakeLedgerPool
 from tracer_agent.shared.agents.runtime.ledger import PooledSql
@@ -66,7 +66,7 @@ class SweepResources:
 
 
 def _activities() -> AgentJobActivities:
-    return AgentJobActivities(TRACER_API_URL, None, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
+    return AgentJobActivities(TRACER_API_URL, AGENT_API_URL, None, PooledSql(FakeLedgerPool()), JOB_PROMPTS)  # type: ignore[arg-type]
 
 
 def test_기동_인자가_계약의_큐_키_셋이다() -> None:

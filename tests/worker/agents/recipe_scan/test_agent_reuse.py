@@ -101,7 +101,7 @@ def _deps(chat: Any) -> RecipeDeps:
     return RecipeDeps(
         req=_request(),
         reader=RecipeLedgerReader(api),  # type: ignore[arg-type]
-        search=RecipeSearchReader(api),  # type: ignore[arg-type]
+        search=RecipeSearchReader(api, api),  # type: ignore[arg-type]
         usage=ExecutionTrace(),
         caller=new_recipe_caller(ChatPair(chat, None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),

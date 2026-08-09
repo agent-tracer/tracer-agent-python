@@ -201,3 +201,53 @@ class Test단계의_순번:
             " VALUES ('s2', 'x2', 'u1', 1, 1, 'assistant', '말', ?)",
             (NOW,),
         )
+
+
+def _suggestion(raw: Any, suggestion_id: str, status: str, task_id: str = "t1") -> None:
+    raw.execute(
+        "INSERT INTO task_cleanup_suggestions"
+        " (id, user_id, job_id, task_id, kind, rationale, status, created_at)"
+        " VALUES (?, 'u1', 'job-1', ?, 'archive', '사건이 오래 없다', ?, ?)",
+        (suggestion_id, task_id, status, NOW),
+    )
+
+
+class Test한_태스크와_한_종류에_대기_중인_제안은_하나:
+    def test_같은_태스크와_종류의_두_번째_대기_행을_거절한다(self, raw: Any) -> None:
+        # cleanup_pending_task_kind_unique 가 다시 스캔해도 대기 행의 수를 늘리지 않는다.
+        _suggestion(raw, "s1", "pending")
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _suggestion(raw, "s2", "pending")
+
+        assert "task_cleanup_suggestions.kind" in str(refused.value)
+
+    def test_앞의_행이_해소되었으면_새_대기_행을_만든다(self, raw: Any) -> None:
+        _suggestion(raw, "s1", "dismissed")
+
+        _suggestion(raw, "s2", "pending")
+
+    def test_태스크가_다르면_대기_행이_여럿_남는다(self, raw: Any) -> None:
+        _suggestion(raw, "s1", "pending")
+
+        _suggestion(raw, "s2", "pending", task_id="t2")
+
+
+def _outbox(raw: Any, row_id: str, target: str) -> None:
+    raw.execute(
+        "INSERT INTO search_outbox (id, user_id, target, target_id, attempts, created_at)"
+        " VALUES (?, 'u1', ?, 'recipe-1', 0, ?)",
+        (row_id, target, NOW),
+    )
+
+
+class Test에이전트_원장이_소유한_색인_대상은_레시피_하나:
+    def test_레시피가_아닌_대상의_적재를_거절한다(self, raw: Any) -> None:
+        # search_outbox_target_check 가 아무도 배출하지 않는 대상을 이 표에 들이지 않는다.
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _outbox(raw, "o1", "task")
+
+        assert "target = 'recipe'" in str(refused.value)
+
+    def test_레시피_대상의_적재는_받는다(self, raw: Any) -> None:
+        _outbox(raw, "o2", "recipe")

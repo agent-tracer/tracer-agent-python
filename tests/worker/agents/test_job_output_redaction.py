@@ -7,17 +7,20 @@ from typing import Any
 
 import pytest
 
+from tests.support.chat_surface import SingleSql
 from tracer_agent.shared.agents.recipe_scan.models import (
     ProvenanceWire,
     RecipeCandidate,
     RecipeScanResult,
 )
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.redaction import is_suspect_text, marker
 from tracer_agent.shared.agents.task_cleanup.models import CleanupDraftSuggestion, CleanupResult
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestion, TitleSuggestionDraft
 from tracer_agent.worker.agents.recipe_scan.agent import RECIPE_SCAN_JOB
 from tracer_agent.worker.agents.runtime.__fakes__.tracer_api import FakeTracerApi
+from tracer_agent.worker.agents.runtime.outputs import JobOutputTargets
 from tracer_agent.worker.agents.task_cleanup.agent import TASK_CLEANUP_JOB
 from tracer_agent.worker.agents.title_suggestion.agent import TITLE_SUGGESTION_JOB
 
@@ -148,20 +151,31 @@ def test_제목은_제목과_근거를_가린다() -> None:
     assert suggestion["rationale"] == f"대화가 {marker()} 를 다뤘다"  # type: ignore[index]
 
 
-async def test_창구로_배달되는_후보도_같은_가림을_지난_값이다() -> None:
-    tracer = FakeTracerApi()
+async def test_원장에_적히는_후보도_같은_가림을_지난_값이다() -> None:
+    store = SqliteLedgerSql()
 
-    await RECIPE_SCAN_JOB.settle_outputs(tracer, "job-1", _recipe_scan_result(), {})
+    await RECIPE_SCAN_JOB.settle_outputs(
+        JobOutputTargets(SingleSql(store), FakeTracerApi()),
+        "job-1",
+        _recipe_scan_result(),
+        {"userId": "user-1"},
+    )
 
-    draft = tracer.posts[0]["body"]["recipes"][0]
-    assert CREDENTIAL not in json.dumps(draft, ensure_ascii=False)
-    assert draft["summaryMd"] == f"- 열쇠 {marker()} 를 그대로 적었다"
+    row = store.rows("recipes")[0]
+    assert CREDENTIAL not in json.dumps(row, ensure_ascii=False, default=str)
+    assert row["summary_md"] == f"- 열쇠 {marker()} 를 그대로 적었다"
+    store.close()
 
 
-async def test_창구로_배달되는_제안도_같은_가림을_지난_값이다() -> None:
-    tracer = FakeTracerApi()
+async def test_원장에_적히는_제안도_같은_가림을_지난_값이다() -> None:
+    store = SqliteLedgerSql()
 
-    await TASK_CLEANUP_JOB.settle_outputs(tracer, "job-2", _task_cleanup_result(), {})
+    await TASK_CLEANUP_JOB.settle_outputs(
+        JobOutputTargets(SingleSql(store), FakeTracerApi()),
+        "job-2",
+        _task_cleanup_result(),
+        {"userId": "user-1"},
+    )
 
-    suggestion = tracer.posts[0]["body"]["suggestions"][0]
-    assert suggestion["rationale"] == f"{marker()} 만 남기고 끝난 태스크다"
+    assert store.rows("task_cleanup_suggestions")[0]["rationale"] == f"{marker()} 만 남기고 끝난 태스크다"
+    store.close()

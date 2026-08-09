@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ...runtime.ledger import LedgerSql, SqlRow, UniqueViolation
+from ...shared.ids import generate_ulid
 from ..rejections import THREAD_NOT_FOUND, ChatLedgerInvariantError, ChatRejected
 from .dispatch import ExecutionDispatch
-from .ids import generate_ulid
 from .ledger import QUEUED, ChatIntakeLedger
 from .models import PostMessagePayload
 

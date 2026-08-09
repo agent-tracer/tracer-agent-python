@@ -21,6 +21,7 @@ from ..runtime.job_agent import GraphRun, JobGraphAgent, dumped
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import ChatPair
 from ..runtime.node import NodeRegistry
+from ..runtime.outputs import JobOutputTargets
 from ..runtime.pricing import ModelRates
 from ..runtime.routes import EMPTY, FINALIZE
 from ..runtime.routing import build_validation_router
@@ -35,7 +36,7 @@ from .graph import TASK_CLEANUP_GRAPH, TASK_CLEANUP_NODE_NAMES
 from .nodes.decision import InvestigateNode, RepairNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
 from .nodes.result import empty_result, finalize_result
-from .outputs import deliver_suggestions
+from .outputs import write_suggestions
 from .policy import VALIDATION_REASONS, has_suggestions
 from .prompts import build_prompt_bundle
 from .reader import load_cleanup_batch
@@ -63,15 +64,18 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
 
     async def settle_outputs(
         self,
-        tracer: TracerApiPort,
+        targets: JobOutputTargets,
         execution_id: str,
         data: JsonObject | None,
-        _payload: JsonObject,
+        payload: JsonObject,
     ) -> None:
-        """정리 제안을 창구로 보내며 보낼 것이 없으면 아무 창구도 부르지 않는다."""
+        """정리 제안을 자기 원장에 적으며 적을 것이 없으면 원장을 열지 않는다."""
         if not data:
             return
-        await deliver_suggestions(tracer, execution_id, data)
+        user_id = payload.get("userId")
+        if not isinstance(user_id, str) or not user_id:
+            return
+        await write_suggestions(targets, user_id, execution_id, data)
 
     def compose(
         self,
@@ -81,6 +85,7 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
         prompt: AgentPrompt,
         chats: ChatPair,
         prior: PriorSpend,
+        _agent_api: TracerApiPort | None = None,
     ) -> GraphRun[TaskCleanupState]:
         budget = ExecutionBudget(
             req.limits.budgetUsd,

@@ -23,6 +23,8 @@ COVERED_BY: dict[str, str | None] = {
     "chat_execution_steps_execution_attempt_seq": _REFUSE,
     "ai_jobs_idempotency_key": _REFUSE,
     "ai_job_steps_job_attempt_seq": _REFUSE,
+    "cleanup_pending_task_kind_unique": _REFUSE,
+    "search_outbox_target_check": _REFUSE,
 }
 
 

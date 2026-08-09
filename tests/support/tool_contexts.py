@@ -38,7 +38,7 @@ def mk_recipe_context(
         max_model_turns=max_model_turns,
         tool_owner=agent_name,
         reader=RecipeLedgerReader(api),  # type: ignore[arg-type]
-        search=RecipeSearchReader(api),  # type: ignore[arg-type]
+        search=RecipeSearchReader(api, api),  # type: ignore[arg-type]
         catalog=catalog or ProvenanceCatalog(),
     )
 

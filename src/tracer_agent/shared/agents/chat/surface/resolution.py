@@ -7,10 +7,10 @@ from datetime import datetime
 from typing import Any, Literal
 
 from ...runtime.ledger import SqlRow, SqlSource
+from ...shared.ids import generate_ulid
 from ..intake.cancel import UpdateSignal
 from ..intake.dispatch import ExecutionDispatch
 from ..intake.follow_up import follow_up_client_request_id, follow_up_input_hash
-from ..intake.ids import generate_ulid
 from ..intake.ledger import ChatIntakeLedger
 from ..rejections import ChatRejected
 from .access import CONFIRMATION_NOT_FOUND, CONFIRMATION_RESOLVED, owned_thread

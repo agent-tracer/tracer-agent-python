@@ -70,6 +70,7 @@ class TitleSuggestionJob(JobGraphAgent[TitleSuggestionRequest, TitleSuggestionSt
         prompt: AgentPrompt,
         chats: ChatPair,
         prior: PriorSpend,
+        _agent_api: TracerApiPort | None = None,
     ) -> GraphRun[TitleSuggestionState]:
         budget = ExecutionBudget(
             req.limits.budgetUsd,

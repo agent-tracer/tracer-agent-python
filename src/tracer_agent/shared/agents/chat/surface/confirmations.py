@@ -10,10 +10,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
+from ...shared.ids import generate_ulid
 from ...shared.json_view import JsonObject
 from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, ok
 from ..dependencies import Dispatch, ToolExecutor, Updates, Watch
-from ..intake.ids import generate_ulid
 from ..rejections import ChatRejected
 from ..tools.surface import chat_tool_note
 from .access import owned_thread

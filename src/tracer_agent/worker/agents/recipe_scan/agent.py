@@ -21,6 +21,7 @@ from ..runtime.job_agent import GraphRun, JobGraphAgent, dumped
 from ..runtime.llm.budget import ExecutionBudget
 from ..runtime.llm.client import ChatPair
 from ..runtime.node import NodeRegistry
+from ..runtime.outputs import JobOutputTargets
 from ..runtime.pricing import ModelRates
 from ..runtime.routes import EMPTY, FINALIZE
 from ..runtime.routing import build_validation_router
@@ -34,7 +35,7 @@ from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import empty_result, finalize_result, wire_provenance
 from .nodes.survey import SurveyNode
-from .outputs import DEFAULT_LANGUAGE, deliver_recipes
+from .outputs import DEFAULT_LANGUAGE, write_recipes
 from .policy import VALIDATION_REASONS
 from .prompts import build_prompt_bundle
 from .reader import RecipeLedgerReader
@@ -56,15 +57,18 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
 
     async def settle_outputs(
         self,
-        tracer: TracerApiPort,
+        targets: JobOutputTargets,
         execution_id: str,
         data: JsonObject | None,
         payload: JsonObject,
     ) -> None:
-        """레시피 후보를 창구로 보내며 보낼 것이 없으면 아무 창구도 부르지 않는다."""
+        """레시피 후보를 자기 원장에 적으며 적을 것이 없으면 원장을 열지 않는다."""
         if not data:
             return
-        await deliver_recipes(tracer, execution_id, data, _language_of(payload))
+        user_id = payload.get("userId")
+        if not isinstance(user_id, str) or not user_id:
+            return
+        await write_recipes(targets, user_id, execution_id, data, _language_of(payload))
 
     def compose(
         self,
@@ -74,6 +78,7 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
         prompt: AgentPrompt,
         chats: ChatPair,
         prior: PriorSpend,
+        agent_api: TracerApiPort | None = None,
     ) -> GraphRun[RecipeScanState]:
         budget = ExecutionBudget(
             req.limits.budgetUsd,
@@ -92,7 +97,7 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
         deps = RecipeDeps(
             req=req,
             reader=RecipeLedgerReader(tracer),
-            search=RecipeSearchReader(tracer),
+            search=RecipeSearchReader(tracer, agent_api or tracer),
             usage=usage,
             caller=new_recipe_caller(chats),
             budget=budget,

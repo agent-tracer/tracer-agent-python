@@ -41,7 +41,7 @@ def _deps(chat: FakeToolLoopChat, req: RecipeScanRequest) -> RecipeDeps:
     return RecipeDeps(
         req=req,
         reader=RecipeLedgerReader(FakeTracerApi()),
-        search=RecipeSearchReader(FakeTracerApi()),
+        search=RecipeSearchReader(FakeTracerApi(), FakeTracerApi()),
         usage=ExecutionTrace(),
         caller=new_recipe_caller(ChatPair(chat, None)),  # type: ignore[arg-type]
         budget=ExecutionBudget(1.0, mk_rates()),

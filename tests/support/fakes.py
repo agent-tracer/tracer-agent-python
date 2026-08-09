@@ -210,6 +210,7 @@ class FakeToolLoopChat:
 
 
 TRACER_API_URL = "http://tracer-api.test"
+AGENT_API_URL = "http://agent-api.test"
 
 
 _ELIGIBLE_SCAN_ANCHOR = ScanAnchor(id="task-1", origin="user", root=True, status="completed")

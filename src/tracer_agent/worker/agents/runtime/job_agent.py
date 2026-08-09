@@ -18,6 +18,7 @@ from .durable_graph import DurableGraph, PriorSpend
 from .execution.trace import ExecutionTrace
 from .graph_session import GraphSession
 from .llm.client import ChatPair, make_chat_pair
+from .outputs import JobOutputTargets
 from .tracer_client import TracerApiPort
 from .validation_graph import ValidationGraphContext
 
@@ -48,12 +49,12 @@ class JobGraphAgent[RequestT: AgentExecutionRequest, StateT](ABC):
 
     async def settle_outputs(
         self,
-        _tracer: TracerApiPort,
+        _targets: JobOutputTargets,
         _execution_id: str,
         _data: JsonObject | None,
         _payload: JsonObject,
     ) -> None:
-        """종결한 잡의 산출물을 배달하며 보낼 것이 없는 잡은 아무 창구도 부르지 않는다."""
+        """종결한 잡의 산출물을 자기 원장에 적으며 적을 것이 없는 잡은 아무것도 하지 않는다."""
         return
 
     async def run(
@@ -64,6 +65,7 @@ class JobGraphAgent[RequestT: AgentExecutionRequest, StateT](ABC):
         prompt: AgentPrompt,
         checkpoints: GraphCheckpointProvider | None = None,
         chats: ChatPair | None = None,
+        agent_api: TracerApiPort | None = None,
     ) -> JsonObject:
         """실행 하나를 열고 이 에이전트가 세운 노드로 그래프를 수행해 산출물을 낸다."""
         session = await GraphSession.open(
@@ -74,7 +76,9 @@ class JobGraphAgent[RequestT: AgentExecutionRequest, StateT](ABC):
             recursion_limit=self.recursion_limit,
             checkpoints=checkpoints,
         )
-        plan = self.compose(req, tracer, usage, prompt, chats or make_chat_pair(req), session.prior)
+        plan = self.compose(
+            req, tracer, usage, prompt, chats or make_chat_pair(req), session.prior, agent_api
+        )
         return self.result_of(await session.invoke(plan.initial, plan.context))
 
     @abstractmethod
@@ -86,6 +90,7 @@ class JobGraphAgent[RequestT: AgentExecutionRequest, StateT](ABC):
         prompt: AgentPrompt,
         chats: ChatPair,
         prior: PriorSpend,
+        agent_api: TracerApiPort | None = None,
     ) -> GraphRun[StateT]:
         """이어받은 지출을 안은 예산과 노드와 초기 상태를 이 실행의 한 벌로 세운다."""
 

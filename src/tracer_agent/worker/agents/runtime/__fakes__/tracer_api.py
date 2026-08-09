@@ -27,7 +27,8 @@ _DEFAULT_TASK: dict[str, Any] = {
 
 
 _TASK_PATH = re.compile(r"/api/v1/tasks/[^/]+")
-CLEANUP_SUGGESTIONS_PATH = "/api/v1/task-cleanup/suggestions"
+# 레시피 검색은 에이전트 원장의 것이므로 이 대역은 자기 축의 경로로 받는다.
+AGENT_RECIPE_SEARCH_PATH = "/api/agent/recipes/search"
 
 
 class FakeTracerApi(TracerApiPort):
@@ -45,7 +46,6 @@ class FakeTracerApi(TracerApiPort):
         children: list[dict[str, Any]] | None = None,
         tasks: list[dict[str, Any]] | None = None,
         hits: dict[str, list[dict[str, Any]]] | None = None,
-        recipes: list[dict[str, Any]] | None = None,
     ) -> None:
         self.rows = rows or []
         self.owned = owned
@@ -56,7 +56,6 @@ class FakeTracerApi(TracerApiPort):
         self.children = children or []
         self.tasks = tasks or []
         self.hits = hits or {}
-        self.recipes = recipes or []
         self.calls: list[dict[str, Any]] = []
         self.posts: list[dict[str, Any]] = []
 
@@ -77,10 +76,8 @@ class FakeTracerApi(TracerApiPort):
             return {"items": list(self.hits.get("tasks", []))}
         if path == "/api/v1/events/search":
             return {"items": list(self.hits.get("events", []))}
-        if path == "/api/v1/recipes/search":
+        if path == AGENT_RECIPE_SEARCH_PATH:
             return {"items": list(self.hits.get("recipes", []))}
-        if path == "/api/v1/recipes":
-            return {"items": list(self.recipes)}
         if path == "/api/v1/rules":
             return {"items": list(self.rules)}
         if _TASK_PATH.fullmatch(path):
@@ -103,10 +100,6 @@ class FakeTracerApi(TracerApiPort):
         return {"items": page, "nextCursor": next_cursor, "total": self.total}
 
     async def post(self, path: str, body: Mapping[str, Any]) -> JsonValue:
-        """보낸 본문을 기억하고 요청에 실린 항목 수만큼 원장 행을 낸다."""
+        """보낸 본문을 기억하며 산출물 적재 경로는 자기 원장으로 옮겨 이 대역에 남지 않았다."""
         self.posts.append({"path": path, "body": body})
-        if path == "/api/v1/recipes":
-            return {"recipes": [{"id": f"recipe-{index}"} for index in range(len(body["recipes"]))]}
-        if path == CLEANUP_SUGGESTIONS_PATH:
-            return {"suggestions": [{"id": f"cleanup-{index}"} for index in range(len(body["suggestions"]))]}
         raise AssertionError(f"이 대역이 응답을 정해 두지 않은 적재 경로다: {path}")
