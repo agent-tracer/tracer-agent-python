@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from ...runtime.dependencies import ExecutionSql, UserId
 from ...shared.json_view import JsonObject
-from ...shared.wire import SuccessEnvelope, error_responses, ok
+from ...shared.wire import SuccessEnvelope, error_envelope, error_responses, ok
 from ..dependencies import Dispatch, ToolExecutor, Updates, Watch
 from ..intake.ids import generate_ulid
 from ..rejections import ChatRejected
@@ -35,8 +35,6 @@ CHAT_CONFIRMATIONS_PATH = f"{CHAT_THREAD_PATH}/confirmations"
 CHAT_CONFIRMATION_PATH = f"{CHAT_CONFIRMATIONS_PATH}/{{confirmation_id}}"
 
 TOOL_UNAVAILABLE = (502, "chat.tool-failed", "Approved tool call did not succeed")
-
-SERVER_ERROR_STATUS = 500
 
 _SUMMARY_VALUE_LIMIT = 80
 
@@ -128,10 +126,11 @@ async def decide_chat_tool(
     except ChatToolArgsInvalid:
         return invalid_request()
     except ChatToolFailed as failed:
-        # 상류가 못 받은 실패와 내용 자체가 규칙에 걸린 거절은 사용자가 할 행동이 정반대다.
-        if failed.status < SERVER_ERROR_STATUS:
-            return invalid_request(failed.details)
-        return rejection(ChatRejected(*TOOL_UNAVAILABLE))
+        # 상류가 낸 어휘를 다시 분류하면 재시도가 의미 있다는 말이 사용자에게 닿지 않는다.
+        if failed.rejection is None:
+            return rejection(ChatRejected(*TOOL_UNAVAILABLE))
+        code, message = failed.rejection
+        return error_envelope(failed.status, code, message, details=failed.details)
     return ok(_decided(resolved))
 
 

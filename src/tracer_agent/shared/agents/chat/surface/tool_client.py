@@ -26,10 +26,14 @@ class ChatToolExecutor(Protocol):
 class ChatToolFailed(RuntimeError):
     """승인된 도구 호출이 상류에서 거절되어 대기 행을 닫지 못하며 그 사유를 함께 싣는다."""
 
-    def __init__(self, message: str, *, status: int, details: Any = None) -> None:
+    def __init__(
+        self, message: str, *, status: int, details: Any = None, rejection: tuple[str, str] | None = None
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.details = details
+        # 상류가 계약의 오류 봉투로 답했을 때만 그 어휘를 싣고 아니면 아무것도 싣지 않는다.
+        self.rejection = rejection
 
 
 def _calls_agent_upstream(path: str) -> bool:
@@ -66,18 +70,33 @@ class HttpChatToolExecutor:
                 f"{tool_name} answered {response.status_code}",
                 status=response.status_code,
                 details=_rejection_details(response.text),
+                rejection=_rejection_vocabulary(response.text),
             )
         return call.describe(_data(response.text))
 
 
-def _rejection_details(raw: str) -> Any:
-    """상류가 계약의 오류 봉투로 적어 보낸 거절 사유만 꺼낸다."""
+def _rejection_vocabulary(raw: str) -> tuple[str, str] | None:
+    """상류가 계약의 오류 봉투로 적어 보낸 코드와 문구를 낸다."""
+    error = _error_body(raw)
+    if error is None:
+        return None
+    code, message = error.get("code"), error.get("message")
+    return (code, message) if isinstance(code, str) and isinstance(message, str) else None
+
+
+def _error_body(raw: str) -> dict[str, Any] | None:
     try:
         payload = json.loads(raw)
     except ValueError:
         return None
     error = payload.get("error") if isinstance(payload, dict) else None
-    return error.get("details") if isinstance(error, dict) else None
+    return error if isinstance(error, dict) else None
+
+
+def _rejection_details(raw: str) -> Any:
+    """상류가 계약의 오류 봉투로 적어 보낸 거절 사유만 꺼낸다."""
+    error = _error_body(raw)
+    return error.get("details") if error is not None else None
 
 
 def _data(raw: str) -> Any:

@@ -8,8 +8,12 @@ from tests.support.chat_surface import RecordingDispatch, RecordingExecutor, see
 from tracer_agent.shared.agents.chat.memory_policy import INSTRUCTION_REJECTION
 from tracer_agent.shared.agents.chat.surface.tool_client import ChatToolFailed
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.shared.ledger_availability import ledger_unavailable_rejection
 
 THREADS = "/api/agent/chat/threads"
+
+_DRY = ledger_unavailable_rejection()
+DRY = {"status": _DRY.status, "code": _DRY.code, "message": _DRY.message}
 
 
 class Test확인_대기:
@@ -72,7 +76,12 @@ class Test확인_대기:
         refused = [{"loc": ["content"], "type": INSTRUCTION_REJECTION}]
 
         async def refuse(*_args: object, **_kwargs: object) -> str:
-            raise ChatToolFailed("remember_fact answered 400", status=400, details=refused)
+            raise ChatToolFailed(
+                "remember_fact answered 400",
+                status=400,
+                details=refused,
+                rejection=("validation_error", "Invalid request"),
+            )
 
         executor.execute = refuse  # type: ignore[method-assign]
 
@@ -93,14 +102,19 @@ class Test확인_대기:
         ).json()["data"]["confirmationId"]
 
         async def unavailable(*_args: object, **_kwargs: object) -> str:
-            raise ChatToolFailed("propose_task_write answered 503", status=503)
+            raise ChatToolFailed(
+                "propose_task_write answered 503",
+                status=503,
+                rejection=(DRY["code"], DRY["message"]),
+            )
 
         executor.execute = unavailable  # type: ignore[method-assign]
 
         res = client.post(f"{THREADS}/t1/confirmations/{confirmation}", json={"decision": "approve"})
 
-        assert res.status_code == 502
-        assert res.json()["error"]["code"] == "chat.tool-failed"
+        # 안쪽 창구가 지킨 어휘를 바깥이 지우면 다시 와도 된다는 말이 사용자에게 닿지 않는다.
+        assert res.status_code == DRY["status"]
+        assert res.json()["error"]["code"] == DRY["code"]
         assert store.rows("chat_pending_tools")[0]["status"] == "pending"
 
     def test_승인은_그_결과를_앵커로_삼는_턴을_세우고_기동한다(
