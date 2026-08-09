@@ -257,7 +257,7 @@ Chat도 스레드 워크플로와 실행 워크플로를 따로 두고 준비·�
 | 계약 판을 찾는 뿌리 | `shared/agents/shared/contract_root.py` |
 | 재개 열쇠와 앞선 시도의 지출 | `runtime/durable_graph.py` |
 | 실행 하나의 그래프와 설정과 이어받은 지출 | `runtime/graph_session.py` |
-| 잡 하나의 조립·실행·배달 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |
+| 잡 하나의 조립·실행·산출물 쓰기 | `runtime/job_agent.py`, 에이전트별 `agent.py`·`outputs.py` |
 | 노드가 함께 받는 실행 의존성 | 에이전트별 `deps.py` |
 | 모델 호출자와 컴파일 캐시 | `runtime/llm/model_caller.py` |
 | 미들웨어 층과 그 순서 | `runtime/llm/middleware_stack.py` |

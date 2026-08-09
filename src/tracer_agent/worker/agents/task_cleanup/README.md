@@ -62,7 +62,7 @@ sequenceDiagram
 | `empty` | `TaskCleanupState` | 제안이 없거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 
 `result_of`는 직렬화한 산출을 계약의 `agent/shared/redaction.json` `stages.output` 자리로 통과시킨다.
-그 한 벌이 잡 원장과 조회 표면과 정리 제안 창구 배달로 함께 나가므로 가림도 그 자리 하나에 선다.
+그 한 벌이 잡 원장과 조회 표면과 정리 제안 원장 쓰기로 함께 나가므로 가림도 그 자리 하나에 선다.
 
 한 계획이 같은 task를 두 번 담으면 `TriagePlan`과 `CleanupDraft.redispatch`가 그 계획을 거부한다.
 task를 가리키는 필드와 그 규칙은 계약의 `agent/shared/dispatch.plan.json` `uniqueness`가 소유한다.

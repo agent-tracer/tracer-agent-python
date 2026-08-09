@@ -78,25 +78,27 @@ sequenceDiagram
 `MAX_REDISPATCH_ROUNDS`를 넘는 재배정은 허용하지 않는다. 기준 task는 후보의 `contributing_slices`에 포함되어야 하며, 동일 turn의 중복 인용은 검증에서 거부한다.
 
 `result_of`는 직렬화한 산출을 계약의 `agent/shared/redaction.json` `stages.output` 자리로 통과시킨다.
-그 한 벌이 잡 원장과 조회 표면과 레시피 창구 배달로 함께 나가므로 가림도 그 자리 하나에 선다.
+그 한 벌이 잡 원장과 조회 표면과 레시피 원장 쓰기로 함께 나가므로 가림도 그 자리 하나에 선다.
 
 한 계획이 같은 축을 두 번 담으면 `DispatchPlan`과 `RecipeDraft.redispatch`가 그 계획을 거부한다.
 축을 가리키는 필드와 그 규칙은 계약의 `agent/shared/dispatch.plan.json` `uniqueness`가 소유한다.
 거부된 계획은 `StandardAgentMiddleware`가 궤적에 실은 뒤 구조화 복구가 사유와 함께 한 번 되돌려
 주므로, 겹친 배정은 관측에 남고 조율자는 남은 축을 덮는 계획을 다시 낼 기회를 얻는다.
 
-## 저장 창구로 보내는 draft
+## 자기 원장에 적는 후보
 
-`outputs.py`의 `_DRAFT_FIELDS`가 후보의 snake_case 칸을 저장 창구가 받는 camelCase 칸으로
-옮긴다. 목록에 없는 칸은 창구로 나가지 않으므로 후보에만 선 값은 배달되지 않는다. 모델의
-`revises_recipe_id`는 `parentRecipeId`가 되며, 이 실행이 본 판(`provenance.recipeRevs`)을
-`parentRecipeSeenRev`로 함께 싣고 본 판을 모르면 두 칸을 함께 뺀다. 받는 칸의 목록은 계약의
-`http/tracer-dependency.openapi.yaml`의 `RecipeDraft`와
-`conformance/cases/tracer.outputs.json`의 `drafts.recipe`가 소유한다.
+`outputs.py`의 `_ROW_FIELDS`가 후보의 칸을 `agent-db` 의 `recipes` 열로 옮긴다. 목록에 없는 칸은
+원장에 적히지 않으므로 후보에만 선 값은 저장되지 않는다. 모델의 `revises_recipe_id`는
+`parent_recipe_id`가 되며, 이 실행이 본 판(`provenance.recipeRevs`)이 지금 판과 같을 때만 적고
+어긋나면 부모를 비운다. 적는 칸과 종결 단계가 정하는 값은 계약의
+`conformance/cases/recipe.ledger.json`의 `ledgerWrite`가 소유한다.
 
-답변 언어는 후보가 아니라 이 실행이 갖는 값이라 종결이 요청 payload에서 꺼내 배달로 넘기고
-`_to_draft`가 초안마다 싣는다. 요청이 언어를 정하지 않았으면 정하지 않았다는 표시를 그대로 실으며
-그 글자는 실제로 쓰인 언어가 아니다. 정본 축도 조건 없이 같은 값을 싣는다.
+후보 한 벌과 그 색인 적재 행은 한 트랜잭션에 함께 적힌다. 같은 `source_job_id` 로 적힌 후보가 이미
+있으면 아무것도 쓰지 않으므로 같은 잡의 재시도가 후보를 두 벌 만들지 않는다.
+
+답변 언어는 후보가 아니라 이 실행이 갖는 값이라 종결이 요청 payload에서 꺼내 쓰기로 넘기고
+`_to_row`가 행마다 적는다. 요청이 언어를 정하지 않았으면 정하지 않았다는 표시를 그대로 적으며
+그 글자는 실제로 쓰인 언어가 아니다. 정본 축도 조건 없이 같은 값을 적는다.
 
 ## 도구 타입
 
@@ -205,5 +207,5 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py`, `reservation.py` |
 | 추적 API 읽기 | `reader.py`, `search.py`, `summary.py` |
-| 후보를 저장 창구로 배달 | `outputs.py` |
+| 후보를 자기 원장에 적기 | `outputs.py` |
 | 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |
