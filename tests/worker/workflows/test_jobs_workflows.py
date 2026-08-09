@@ -10,6 +10,7 @@ from temporalio import workflow
 from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
 from temporalio.workflow import _Definition
 
+from tracer_agent.shared.agents.shared.job_kinds import AgentJobKind
 from tracer_agent.shared.agents.shared.models import AgentResponse
 from tracer_agent.shared.workflows.jobs_spec import (
     AGENT_JOB_WORKFLOW,
@@ -25,6 +26,13 @@ from tracer_agent.shared.workflows.jobs_spec import (
     JobOutcome,
 )
 from tracer_agent.worker.workflows.jobs_workflows import AgentJobWorkflow
+
+SIGNAL_WAIT_S = 5.0
+
+
+async def _reached(signal: asyncio.Event) -> None:
+    """워크플로가 그 단계에 닿기를 기다리며, 닿지 못하면 정지가 아니라 실패로 낸다."""
+    await asyncio.wait_for(signal.wait(), SIGNAL_WAIT_S)
 
 
 def _stage_recorder(scheduled: list[dict[str, Any]]) -> Any:
@@ -44,7 +52,7 @@ async def _run_stages() -> list[dict[str, Any]]:
     scheduled: list[dict[str, Any]] = []
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(workflow, "execute_activity", _stage_recorder(scheduled))
-        await AgentJobWorkflow().run(AgentJobRequest("title-suggestion", {}))
+        await AgentJobWorkflow().run(AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, {}))
     return scheduled
 
 
@@ -116,14 +124,14 @@ class TestCanceledJobSettles:
         settled: list[str] = []
         generating = asyncio.Event()
         settling = asyncio.Event()
-        request = AgentJobRequest("title-suggestion", {"executionId": "job-1"})
+        request = AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, {"executionId": "job-1"})
 
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(workflow, "execute_activity", self._canceling_stages(settled, generating, settling))
             running = asyncio.ensure_future(AgentJobWorkflow().run(request))
-            await generating.wait()
+            await _reached(generating)
             running.cancel()
-            await settling.wait()
+            await _reached(settling)
             running.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await running
@@ -137,8 +145,10 @@ class TestCanceledJobSettles:
 
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(workflow, "execute_activity", self._canceling_stages(settled, generating, settling))
-            running = asyncio.ensure_future(AgentJobWorkflow().run(AgentJobRequest("recipe.scan", {})))
-            await generating.wait()
+            running = asyncio.ensure_future(
+                AgentJobWorkflow().run(AgentJobRequest(AgentJobKind.RECIPE_SCAN, {}))
+            )
+            await _reached(generating)
             running.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await running
@@ -170,12 +180,12 @@ class TestCanceledDuringFinalize:
     async def test_종결_중_취소가_닿아도_종결이_끝까지_실행된다(self) -> None:
         done: list[str] = []
         finalizing = asyncio.Event()
-        request = AgentJobRequest("title-suggestion", {"executionId": "job-1"})
+        request = AgentJobRequest(AgentJobKind.TITLE_SUGGESTION, {"executionId": "job-1"})
 
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(workflow, "execute_activity", self._finalizing_stages(done, finalizing))
             running = asyncio.ensure_future(AgentJobWorkflow().run(request))
-            await finalizing.wait()
+            await _reached(finalizing)
             running.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await running
