@@ -18,11 +18,11 @@ COVERED_BY: dict[str, str | None] = {
     "chat_threads_summary_pairing": _REFUSE,
     "chat_executions_running_thread": _REFUSE,
     "chat_user_memories_unique": _REFUSE,
-    "chat_executions_idempotency": None,
-    "chat_executions_requested_backend_check": None,
-    "chat_execution_steps_execution_attempt_seq": None,
+    "chat_executions_idempotency": _REFUSE,
+    "chat_executions_requested_backend_check": _REFUSE,
+    "chat_execution_steps_execution_attempt_seq": _REFUSE,
     "ai_jobs_idempotency_key": _REFUSE,
-    "ai_job_steps_job_attempt_seq": None,
+    "ai_job_steps_job_attempt_seq": _REFUSE,
 }
 
 

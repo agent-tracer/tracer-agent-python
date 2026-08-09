@@ -118,3 +118,63 @@ class Test잡의_멱등_열쇠:
         _job(raw, "j2", None)
 
         assert len(raw.execute("SELECT id FROM ai_jobs").fetchall()) == 2
+
+
+class Test한_스레드의_같은_요청:
+    def test_같은_요청_식별자로_두_번_접수하면_거절한다(self, raw: Any) -> None:
+        _thread(raw, "t1", None, None)
+        _execution(raw, "e1", "completed", "r1")
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _execution(raw, "e2", "completed", "r1")
+
+        assert "chat_executions.client_request_id" in str(refused.value)
+
+
+class Test실행의_축:
+    def test_계약이_적지_않은_축은_원장이_거절한다(self, raw: Any) -> None:
+        # 접수가 자기 축 상수를 적으므로, 상류가 실어 보낸 값을 옮겨 적는 길이 생기면 여기서 막힌다.
+        _thread(raw, "t1", None, None)
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            raw.execute(
+                "INSERT INTO chat_executions"
+                " (id, user_id, thread_id, replay_anchor_message_id, client_request_id, input_hash,"
+                "  status, requested_backend, created_at, updated_at)"
+                " VALUES ('e1', 'u1', 't1', 'm1', 'r1', 'h1', 'queued', 'rust', ?, ?)",
+                (NOW, NOW),
+            )
+
+        assert "requested_backend" in str(refused.value)
+
+
+def _step(raw: Any, table: str, owner: str, step_id: str, attempt: int, seq: int) -> None:
+    raw.execute(
+        f"INSERT INTO {table} (id, {owner}, user_id, attempt, seq, role, content, created_at)"
+        " VALUES (?, 'x1', 'u1', ?, ?, 'assistant', '말', ?)",
+        (step_id, attempt, seq, NOW),
+    )
+
+
+class Test단계의_순번:
+    @pytest.mark.parametrize(
+        ("table", "owner"),
+        [("chat_execution_steps", "execution_id"), ("ai_job_steps", "job_id")],
+    )
+    def test_같은_시도의_같은_순번을_두_번_적으면_거절한다(self, raw: Any, table: str, owner: str) -> None:
+        # 재시도가 같은 시도 번호로 단계를 다시 적으면 궤적이 두 벌이 되므로 원장이 막는다.
+        _step(raw, table, owner, "s1", 1, 1)
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _step(raw, table, owner, "s2", 1, 1)
+
+        assert f"{table}.seq" in str(refused.value)
+
+    @pytest.mark.parametrize(
+        ("table", "owner"),
+        [("chat_execution_steps", "execution_id"), ("ai_job_steps", "job_id")],
+    )
+    def test_다시_태운_시도는_같은_순번을_받는다(self, raw: Any, table: str, owner: str) -> None:
+        _step(raw, table, owner, "s1", 1, 1)
+
+        _step(raw, table, owner, "s2", 2, 1)
