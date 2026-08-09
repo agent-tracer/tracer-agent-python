@@ -21,18 +21,8 @@ from ..shared.agents.chat.surface.updates import UpdateSubscriber
 from ..shared.agents.cleanup.archiver import TracerTaskArchiver
 from ..shared.agents.cleanup.router import router as cleanup_router
 from ..shared.agents.envelope.router import router as envelope_router
-from ..shared.agents.recipe.consumer import LedgerEventConsumer
-from ..shared.agents.recipe.outbox import (
-    LedgerSearchOutboxDrain,
-    SearchOutboxDrain,
-    SearchOutboxDrainScheduler,
-)
 from ..shared.agents.recipe.router import router as recipe_router
-from ..shared.agents.recipe.search import (
-    OpenSearchClient,
-    OpenSearchIndexWriter,
-    OpenSearchRecipeSearch,
-)
+from ..shared.agents.recipe.search import OpenSearchClient, OpenSearchRecipeSearch
 from ..shared.agents.recipe.tasks import TracerTaskReader
 from ..shared.agents.runtime.ledger import (
     LedgerPoolProvider,
@@ -40,6 +30,7 @@ from ..shared.agents.runtime.ledger import (
     PooledSql,
     SqlSource,
 )
+from ..shared.agents.runtime.readiness import UNREADY_STATUS, ledger_ready
 from ..shared.agents.runtime.telemetry.bootstrap import configure_observability
 from ..shared.agents.runtime.wakeup import UpdatePublisher
 from ..shared.agents.settings.router import router as settings_router
@@ -61,9 +52,8 @@ from .surface import SURFACE_PATH, get_served_surface
 # 배포 단위 사이의 창구를 부를 때 쓰는 여유이며 실행 자체를 기다리지 않는다.
 OUTBOUND_HTTP_TIMEOUT_S = 20.0
 
-# 원장까지 왕복하는 질의라야 연결이 살아 있다는 것을 알린다.
-READINESS_PROBE = "SELECT 1"
-UNREADY_STATUS = 503
+# 준비 프로브가 실패를 알리는 이름이며 로그가 어느 배포 단위의 것인지 밝힌다.
+DEPLOYMENT_UNIT = "agent-api"
 
 
 _log = logging.getLogger(__name__)
@@ -111,19 +101,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         execution_updates=updates,
         execution_watch=watch,
     )
-    # 배출기와 프로젝터는 별도 배포 단위가 아니라 이 프로세스 안에 서며 자문 잠금이 replica 중복을 막는다.
-    drain = SearchOutboxDrainScheduler(
-        SearchOutboxDrain(LedgerSearchOutboxDrain(execution_sql), OpenSearchIndexWriter(search_client))
-    )
-    ledger_events = LedgerEventConsumer(settings.kafka_brokers, execution_sql)
-    drain.start()
-    await ledger_events.start()
     try:
         yield
     finally:
         shutdown_observability()
-        await ledger_events.stop()
-        await drain.stop()
         await search_http.aclose()
         await ledger_http.aclose()
         await anchor_http.aclose()
@@ -140,12 +121,7 @@ async def health() -> dict[str, str]:
 async def readiness(request: Request) -> JSONResponse:
     """의존에 닿아 요청을 처리할 수 있는지 신원 없이 알리며 봉투를 씌우지 않는다."""
     source: SqlSource = request.app.state.services.execution_sql
-    try:
-        async with source.connect() as sql:
-            await sql.fetch(READINESS_PROBE)
-    except Exception:
-        # 사유를 감추는 것은 응답이지 로그가 아니다.
-        _log.warning("agent api readiness probe failed", exc_info=True)
+    if not await ledger_ready(source, DEPLOYMENT_UNIT):
         return JSONResponse(status_code=UNREADY_STATUS, content={"status": "unready"})
     return JSONResponse(status_code=200, content={"status": "ok"})
 

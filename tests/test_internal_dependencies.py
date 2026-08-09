@@ -86,6 +86,42 @@ def test_접수가_워커를_워커가_접수를_공유가_접수와_워커를_�
     }
 
 
+def test_프로젝터가_공유를_보는_것은_통과시킨다(tmp_path: Path) -> None:
+    source_root = tmp_path / "src"
+    write_module(
+        source_root,
+        "tracer_agent.projector.runtime",
+        "from ..shared.agents.recipe import outbox\n"
+        "from ..shared.agents.runtime.ledger import PooledSql\n"
+        "from ..shared.config import Settings\n",
+    )
+    write_module(source_root, "tracer_agent.projector.app", "from .runtime import build_projector\n")
+
+    assert find_violations(source_root) == []
+
+
+def test_프로젝터와_접수와_워커가_서로를_참조하면_실패한다(tmp_path: Path) -> None:
+    source_root = tmp_path / "src"
+    write_module(
+        source_root,
+        "tracer_agent.projector.leak",
+        "from ..api.app import app\nfrom ..worker.worker import main\n",
+    )
+    write_module(source_root, "tracer_agent.api.leak", "from ..projector.app import app\n")
+    write_module(source_root, "tracer_agent.worker.leak", "from ..projector.app import app\n")
+    write_module(source_root, "tracer_agent.shared.leak", "from ..projector.app import app\n")
+
+    violations = find_violations(source_root)
+
+    assert {(item.source_module, item.target_module) for item in violations} == {
+        ("tracer_agent.projector.leak", "tracer_agent.api.app"),
+        ("tracer_agent.projector.leak", "tracer_agent.worker.worker"),
+        ("tracer_agent.api.leak", "tracer_agent.projector.app"),
+        ("tracer_agent.worker.leak", "tracer_agent.projector.app"),
+        ("tracer_agent.shared.leak", "tracer_agent.projector.app"),
+    }
+
+
 def test_relative_absolute_import와_from_alias의_계층_위반을_모두_찾는다(
     tmp_path: Path,
 ) -> None:

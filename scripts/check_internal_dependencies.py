@@ -10,10 +10,12 @@ from pathlib import Path
 PACKAGE_ROOT = "tracer_agent"
 API_ROOT = f"{PACKAGE_ROOT}.api"
 WORKER_ROOT = f"{PACKAGE_ROOT}.worker"
+PROJECTOR_ROOT = f"{PACKAGE_ROOT}.projector"
 SHARED_ROOT = f"{PACKAGE_ROOT}.shared"
 AGENTS_PACKAGE = f"{SHARED_ROOT}.agents"
 API_LAYER = "api"
 WORKER_LAYER = "worker"
+PROJECTOR_LAYER = "projector"
 SHARED_APP_LAYER = "shared:app"
 RUNTIME_LAYER = "shared:runtime"
 SHARED_LAYER = "shared:shared"
@@ -100,6 +102,8 @@ def _target_layer(module: str) -> str | None:
         return API_LAYER
     if module == WORKER_ROOT or module.startswith(f"{WORKER_ROOT}."):
         return WORKER_LAYER
+    if module == PROJECTOR_ROOT or module.startswith(f"{PROJECTOR_ROOT}."):
+        return PROJECTOR_LAYER
     if module == SHARED_ROOT or module.startswith(f"{SHARED_ROOT}."):
         if module == AGENTS_PACKAGE:
             return None
@@ -171,6 +175,8 @@ def _is_layer_package_root(module: str, layer: str) -> bool:
         return module == API_ROOT
     if layer == WORKER_LAYER:
         return module == WORKER_ROOT
+    if layer == PROJECTOR_LAYER:
+        return module == PROJECTOR_ROOT
     if layer == SHARED_APP_LAYER:
         return module == SHARED_ROOT
     return False
@@ -186,6 +192,8 @@ def _is_allowed(
         return target == API_LAYER or target.startswith("shared:")
     if source == WORKER_LAYER:
         return target == WORKER_LAYER or target.startswith("shared:")
+    if source == PROJECTOR_LAYER:
+        return target == PROJECTOR_LAYER or target.startswith("shared:")
     if source == SHARED_APP_LAYER:
         return target.startswith("shared:")
     if source.startswith(SLICE_PREFIX):

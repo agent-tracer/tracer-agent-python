@@ -17,5 +17,6 @@ COPY src ./src
 COPY contract ./contract
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
-EXPOSE 8800
+# 배포 단위 셋이 같은 이미지에서 서고 배포가 command 로 고른다. 8800 은 접수 창구, 8801 은 프로젝터 프로브다.
+EXPOSE 8800 8801
 CMD ["python", "-m", "tracer_agent.api"]

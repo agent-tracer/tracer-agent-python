@@ -42,6 +42,7 @@ dev = [
 [project.scripts]
 tracer-agent = "tracer_agent.api.__main__:main"
 tracer-agent-worker = "tracer_agent.worker.__main__:main"
+tracer-agent-projector = "tracer_agent.projector.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -44,6 +44,9 @@ class Settings(BaseSettings):
 
     tracer_agent_host: str = "0.0.0.0"
     tracer_agent_port: int = 8800
+    # 배경 작업만 드는 배포 단위도 배포가 기동 여부를 물을 자리를 열어야 하므로 자기 포트를 갖는다.
+    agent_projector_host: str = "0.0.0.0"
+    agent_projector_port: int = 8801
 
     agent_db_host: str = "agent-db"
     agent_db_port: int = 5432
