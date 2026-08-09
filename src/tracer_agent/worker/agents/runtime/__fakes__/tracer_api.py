@@ -1,7 +1,10 @@
 """추적 창구 포트의 대역이며 부른 창구를 기록하고 경로마다 정해 둔 응답을 낸다."""
 
+# 실물이 모르는 경로에 404를 내므로 이 대역도 정해 두지 않은 경로에는 응답을 지어내지 않는다.
+
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,6 +24,10 @@ _DEFAULT_TASK: dict[str, Any] = {
     "createdAt": "2026-07-14T00:00:00Z",
     "updatedAt": "2026-07-14T00:00:00Z",
 }
+
+
+_TASK_PATH = re.compile(r"/api/v1/tasks/[^/]+")
+CLEANUP_SUGGESTIONS_PATH = "/api/v1/task-cleanup/suggestions"
 
 
 class FakeTracerApi(TracerApiPort):
@@ -76,7 +83,9 @@ class FakeTracerApi(TracerApiPort):
             return {"items": list(self.recipes)}
         if path == "/api/v1/rules":
             return {"items": list(self.rules)}
-        return {"task": dict(self.task)}
+        if _TASK_PATH.fullmatch(path):
+            return {"task": dict(self.task)}
+        raise AssertionError(f"이 대역이 응답을 정해 두지 않은 조회 경로다: {path}")
 
     def _timeline_page(self, params: Mapping[str, Any]) -> dict[str, Any]:
         """실제 창구와 같이 커서 뒤부터 limit만큼 잘라 주고 남은 것이 있으면 다음 커서를 낸다."""
@@ -98,4 +107,6 @@ class FakeTracerApi(TracerApiPort):
         self.posts.append({"path": path, "body": body})
         if path == "/api/v1/recipes":
             return {"recipes": [{"id": f"recipe-{index}"} for index in range(len(body["recipes"]))]}
-        return {"suggestions": [{"id": f"cleanup-{index}"} for index in range(len(body["suggestions"]))]}
+        if path == CLEANUP_SUGGESTIONS_PATH:
+            return {"suggestions": [{"id": f"cleanup-{index}"} for index in range(len(body["suggestions"]))]}
+        raise AssertionError(f"이 대역이 응답을 정해 두지 않은 적재 경로다: {path}")
