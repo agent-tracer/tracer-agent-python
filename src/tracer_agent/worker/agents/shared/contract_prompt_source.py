@@ -29,8 +29,8 @@ class ContractPromptSource:
 
     def resolve(self, agent_name: str) -> AgentPrompt:
         """에이전트 하나의 조각을 상한으로 치환해 template 별로 묶는다."""
-        prompt = self._read(f"agent/{agent_name}/prompt.json")
-        tools = self._read(f"agent/{agent_name}/tool.json")
+        prompt = self._prompt(agent_name)
+        tools = self._tools(agent_name)
         values = _placeholder_values(tools)
         fragments = prompt["fragments"]
         templates = {
@@ -51,6 +51,25 @@ class ContractPromptSource:
             language_directives=_directives(fragments, values),
             tool_contract_version=str(tools["version"]),
         )
+
+    def tool(self, agent_name: str, tool_name: str) -> dict[str, Any]:
+        """도구 하나의 설명과 인자 선언을 계약에서 그대로 읽는다."""
+        found = self._tools(agent_name).get("tools", {}).get(tool_name)
+        if isinstance(found, dict):
+            return found
+        raise ContractPromptUnavailable(f"tool contract is missing: {agent_name}.{tool_name}")
+
+    def _prompt(self, agent_name: str) -> dict[str, Any]:
+        payload = self._read(f"agent/{agent_name}/prompt.json")
+        if isinstance(payload, dict):
+            return payload
+        raise ContractPromptUnavailable(f"prompt contract is invalid: {agent_name}")
+
+    def _tools(self, agent_name: str) -> dict[str, Any]:
+        payload = self._read(f"agent/{agent_name}/tool.json")
+        if isinstance(payload, dict):
+            return payload
+        raise ContractPromptUnavailable(f"tool contract is invalid: {agent_name}")
 
     def _read(self, relative: str) -> Any:
         path = self._root / relative

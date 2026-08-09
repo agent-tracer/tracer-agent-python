@@ -116,6 +116,7 @@ class ChatExecutionActivities:
                     tool_contract_version=self._prompt.tool_contract_version,
                     execution_id=prepared.execution_id,
                     attempt_id=str(attempt),
+                    model_rates=request.modelRates,
                 ),
                 _body(
                     request,

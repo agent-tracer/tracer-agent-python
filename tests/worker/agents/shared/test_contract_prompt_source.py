@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.contract import agent_prompt, agent_tools
+from tests.support.contract import agent_prompt, agent_tool, agent_tools
 from tracer_agent.shared.agents.settings.execution import fallback_language
 from tracer_agent.worker.agents.shared.contract_prompt_source import (
     ContractPromptSource,
@@ -89,6 +89,13 @@ def test_언어_지시문도_조각과_같은_상한으로_치환된다(tmp_path
 
     limit = agent_tools("task-cleanup")["limits"]["maxSuggestions"]
     assert resolved.directive("ko") == f"Write at most {limit} rationales in Korean."
+
+
+def test_도구_설명과_인자_선언도_계약에서_그대로_읽는다() -> None:
+    source = ContractPromptSource()
+    declared = agent_tool("title-suggestion", "get_task_events")
+
+    assert source.tool("title-suggestion", "get_task_events") == declared
 
 
 def test_상한과_조사_깊이_어휘가_계약에서_온다() -> None:

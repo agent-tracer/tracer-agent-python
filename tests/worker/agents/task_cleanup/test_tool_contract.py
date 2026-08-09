@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from tests.support.contract import (
     agent_tools,
+    tool_arg,
     tool_arg_descriptions,
     tool_arg_partition,
     tool_descriptions,
@@ -88,6 +89,14 @@ def test_get_task_events의_필수와_선택_인자가_계약과_같다() -> Non
     declared = tool_arg_partition("task-cleanup", GET_TASK_EVENTS)
 
     assert _partition(GetTaskEventsArgs) == declared
+
+
+def test_get_task_events의_limit_기본값과_상하한이_계약과_같다() -> None:
+    limit = tool_arg("task-cleanup", GET_TASK_EVENTS, "limit")
+
+    assert GetTaskEventsArgs.model_validate({"taskId": "task-1"}).limit == limit["default"]
+    assert GetTaskEventsArgs.model_validate({"taskId": "task-1", "limit": limit["min"]}).limit == limit["min"]
+    assert GetTaskEventsArgs.model_validate({"taskId": "task-1", "limit": limit["max"]}).limit == limit["max"]
 
 
 def test_제안_종류가_계약과_같다() -> None:

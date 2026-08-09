@@ -228,7 +228,10 @@ async def test_실행_식별자가_있으면_원장에_종료_상태와_비용�
     assert row["usage"]["costUsd"] is not None
     assert row["result"] == {"suggestions": []}
     assert execution_sql.rows("ai_job_steps")[0]["attempt"] == 1
-    assert execution_sql.rows("agent_run_observations")[0]["execution_id"] == "e1"
+    observation = execution_sql.rows("agent_run_observations")[0]
+    assert observation["execution_id"] == "e1"
+    assert observation["cost_usd"] == row["usage"]["costUsd"]
+    assert [call["costUsd"] for call in observation["model_calls"]] == [row["usage"]["costUsd"]]
     execution_sql.close()
 
 

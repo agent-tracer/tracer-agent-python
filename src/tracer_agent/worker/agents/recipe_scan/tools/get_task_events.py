@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,46 +11,44 @@ from tracer_agent.shared.agents.shared.models import TrimmedStr
 
 from ...runtime.tooling import AgentTool
 from ...runtime.tracer_client import TRANSIENT_TRACER_ERRORS
+from ...shared.contract_prompt_source import ContractPromptSource
 from .context import RecipeToolContext
 from .provenance import add_events, loaded
 
 GET_TASK_EVENTS = "get_task_events"
-DEFAULT_EVENT_LIMIT = 100
-MAX_EVENT_LIMIT = 300
+_CONTRACT = ContractPromptSource()
+_TOOL = _CONTRACT.tool("recipe-scan", GET_TASK_EVENTS)
+_ARGS = _TOOL["args"]
+_LIMIT = _ARGS["limit"]
+DEFAULT_EVENT_LIMIT = int(_LIMIT["default"])
+MIN_EVENT_LIMIT = int(_LIMIT["min"])
+MAX_EVENT_LIMIT = int(_LIMIT["max"])
+EventOrder = Literal["asc", "desc"]
+DEFAULT_EVENT_ORDER = cast(EventOrder, _ARGS["order"]["default"])
 
 
 class GetTaskEventsArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    taskId: TrimmedStr = Field(min_length=1, description="The task ID")
+    taskId: TrimmedStr = Field(min_length=1, description=str(_ARGS["taskId"]["description"]))
     limit: int = Field(
         default=DEFAULT_EVENT_LIMIT,
-        ge=1,
+        ge=MIN_EVENT_LIMIT,
         le=MAX_EVENT_LIMIT,
-        description=(
-            f"Max events to return in this page (default {DEFAULT_EVENT_LIMIT}, hard cap {MAX_EVENT_LIMIT})"
-        ),
+        description=str(_LIMIT["description"]),
     )
     cursor: TrimmedStr | None = Field(
         default=None,
         min_length=1,
-        description=("Opaque cursor from a previous call's nextCursor. Omit to start from the first page."),
+        description=str(_ARGS["cursor"]["description"]),
     )
-    order: Literal["asc", "desc"] = Field(
-        default="asc",
-        description=(
-            'Reading direction: "asc" (default) pages from the earliest event forward; '
-            '"desc" pages from the latest event backward.'
-        ),
+    order: EventOrder = Field(
+        default=DEFAULT_EVENT_ORDER,
+        description=str(_ARGS["order"]["description"]),
     )
 
 
-GET_TASK_EVENTS_DESCRIPTION = (
-    "Get a page of a task's chronological event sequence (user messages, assistant messages, tool "
-    f"runs), up to {MAX_EVENT_LIMIT} events per page. You choose how much to read: pick limit, pass the "
-    'response\'s nextCursor back as cursor to keep paging, and set order="desc" to start from the '
-    "latest events. truncated/total tell you whether more events exist."
-)
+GET_TASK_EVENTS_DESCRIPTION = str(_TOOL["description"])
 
 
 class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, RecipeToolContext]):

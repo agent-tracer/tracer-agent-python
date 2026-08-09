@@ -7,8 +7,11 @@ from typing import Any
 import pytest
 from temporalio.exceptions import ApplicationError
 
+from tests.support.fakes import mk_ai
+from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.workflows.chat_spec import PreparedChatExecution
-from tracer_agent.worker.workflows.chat_turn import INVALID_ENVELOPE, turn_request
+from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
+from tracer_agent.worker.workflows.chat_turn import INVALID_ENVELOPE, canceled_turn, turn_request
 
 READ_API = "http://tracer-api:3902"
 
@@ -48,6 +51,19 @@ def test_원장이_모델을_고르지_않았으면_봉투의_기본_모델로_�
     request = turn_request(PreparedChatExecution("e1", "t1", "u1", "auto"), ENVELOPE)
 
     assert request.model == "claude-sonnet-4-6"
+
+
+def test_취소된_턴도_실행과_모델_호출에_계산한_비용을_싣는다() -> None:
+    prepared = PreparedChatExecution("e1", "t1", "u1", "auto")
+    request = turn_request(prepared, ENVELOPE)
+    trace = ExecutionTrace()
+    trace.add_message(mk_ai(response_metadata={"model_name": "claude-sonnet-4-6"}))
+
+    generated = canceled_turn(prepared, 1, request, trace, CHAT_PROMPT)
+
+    assert generated.cost_usd == 0.000877
+    assert generated.observation["costUsd"] == generated.cost_usd
+    assert [call["costUsd"] for call in generated.observation["modelCalls"]] == [generated.cost_usd]
 
 
 @pytest.mark.parametrize("missing", ["apiKey", "modelRates", "limits"])

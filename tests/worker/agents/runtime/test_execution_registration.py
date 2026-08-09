@@ -6,8 +6,10 @@ import asyncio
 
 import pytest
 
+from tests.support.fakes import mk_ai
 from tests.support.prompts import CONTRACT_VERSION
 from tracer_agent.shared.agents.shared.json_view import JsonObject
+from tracer_agent.shared.agents.shared.models import ModelRateDTO
 from tracer_agent.worker.agents.runtime.execution.runner import ExecutionRequest, execute
 from tracer_agent.worker.agents.runtime.execution.trace import ExecutionTrace
 
@@ -73,6 +75,23 @@ class TestTraceOwnership:
 
         assert response.observation is not None
         assert response.observation.ttftMs is not None
+
+    async def test_단가와_사용량이_있으면_실행과_모델_호출에_같은_비용을_싣는다(self) -> None:
+        async def body(running: ExecutionTrace) -> JsonObject:
+            running.add_message(mk_ai(response_metadata={"model_name": "model"}))
+            return {}
+
+        response = await execute(
+            _request(
+                execution_id="e1",
+                model_rates={"model": ModelRateDTO(input=1, output=5, cacheWrite=1.25, cacheRead=0.1)},
+            ),
+            body,
+        )
+
+        assert response.observation is not None
+        assert response.observation.costUsd == 0.000292
+        assert [call.costUsd for call in response.observation.modelCalls] == [0.000292]
 
 
 class TestCancellation:

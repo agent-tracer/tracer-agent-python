@@ -97,6 +97,9 @@ def canceled_turn(
             # 이 산출은 실행을 잰 자리 밖에서 만들어지므로 잰 값을 옮겨 적을 기준 시각이 없다.
             ttft_ms=None,
             error_subtype="cancelled",
+            cost_usd=ModelRates(request.modelRates).estimate_cost_usd(
+                trace.actual_model or request.model, trace.to_usage_dto()
+            ),
         ).model_dump(mode="json"),
     )
 

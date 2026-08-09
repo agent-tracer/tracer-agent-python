@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage, ToolMessage
 from tracer_agent.shared.agents.shared.models import AgentRunObservationDTO
 from tracer_agent.worker.agents.runtime.execution.trace import (
     INCOMPLETE_TOOL_CALL,
-    TOOL_EXECUTION_ERROR,
     ExecutionTrace,
 )
 
@@ -40,8 +39,8 @@ def _tool_calls(trace: ExecutionTrace) -> dict[str, tuple[str, str | None]]:
     return {call.toolCallId: (call.status, call.errorType) for call in _observation(trace).toolCalls}
 
 
-def test_사유와_함께_돌아온_실패는_실패로_기록한다() -> None:
-    # 도구가 문자열로 실패를 알리면 예외가 없어 계측만으로는 성공과 구분되지 않는다.
+def test_status_error여도_결과가_돌아온_호출은_성공으로_기록한다() -> None:
+    # 모델에게 읽힐 도구 결과가 남았으면 status 값과 무관하게 호출은 완료로 본다.
     trace = ExecutionTrace()
     trace.record_message(_call("c1"))
     trace.record_message(
@@ -53,7 +52,7 @@ def test_사유와_함께_돌아온_실패는_실패로_기록한다() -> None:
         )
     )
 
-    assert _tool_calls(trace) == {"c1": ("failed", TOOL_EXECUTION_ERROR)}
+    assert _tool_calls(trace) == {"c1": ("succeeded", None)}
 
 
 def test_결과를_돌려준_호출은_성공으로_기록한다() -> None:

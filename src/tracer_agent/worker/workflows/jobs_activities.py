@@ -131,7 +131,9 @@ class AgentJobActivities:
             response = await self._run_once(job, req, tracer)
         finally:
             heartbeat.cancel()
-        cost_usd = ModelRates(req.modelRates).estimate_cost_usd(response.modelUsed, response.usage)
+        cost_usd = ModelRates(req.modelRates).estimate_cost_usd(
+            response.actualModel or response.modelUsed, response.usage
+        )
         return GeneratedAgentJob(outcome=_outcome(req, response, cost_usd), response=response)
 
     @activity.defn(name=FINALIZE_AGENT_JOB_ACTIVITY)
@@ -252,6 +254,7 @@ class AgentJobActivities:
                 job_id=req.jobId,
                 execution_id=req.executionId,
                 attempt_id=req.attemptId,
+                model_rates=req.modelRates,
             ),
             body,
         )

@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.models import (
     AgentErrorDTO,
     AgentResponse,
+    ModelRateDTO,
     UsageDTO,
 )
 
 from ..errors import CANCELLED, DeadlineExceeded, classify_exception, redact_exception
+from ..pricing import ModelRates
 from ..telemetry.attributes import apply_usage_attributes
 from ..telemetry.execution_metrics import record_model_landed
 from ..telemetry.metrics import record_client_metrics
@@ -36,6 +38,7 @@ class ExecutionRequest:
     job_id: str | None = None
     execution_id: str | None = None
     attempt_id: str | None = None
+    model_rates: Mapping[str, ModelRateDTO] | None = None
 
     def attempt(self) -> str:
         """관측이 적는 시도 회차이며 요청이 회차를 싣지 않으면 첫 시도로 본다."""
@@ -79,6 +82,13 @@ async def execute(
 
     duration_ms = int((time.monotonic() - started) * 1000)
     error_subtype = error.subtype if error else None
+    cost_usd = (
+        None
+        if request.model_rates is None
+        else ModelRates(request.model_rates).estimate_cost_usd(
+            run_trace.actual_model or request.model, usage_dto
+        )
+    )
     record_client_metrics(request.model, run_trace.actual_model, duration_ms / 1000, usage_dto, error_subtype)
     if run_trace.landed:
         record_model_landed(request.label)
@@ -96,6 +106,7 @@ async def execute(
             duration_ms=duration_ms,
             ttft_ms=_ttft_ms(run_trace.first_token_at, started),
             error_subtype=error_subtype,
+            cost_usd=cost_usd,
         )
     )
     return AgentResponse(

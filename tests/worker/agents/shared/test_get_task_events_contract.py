@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import importlib
+from copy import deepcopy
+from types import ModuleType
 from typing import Any
 
+import pytest
+
 from tests.support.contract import agent_tool
+from tracer_agent.worker.agents.recipe_scan.tools import get_task_events as recipe_module
 from tracer_agent.worker.agents.recipe_scan.tools.get_task_events import (
     GetTaskEventsArgs as RecipeArgs,
 )
+from tracer_agent.worker.agents.shared.contract_prompt_source import ContractPromptSource
+from tracer_agent.worker.agents.task_cleanup.tools import get_events as cleanup_module
 from tracer_agent.worker.agents.task_cleanup.tools.get_events import (
     GetTaskEventsArgs as CleanupArgs,
 )
+from tracer_agent.worker.agents.title_suggestion.tools import get_task_events as title_module
 from tracer_agent.worker.agents.title_suggestion.tools.get_task_events import (
     GetTaskEventsArgs as TitleArgs,
 )
@@ -19,6 +28,12 @@ _SLICES: tuple[tuple[str, type[Any]], ...] = (
     ("recipe-scan", RecipeArgs),
     ("task-cleanup", CleanupArgs),
     ("title-suggestion", TitleArgs),
+)
+
+_MODULES: tuple[tuple[str, ModuleType], ...] = (
+    ("recipe-scan", recipe_module),
+    ("task-cleanup", cleanup_module),
+    ("title-suggestion", title_module),
 )
 
 
@@ -53,3 +68,33 @@ def test_어느_슬라이스도_생략한_인자를_null로_모델에게_보이�
 
         assert properties["limit"]["type"] == "integer"
         assert "anyOf" not in properties["order"]
+
+
+@pytest.mark.parametrize(("agent_id", "module"), _MODULES)
+def test_계약_도구_선언이_바뀌면_각_슬라이스의_모델_표면도_함께_바뀐다(
+    agent_id: str, module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = ContractPromptSource.tool
+
+    def changed(source: ContractPromptSource, requested_agent: str, tool_name: str) -> dict[str, Any]:
+        declared = deepcopy(original(source, requested_agent, tool_name))
+        if requested_agent == agent_id:
+            declared["description"] = "changed tool description"
+            declared["args"]["limit"] |= {
+                "default": 7,
+                "min": 2,
+                "max": 9,
+                "description": "changed limit description",
+            }
+        return declared
+
+    monkeypatch.setattr(ContractPromptSource, "tool", changed)
+    changed_module = importlib.reload(module)
+    try:
+        field = changed_module.GetTaskEventsArgs.model_fields["limit"]
+        assert changed_module.GET_TASK_EVENTS_DESCRIPTION == "changed tool description"
+        assert (field.default, field.metadata[0].ge, field.metadata[1].le) == (7, 2, 9)
+        assert field.description == "changed limit description"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(module)
