@@ -4,36 +4,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..shared.execution_limits import contract_execution_limits
 from ..shared.job_kinds import AgentJobKind
+from ..shared.model_rates import contract_model_rates
 from ..shared.model_tiering import CHAT_KIND
 from ..shared.models import ExecutionLimitsDTO, ModelRateDTO
 
-# 실행 기계가 모든 캐시 경계에 쓰는 수명이며 단가는 이 값이 정하는 배수를 따른다.
+# 실행 기계가 모든 캐시 경계에 요청하는 수명이며 청구하는 배수는 계약이 이 수명에 적은 값이다.
 CACHE_WRITE_TTL = "1h"
-# 캐시 쓰기 단가는 수명마다 입력 단가의 이 배수이며 값의 출처는 Anthropic 공식 문서다.
-# https://platform.claude.com/docs/en/build-with-claude/prompt-caching
-CACHE_WRITE_MULTIPLIER: dict[str, float] = {"5m": 1.25, "1h": 2.0}
-CACHE_READ_MULTIPLIER = 0.1
-
-_INPUT_OUTPUT_RATES: dict[str, tuple[float, float]] = {
-    "claude-opus-5": (5.0, 25.0),
-    "claude-sonnet-5": (3.0, 15.0),
-    "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-haiku-4-5": (1.0, 5.0),
-}
 
 
 def _rate(input_rate: float, output_rate: float) -> ModelRateDTO:
-    """백만 토큰당 USD이며 캐시 단가는 실행이 실제로 쓰는 수명의 배수에서 나온다."""
+    """백만 토큰당 USD이며 캐시 단가는 실행이 실제로 요청하는 수명의 배수에서 나온다."""
+    declared = contract_model_rates()
     return ModelRateDTO(
         input=input_rate,
         output=output_rate,
-        cacheWrite=input_rate * CACHE_WRITE_MULTIPLIER[CACHE_WRITE_TTL],
-        cacheRead=input_rate * CACHE_READ_MULTIPLIER,
+        cacheWrite=input_rate * declared.write_multiplier_for(CACHE_WRITE_TTL),
+        cacheRead=input_rate * declared.read_multiplier,
     )
 
 
-MODEL_RATES: dict[str, ModelRateDTO] = {name: _rate(*rates) for name, rates in _INPUT_OUTPUT_RATES.items()}
+MODEL_RATES: dict[str, ModelRateDTO] = {
+    name: _rate(*rates) for name, rates in contract_model_rates().base.items()
+}
 
 
 @dataclass(frozen=True)
@@ -50,31 +44,25 @@ class ExecutionCatalog:
         return self.limits.model_dump()
 
 
+def _from_contract(agent_name: str) -> ExecutionCatalog:
+    """계약이 그 종류에 적은 상한을 실행 카탈로그 한 칸으로 옮긴다."""
+    declared = contract_execution_limits()[agent_name]
+    return ExecutionCatalog(
+        default_model=declared.default_model,
+        fallback_model=declared.fallback_model,
+        limits=ExecutionLimitsDTO(
+            budgetUsd=declared.budget_usd,
+            maxTurns=declared.max_turns,
+            maxOutputTokens=declared.max_output_tokens,
+        ),
+        deadline_ms=declared.deadline_ms,
+    )
+
+
+# 봉투는 wire 값으로 종류를 가리키고 계약은 그 잡을 맡은 에이전트 이름으로 상한을 적는다.
 CATALOG: dict[str, ExecutionCatalog] = {
-    CHAT_KIND: ExecutionCatalog(
-        default_model="claude-sonnet-4-6",
-        fallback_model=None,
-        limits=ExecutionLimitsDTO(budgetUsd=1.2, maxTurns=14, maxOutputTokens=4_000),
-        deadline_ms=600_000,
-    ),
-    AgentJobKind.TITLE_SUGGESTION.wire: ExecutionCatalog(
-        default_model="claude-haiku-4-5",
-        fallback_model="claude-haiku-4-5",
-        limits=ExecutionLimitsDTO(budgetUsd=0.2, maxTurns=12, maxOutputTokens=4_000),
-        deadline_ms=300_000,
-    ),
-    AgentJobKind.RECIPE_SCAN.wire: ExecutionCatalog(
-        default_model="claude-sonnet-4-6",
-        fallback_model="claude-haiku-4-5",
-        limits=ExecutionLimitsDTO(budgetUsd=2.0, maxTurns=15, maxOutputTokens=16_000),
-        deadline_ms=720_000,
-    ),
-    AgentJobKind.TASK_CLEANUP.wire: ExecutionCatalog(
-        default_model="claude-haiku-4-5",
-        fallback_model="claude-haiku-4-5",
-        limits=ExecutionLimitsDTO(budgetUsd=0.5, maxTurns=16, maxOutputTokens=16_000),
-        deadline_ms=600_000,
-    ),
+    CHAT_KIND: _from_contract(CHAT_KIND),
+    **{kind.wire: _from_contract(kind.value) for kind in AgentJobKind},
 }
 
 JOB_KINDS: frozenset[str] = frozenset(CATALOG) - {CHAT_KIND}

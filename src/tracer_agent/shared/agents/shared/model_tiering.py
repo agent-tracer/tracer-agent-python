@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
+from .execution_limits import contract_execution_limits
 from .job_kinds import AgentJobKind
 
 CHAT_KIND = "chat"
 
-# 종류마다 허용 모델을 좁게 두는 것이 절감의 첫 자리이며, 예산은 이 목록을 전제로 잡힌다.
+# 허용 목록과 예산은 한 쌍이라 목록을 넓히면 같은 예산이 다른 모델을 실행하므로 계약이 함께 갖는다.
 ALLOWED_MODELS: dict[str, tuple[str, ...]] = {
-    CHAT_KIND: ("claude-sonnet-4-6", "claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"),
-    AgentJobKind.TITLE_SUGGESTION.wire: ("claude-haiku-4-5", "claude-sonnet-4-6", "claude-sonnet-5"),
-    AgentJobKind.RECIPE_SCAN.wire: (
-        "claude-sonnet-4-6",
-        "claude-sonnet-5",
-        "claude-opus-5",
-        "claude-haiku-4-5",
-    ),
-    AgentJobKind.TASK_CLEANUP.wire: ("claude-haiku-4-5", "claude-sonnet-4-6", "claude-sonnet-5"),
+    CHAT_KIND: contract_execution_limits()[CHAT_KIND].allowed_models,
+    **{kind.wire: contract_execution_limits()[kind.value].allowed_models for kind in AgentJobKind},
 }
 
 
