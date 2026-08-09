@@ -79,7 +79,7 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
                 f"{self.name} dropped out of batch -> {', '.join(sorted(dropped))}",
                 node_name=self.name,
             )
-        chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments) or "없음"
+        chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments) or "no candidates"
         deps.usage.record_orchestration_event(
             "route.selected",
             f"{self.name} -> {chosen}",

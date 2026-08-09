@@ -59,3 +59,25 @@ def load_reservation_policy() -> ReservationPolicy:
     return ReservationPolicy(
         repair=steps["repair"], survey=steps["survey"], synthesis_floor=steps["synthesisFloor"]
     )
+
+
+@dataclass(frozen=True)
+class WallClockPolicy:
+    """단계 하나가 진전 없이 머물 수 있는 상한이며 실행 데드라인에 곱하는 비율이다."""
+
+    survey: float
+    probe: float
+    synthesis: float
+    probe_min_fraction: float
+
+
+@lru_cache(maxsize=1)
+def load_wall_clock_policy() -> WallClockPolicy:
+    """단계마다의 벽시계 비율을 계약에서 읽는다."""
+    declared = execution_budget_contract()["wallClock"]
+    return WallClockPolicy(
+        survey=float(declared["survey"]),
+        probe=float(declared["probe"]),
+        synthesis=float(declared["synthesis"]),
+        probe_min_fraction=float(declared["probeMinFraction"]["value"]),
+    )

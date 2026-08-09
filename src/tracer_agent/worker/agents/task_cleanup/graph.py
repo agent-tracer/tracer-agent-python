@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from langgraph.graph import START
-from langgraph.types import Send
+from langgraph.types import RetryPolicy, Send, TimeoutPolicy
 
+from tracer_agent.shared.agents.envelope.catalog import CATALOG
 from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, remaining_turns
 from tracer_agent.shared.agents.task_cleanup.models import (
     InspectAssignment,
@@ -13,11 +14,30 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 )
 
 from ..runtime.durable_graph import DurableGraph
+from ..runtime.errors import is_retryable_node_failure
 from ..runtime.llm.budget import lease_shares
 from ..runtime.routes import EMPTY
+from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import add_validation_tail, declared_node_names, new_graph, observed
+from ..shared.execution_reservation import load_wall_clock_policy
 from .nodes.decision import InvestigateNode, ValidateDecisionsNode
 from .nodes.inspect import InspectNode, TriageNode
+
+_TASK_CLEANUP_DEADLINE_MS = CATALOG["task.cleanup"].deadline_ms
+_WALL_CLOCK = load_wall_clock_policy()
+
+# 조사가 진전 없이 머무는 상한이며 계약의 단계별 몫에서 파생한다.
+_TRIAGE_TIMEOUT = TimeoutPolicy(
+    run_timeout=deadline_fraction_s(_TASK_CLEANUP_DEADLINE_MS, _WALL_CLOCK.survey)
+)
+_INVESTIGATE_TIMEOUT = TimeoutPolicy(
+    run_timeout=deadline_fraction_s(_TASK_CLEANUP_DEADLINE_MS, _WALL_CLOCK.synthesis)
+)
+_INSPECT_SEND_TIMEOUT = TimeoutPolicy(
+    idle_timeout=deadline_fraction_s(_TASK_CLEANUP_DEADLINE_MS, _WALL_CLOCK.probe)
+)
+# 예산 초과와 출력 절단은 같은 예산으로 다시 돌아도 같은 자리에서 끝나므로 재시도하지 않는다.
+_NODE_RETRY = RetryPolicy(max_attempts=3, retry_on=is_retryable_node_failure)
 
 
 def _fan_out(assignments: list[InspectAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
@@ -32,6 +52,7 @@ def _fan_out(assignments: list[InspectAssignment], remaining_turns: int, remaini
                 max_turns=lease.max_turns,
                 cost_budget=lease.max_cost_usd,
             ),
+            timeout=_INSPECT_SEND_TIMEOUT,
         )
         for assignment, lease in zip(assignments, leases, strict=True)
     ]
@@ -60,9 +81,9 @@ def _after_investigate(state: TaskCleanupState) -> list[Send]:
 
 
 _graph = new_graph(TaskCleanupState)
-observed(_graph, TriageNode.name)
+observed(_graph, TriageNode.name, retry_policy=_NODE_RETRY, timeout=_TRIAGE_TIMEOUT)
 observed(_graph, InspectNode.name)
-observed(_graph, InvestigateNode.name)
+observed(_graph, InvestigateNode.name, retry_policy=_NODE_RETRY, timeout=_INVESTIGATE_TIMEOUT)
 add_validation_tail(_graph, ValidateDecisionsNode.name)
 _graph.add_edge(START, TriageNode.name)
 _graph.add_conditional_edges(TriageNode.name, _dispatch, [InspectNode.name, EMPTY])

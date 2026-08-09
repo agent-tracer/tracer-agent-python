@@ -11,8 +11,10 @@ from ....shared.agents.shared.contract_root import CONTRACT_ROOT
 from ..shared.execution_reservation import (
     ReservationPolicy,
     ReservationStep,
+    WallClockPolicy,
     execution_budget_contract,
     load_reservation_policy,
+    load_wall_clock_policy,
 )
 
 _TOOL_PATH = CONTRACT_ROOT / "agent" / "recipe-scan" / "tool.json"
@@ -37,33 +39,11 @@ def load_citable_id_list_limit() -> int:
 
 
 @dataclass(frozen=True)
-class WallClockPolicy:
-    """단계 하나가 진전 없이 머물 수 있는 상한이며 실행 데드라인에 곱하는 비율이다."""
-
-    survey: float
-    probe: float
-    synthesis: float
-    probe_min_fraction: float
-
-
-@dataclass(frozen=True)
 class PricingPolicy:
     """예산 집행이 어느 모델의 단가를 쓰는지와 그 단가를 모를 때의 결말이다."""
 
     model: str
     on_unpriced_model: str
-
-
-@lru_cache(maxsize=1)
-def load_wall_clock_policy() -> WallClockPolicy:
-    """단계마다의 벽시계 비율을 계약에서 읽는다."""
-    declared = execution_budget_contract()["wallClock"]
-    return WallClockPolicy(
-        survey=float(declared["survey"]),
-        probe=float(declared["probe"]),
-        synthesis=float(declared["synthesis"]),
-        probe_min_fraction=float(declared["probeMinFraction"]["value"]),
-    )
 
 
 @lru_cache(maxsize=1)
