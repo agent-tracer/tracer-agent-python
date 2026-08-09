@@ -124,7 +124,7 @@ async def search_recipes_window(request: Request, search: RecipeSearch, user_id:
 
 @router.get(RECIPE_PATH, response_model=SuccessEnvelope, responses=error_responses(404))
 async def get_recipe_window(recipe_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
-    """레시피 하나를 전문과 적용 이력까지 낸다."""
+    """레시피 한 건의 조회를 받아 없거나 남의 것이면 계약이 정한 404 를 낸다."""
     try:
         async with source.connect() as sql:
             data = await get_recipe(RecipeLedger.open(sql), user_id, recipe_id)
@@ -135,7 +135,7 @@ async def get_recipe_window(recipe_id: str, source: ExecutionSql, user_id: UserI
 
 @router.post(RECIPE_ACCEPT_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))
 async def accept_recipe_window(recipe_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
-    """후보 레시피를 채택하고 부모가 있으면 그 부모를 대체됨으로 함께 옮긴다."""
+    """후보 레시피의 채택을 받는다."""
     now = datetime.now(UTC)
     outbox_row_ids = [generate_ulid(now), generate_ulid(now)]
     return await _commit(

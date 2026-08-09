@@ -35,7 +35,7 @@ class SearchOutboxDrainPort(Protocol):
 
 
 class LedgerSearchOutboxDrain:
-    """배출기는 자문 잠금 하나를 얻은 뒤 실행하므로 replica 가 여럿이어도 한 번에 하나만 배출한다."""
+    """replica 가 여럿이어도 배출이 한 번에 하나만 실행되게 하는 자문 잠금의 소유자다."""
 
     def __init__(self, source: SqlSource) -> None:
         self._source = source

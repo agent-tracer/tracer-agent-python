@@ -165,7 +165,7 @@ def to_application(row: SqlRow) -> RecipeApplication:
 
 
 class RecipeStore:
-    """레시피 원장의 조회와 저장을 제공하며 지운 레시피는 어느 조회에도 잡히지 않는다."""
+    """레시피 원장의 조회와 저장을 제공한다."""
 
     def __init__(self, sql: LedgerSql) -> None:
         self._sql = sql
@@ -181,7 +181,7 @@ class RecipeStore:
         return [to_recipe(row) for row in rows]
 
     async def count_by_source_job(self, user_id: str, source_job_id: str) -> int:
-        """그 잡이 이미 적어 둔 후보의 수이며 재시도가 후보를 두 벌 만들지 않게 한다."""
+        """그 잡이 적어 둔 후보의 수이며 지운 후보도 세어 재시도가 후보를 두 벌 만들지 않게 한다."""
         rows = await self._sql.fetch(_SELECT_RECIPE_IDS_BY_SOURCE_JOB, user_id, source_job_id)
         return len(rows)
 

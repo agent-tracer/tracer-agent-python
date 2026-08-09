@@ -19,7 +19,7 @@ from .topic import ledger_events_consumer_group, ledger_events_topic
 
 _log = logging.getLogger(__name__)
 
-# 프로젝터는 붙은 뒤 마지막 반영 지점부터 이어 읽으므로 처음 붙을 때는 원장의 처음부터 읽는다.
+# 마지막 반영 지점이 없는 첫 연결은 토픽에 남아 있는 가장 이른 메시지부터 읽는다.
 _OFFSET_RESET = "earliest"
 
 

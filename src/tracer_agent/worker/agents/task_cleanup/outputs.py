@@ -23,7 +23,7 @@ CLEANUP_OUTPUT_LABEL = "cleanup"
 
 TASKS_PATH = "/api/v1/tasks"
 
-# 목록 창구 한 장이 담는 최대 개수이며 값은 계약의 태스크 집합 조회가 소유한다.
+# 태스크 집합 조회 한 번에 실을 수 있는 식별자의 개수이며 계약의 tracer.tasks 케이스가 갖는다.
 MAX_IDS_PER_CALL = 100
 
 

@@ -9,7 +9,7 @@ from ..shared.tracer_window import TracerWindow
 
 TASKS_PATH = "/api/v1/tasks"
 
-# 목록 창구 한 장이 담는 최대 개수이며 계약의 tracer.tasks 케이스가 같은 수를 갖는다.
+# 한 번에 실을 수 있는 식별자의 개수이며 계약의 tracer.tasks 케이스가 같은 수를 갖는다.
 MAX_IDS_PER_CALL = 100
 
 
@@ -22,7 +22,7 @@ class RecipeTaskReader(Protocol):
 
 
 class TracerTaskReader:
-    """인용된 식별자를 모아 한 번에 물어 레시피 수만큼 왕복이 생기지 않게 한다."""
+    """태스크 제목의 정본이 추적 원장이므로 그 공개 창구로만 제목을 읽는다."""
 
     def __init__(self, tracer: TracerWindow) -> None:
         self._tracer = tracer

@@ -15,7 +15,7 @@ from .models import RECIPE_STATUS_ACTIVE
 # 얇은 코퍼스에서 실측해 정한 값이며 계약의 wire/search.index.json 이 같은 수를 갖는다.
 MINIMUM_SHOULD_MATCH = "30%"
 
-# 가장 높은 점수의 이 비율에 못 미치는 적중을 버린다.
+# 계약의 relativeScoreCutoffRatio 와 같은 값이며 이 비율에 못 미치는 적중을 버린다.
 RELATIVE_SCORE_CUTOFF_RATIO = 0.4
 
 # 계약이 선언한 뒤질 칸이며 색인 문서가 갖지 않는 칸을 여기에 적으면 언제나 비어서 온다.
@@ -118,13 +118,13 @@ class OpenSearchRecipeSearch:
 
 
 class OpenSearchIndexWriter:
-    """문서 식별자가 원장의 식별자와 같으므로 같은 행을 여러 번 배출해도 문서가 늘지 않는다."""
+    """배출기가 낸 색인 쓰기를 원장의 식별자를 문서 식별자로 삼아 수행한다."""
 
     def __init__(self, client: OpenSearchClient) -> None:
         self._client = client
 
     async def index_document(self, alias: str, document_id: str, document: JsonObject) -> None:
-        """문서 하나를 식별자로 덮어쓴다."""
+        """문서 식별자를 경로에 안전하게 실어 색인에 덮어쓴다."""
         await self._client.request("PUT", f"/{alias}/_doc/{quote(document_id, safe='')}", document)
 
     async def delete_document(self, alias: str, document_id: str) -> None:

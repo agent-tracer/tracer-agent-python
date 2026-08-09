@@ -58,7 +58,7 @@ class CleanupSuggestion:
     observed_last_event_at: datetime | None = None
 
     def is_accepted(self) -> bool:
-        """이미 수용된 제안인지 알린다."""
+        """끊긴 뒤의 재시도가 원장을 다시 바꾸지 않도록 이미 수용된 제안인지 알린다."""
         return self.status == CLEANUP_STATUS_ACCEPTED
 
     def accept(self, now: datetime) -> None:

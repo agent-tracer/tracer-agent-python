@@ -14,7 +14,7 @@ SEARCH_OUTBOX_BATCH_SIZE = 100
 
 
 def touched_file_paths(touched_files: list[JsonValue]) -> list[str]:
-    """원장의 칸은 경로와 역할을 가진 객체 배열이며 색인에는 경로 문자열만 싣는다."""
+    """원장의 객체 배열에서 색인이 받는 경로 문자열만 낸다."""
     paths: list[str] = []
     for entry in touched_files:
         if not isinstance(entry, dict):

@@ -48,7 +48,7 @@ async def _collect(
 
 
 def _dedupe_pending(rows: list[CleanupSuggestion]) -> list[CleanupSuggestion]:
-    """다른 상태의 행은 중복 제거 대상이 아니다."""
+    """대기 행만 태스크와 종류의 쌍으로 첫 행을 남기고 다른 상태의 행은 그대로 둔다."""
     seen: set[tuple[str, str]] = set()
     kept: list[CleanupSuggestion] = []
     for row in rows:

@@ -57,7 +57,7 @@ class HttpTracerWindow:
         query: dict[str, Any] | None = None,
         body: dict[str, Any] | None = None,
     ) -> JsonValue:
-        """자리 하나를 부르고 성공이면 봉투를 벗긴 본문을 낸다."""
+        """사용자 머리글을 실어 부르고 상류가 낸 거절은 상태와 코드를 그대로 실은 예외로 낸다."""
         try:
             response = await self._client.request(
                 method,

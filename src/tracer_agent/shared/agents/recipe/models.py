@@ -104,7 +104,7 @@ class Recipe:
         self.resolved_at = now
 
     def retire(self, now: datetime) -> None:
-        """폐기는 채택 시점에 적은 해소 시각을 그대로 둔다."""
+        """채택된 레시피만 폐기로 옮기고 해소 시각은 채택 시점의 값을 그대로 둔다."""
         if self.status != RECIPE_STATUS_ACTIVE:
             raise RecipeRejected(RECIPE_NOT_ACTIVE)
         self.status = RECIPE_STATUS_RETIRED
