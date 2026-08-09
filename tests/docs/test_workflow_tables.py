@@ -16,6 +16,7 @@ from tracer_agent.worker.agents.runtime.llm.standard_agent import (
     CONTEXT_EDITING_KEEP_TOOL_RESULTS,
     CONTEXT_EDITING_TRIGGER_TOKENS,
 )
+from tracer_agent.worker.agents.shared.execution_reservation import repair_attempts
 
 AGENTS_ROOT = Path(__file__).resolve().parents[2] / "src" / "tracer_agent" / "worker" / "agents"
 
@@ -170,3 +171,12 @@ def test_문서가_옮겨_적은_층_호출이_실행이_세우는_호출과_같
     assert written, doc.name
     for call in written:
         assert call in source, f"{doc.name}: {call}"
+
+
+@pytest.mark.parametrize("doc", [AGENTS_DOC, *JOB_DOCS], ids=lambda doc: doc.parent.name)
+def test_문서가_적은_수리_횟수가_계약이_적은_값과_같다(doc: Path) -> None:
+    lines = [one for one in doc.read_text(encoding="utf-8").splitlines() if "repair" in one.lower()]
+    written = [count for one in lines for count in re.findall(r"(\d+)회", one)]
+
+    assert written, doc.name
+    assert {int(count) for count in written} == {repair_attempts()}, doc.name

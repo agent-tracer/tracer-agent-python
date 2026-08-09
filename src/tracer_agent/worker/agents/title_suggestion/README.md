@@ -50,7 +50,7 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | `investigate` | `TitleSuggestionState` | 현재 title과 대화 문맥을 분석하고 필요할 때 event를 조회한다 | `candidate`, `messages`, 비용 |
 | `validate_candidate` | `TitleSuggestionState` | 지울 수 있는 후보를 떨어뜨리고 모자란 수만 사유로 남긴다 | `candidate`, `validation_errors` |
-| `repair` | `TitleSuggestionState` | 검증 오류를 포함해 title 후보를 한 번 다시 생성한다 | `candidate`, `repair_attempted` |
+| `repair` | `TitleSuggestionState` | 검증 오류를 포함해 title 후보를 1회 다시 생성한다 | `candidate`, `repair_attempted` |
 | `finalize` | `TitleSuggestionState` | `TitleSuggestionDraft`를 외부 결과로 직렬화한다 | 제안 목록 |
 | `empty` | `TitleSuggestionState` | 현재 title이 충분하거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 

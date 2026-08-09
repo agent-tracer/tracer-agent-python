@@ -57,7 +57,7 @@ sequenceDiagram
 | `inspect` | `InspectDispatch` | 후보 하나의 timeline을 읽고 archive 여부·사유·event ID를 보고한다 | `reports`, `event_ids_by_task` |
 | `investigate` | `TaskCleanupState` | review 보고를 종합해 `CleanupDraft`를 만들고 필요하면 redispatch한다 | `suggestions`, `redispatch` |
 | `validate_decisions` | `TaskCleanupState` | 노출 후보와 조사 event만 제안이 인용하는지 검사한다 | 유효 제안, `validation_errors` |
-| `repair` | `TaskCleanupState` | 검증 오류를 포함해 조율자 출력을 한 번 다시 생성한다 | 제안과 보고 갱신 |
+| `repair` | `TaskCleanupState` | 검증 오류를 포함해 조율자 출력을 1회 다시 생성한다 | 제안과 보고 갱신 |
 | `finalize` | `TaskCleanupState` | 제안을 `max_suggestions`까지 외부 결과로 직렬화한다 | `suggestions` |
 | `empty` | `TaskCleanupState` | 제안이 없거나 검증이 소진된 결과를 반환한다 | 빈 `suggestions` |
 

@@ -63,7 +63,7 @@ sequenceDiagram
 | `probe` | `ProbeDispatch` | 할당된 질문을 전용 도구·예산·근거 장부로 조사한다 | `reports`, `provenance`, 비용, 사용 turn |
 | `investigate` | `RecipeScanState` | 전문가 보고를 종합해 `RecipeDraft`를 만들고 필요하면 redispatch를 요청한다 | `candidates`, `messages`, `redispatch` |
 | `validate_candidate` | `RecipeScanState` | task·event·turn·rule·recipe revision 인용을 provenance와 대조한다 | `validation_errors` |
-| `repair` | `RecipeScanState` | 검증 오류를 포함한 수정 지시로 후보를 한 번 다시 생성한다 | 후보·provenance 갱신 |
+| `repair` | `RecipeScanState` | 검증 오류를 포함한 수정 지시로 후보를 1회 다시 생성한다 | 후보·provenance 갱신 |
 | `finalize` | `RecipeScanState` | 후보와 `ProvenanceCatalog`를 wire 결과로 직렬화한다 | `recipes`, `provenance` |
 | `empty` | `RecipeScanState` | 후보가 없거나 검증이 소진된 결과를 직렬화한다 | 빈 `recipes` |
 

@@ -15,6 +15,8 @@ from ...shared.agents.shared.json_view import JsonObject
 
 # 종결 값의 모양은 계약 파일을 읽어 세워지므로 샌드박스가 그 모듈을 다시 실행하지 않게 그대로 들여온다.
 with workflow.unsafe.imports_passed_through():
+    from tracer_agent.shared.workflows.generate_limits import generate_limits
+
     from ...shared.workflows.jobs_spec import (
         AGENT_JOB_WORKFLOW,
         FAIL_AGENT_JOB_ACTIVITY,
@@ -31,7 +33,6 @@ with workflow.unsafe.imports_passed_through():
         AgentJobRequest,
         AgentJobSettlement,
         GeneratedAgentJob,
-        generate_limits,
     )
 
 
