@@ -8,7 +8,10 @@ from ..shared.agents.chat.intake.cancel import UpdateSignal
 from ..shared.agents.chat.intake.dispatch import ExecutionDispatch
 from ..shared.agents.chat.surface.tool_client import ChatToolExecutor
 from ..shared.agents.chat.surface.updates import ChatExecutionUpdates
+from ..shared.agents.cleanup.archiver import CleanupTaskArchiver
 from ..shared.agents.envelope.models import ModelCredentialSource
+from ..shared.agents.recipe.search import RecipeSearchPort
+from ..shared.agents.recipe.tasks import RecipeTaskReader
 from ..shared.agents.runtime.ledger import SqlSource
 from ..shared.agents.settings.secret import SettingCipher
 from ..shared.workflows.jobs_anchor import ScanAnchorSource
@@ -29,6 +32,9 @@ class AgentServices:
     execution_dispatch: ExecutionDispatch
     job_dispatch: TemporalJobDispatch
     scan_anchors: ScanAnchorSource
+    recipe_search: RecipeSearchPort
+    recipe_tasks: RecipeTaskReader
+    task_archiver: CleanupTaskArchiver
     read_api_base_url: str
     execution_updates: UpdateSignal | None = None
     execution_watch: ChatExecutionUpdates | None = None

@@ -6,6 +6,7 @@ from typing import Any
 
 from tests.support.chat_surface import RecordingDispatch, RecordingExecutor, SilentWatch
 from tests.support.fakes import FakeScanAnchors
+from tests.support.recipes import RecordingArchiver, RecordingSearch, RecordingTaskReader
 from tracer_agent.api.services import AgentServices
 from tracer_agent.shared.agents.settings.secret import SettingCipher
 from tracer_agent.shared.config import MonitorProfile
@@ -52,6 +53,9 @@ def fake_services(**overrides: Any) -> AgentServices:
         "execution_dispatch": RecordingDispatch(),
         "job_dispatch": SilentJobDispatch(),
         "scan_anchors": FakeScanAnchors(),
+        "recipe_search": RecordingSearch(),
+        "recipe_tasks": RecordingTaskReader(),
+        "task_archiver": RecordingArchiver(),
         "read_api_base_url": READ_API_BASE_URL,
         "execution_updates": None,
         "execution_watch": SilentWatch(),

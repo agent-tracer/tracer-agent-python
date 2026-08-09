@@ -18,7 +18,22 @@ from ..shared.agents.chat.surface.stream import router as chat_stream_router
 from ..shared.agents.chat.surface.threads import router as chat_thread_router
 from ..shared.agents.chat.surface.tool_client import HttpChatToolExecutor
 from ..shared.agents.chat.surface.updates import UpdateSubscriber
+from ..shared.agents.cleanup.archiver import TracerTaskArchiver
+from ..shared.agents.cleanup.router import router as cleanup_router
 from ..shared.agents.envelope.router import router as envelope_router
+from ..shared.agents.recipe.consumer import LedgerEventConsumer
+from ..shared.agents.recipe.outbox import (
+    LedgerSearchOutboxDrain,
+    SearchOutboxDrain,
+    SearchOutboxDrainScheduler,
+)
+from ..shared.agents.recipe.router import router as recipe_router
+from ..shared.agents.recipe.search import (
+    OpenSearchClient,
+    OpenSearchIndexWriter,
+    OpenSearchRecipeSearch,
+)
+from ..shared.agents.recipe.tasks import TracerTaskReader
 from ..shared.agents.runtime.ledger import (
     LedgerPoolProvider,
     LedgerUnavailable,
@@ -30,6 +45,7 @@ from ..shared.agents.runtime.wakeup import UpdatePublisher
 from ..shared.agents.settings.router import router as settings_router
 from ..shared.agents.settings.secret import SettingCipher
 from ..shared.agents.shared.ledger_availability import ledger_unavailable_rejection
+from ..shared.agents.shared.tracer_window import HttpTracerWindow
 from ..shared.agents.shared.wire import error_envelope
 from ..shared.config import get_settings
 from ..shared.workflows.chat_spec import CHAT_EXECUTION_UPDATES_TOPIC
@@ -73,6 +89,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     watch = UpdateSubscriber(settings.kafka_brokers, CHAT_EXECUTION_UPDATES_TOPIC)
     chat_tool_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
     anchor_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
+    ledger_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
+    search_http = httpx.AsyncClient(timeout=OUTBOUND_HTTP_TIMEOUT_S)
+    tracer_window = HttpTracerWindow(ledger_http, settings.tracer_api_url)
+    search_client = OpenSearchClient(search_http, settings.opensearch_url)
     temporal_client = TemporalClientProvider(settings.connect_temporal)
     application.state.services = AgentServices(
         execution_sql=execution_sql,
@@ -84,14 +104,28 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         execution_dispatch=TemporalExecutionDispatch(temporal_client),
         job_dispatch=TemporalJobDispatch(temporal_client),
         scan_anchors=ScanAnchorClient(anchor_http, settings.tracer_api_url),
+        recipe_search=OpenSearchRecipeSearch(search_client),
+        recipe_tasks=TracerTaskReader(tracer_window),
+        task_archiver=TracerTaskArchiver(tracer_window),
         read_api_base_url=settings.tracer_api_url,
         execution_updates=updates,
         execution_watch=watch,
     )
+    # 배출기와 프로젝터는 별도 배포 단위가 아니라 이 프로세스 안에 서며 자문 잠금이 replica 중복을 막는다.
+    drain = SearchOutboxDrainScheduler(
+        SearchOutboxDrain(LedgerSearchOutboxDrain(execution_sql), OpenSearchIndexWriter(search_client))
+    )
+    ledger_events = LedgerEventConsumer(settings.kafka_brokers, execution_sql)
+    drain.start()
+    await ledger_events.start()
     try:
         yield
     finally:
         shutdown_observability()
+        await ledger_events.stop()
+        await drain.stop()
+        await search_http.aclose()
+        await ledger_http.aclose()
         await anchor_http.aclose()
         await chat_tool_http.aclose()
         await watch.close()
@@ -141,6 +175,8 @@ def create_app() -> FastAPI:
     application.include_router(job_query_router)
     application.include_router(job_intake_router)
     application.include_router(settings_router)
+    application.include_router(recipe_router)
+    application.include_router(cleanup_router)
     application.include_router(envelope_router)
     return application
 

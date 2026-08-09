@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     tracer_api_url: str = "http://tracer-api:3902"
     # 프롬프트는 에이전트의 데이터이므로 워커가 자기 배포 단위의 창구에서 이번 실행이 쓸 판을 받아 온다.
     agent_api_url: str = "http://agent-api:8800"
+    # 레시피 색인은 추적과 같은 OpenSearch 를 쓰되 색인 이름을 나눈다.
+    opensearch_url: str = "http://opensearch:9200"
 
     # LangSmith SDK가 같은 환경변수를 직접 읽으며 명시적 opt-in 전에는 trace를 보내지 않는다.
     langsmith_tracing: bool = False
