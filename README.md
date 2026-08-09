@@ -172,8 +172,6 @@ LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소
 
 새 엔드포인트·워크플로·도구·프롬프트·DB 필드를 더할 때는 계약을 먼저 확인하고 테스트와 적합성 케이스와 구현을 함께 갱신합니다. 구현 차이는 임의의 예외 목록으로 숨기지 않고 `divergence.json`과 함께 갱신합니다.
 
-아직 착수하지 않은 구조 변경의 설계와 되돌릴 수 있는 마이그레이션 순서는 [미룬 구조 변경과 마이그레이션 순서](STRUCTURE-MIGRATION.md)가 갖습니다. 계약 저장소나 TypeScript 축이 먼저 움직여야 닫히는 항목은 [계약 저장소나 TypeScript 축을 함께 고쳐야 닫히는 항목](CONTRACT-BACKLOG.md)이 갖습니다.
-
 ## 에이전트 구현 문서
 
 잡 셋의 노드 토폴로지와 검증 꼬리, 대화 턴의 단계, 도구 표면, 프롬프트 계층, 미들웨어 순서, 예산과 재개, 대화·잡 워크플로를 한 장에 모은 그림은 [실행 토폴로지와 워크플로](ARCHITECTURE.md)에서 확인한다. 노드 간 이동, 프롬프트 원문·번역, 구조화 출력의 상세는 [에이전트 실행 구조 문서](src/tracer_agent/worker/agents/README.md)에서 확인한다. 에이전트별 상세 내용은 [Chat](src/tracer_agent/worker/agents/chat/README.md), [Recipe Scan](src/tracer_agent/worker/agents/recipe_scan/README.md), [Task Cleanup](src/tracer_agent/worker/agents/task_cleanup/README.md), [Title Suggestion](src/tracer_agent/worker/agents/title_suggestion/README.md) 문서에 정리한다.
