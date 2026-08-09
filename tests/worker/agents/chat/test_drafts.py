@@ -15,6 +15,7 @@ from tests.support.chat_api import chat_confirmation_response
 from tests.support.fakes import WIRE_LIMITS, WIRE_MODEL_RATES, FakeToolLoopChat
 from tests.support.prompts import CHAT_PROMPT
 from tracer_agent.shared.agents.chat.models import ChatRequest, DraftCallback
+from tracer_agent.shared.agents.chat.surface.contract import chat_draft_rules
 from tracer_agent.worker.agents.chat import agent as chat_mod
 from tracer_agent.worker.agents.chat.drafts import ChatExecutionClosed, DraftPublisher
 from tracer_agent.worker.agents.chat.steps.converse import _fresh_tool_names
@@ -156,7 +157,9 @@ async def test_첫_조각은_곧바로_보내고_그_뒤로만_묶는다() -> No
         return httpx.Response(200, json={"stored": True})
 
     # 시계가 0에서 시작해도 첫 조각이 나가야 앞쪽 엣지다.
-    ticks = iter([0.0, 0.01, 0.02, 0.20, 0.30])
+    interval = chat_draft_rules().interval_s
+    # 간격이 계약에서 움직여도 안과 밖이 뒤바뀌지 않도록 눈금을 그 값에서 만든다.
+    ticks = iter([0.0, interval / 15, interval * 2 / 15, interval * 4 / 3, interval * 2])
     callback = DraftCallback.model_validate(
         {"url": "http://tracer-api.test/drafts", "token": "grant", "attempt": 1}
     )
