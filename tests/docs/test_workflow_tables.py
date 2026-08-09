@@ -157,3 +157,16 @@ def test_비고가_적은_전체_상한이_그_종류의_값과_같다(doc: Path
 
     assert written, doc.name
     assert set(written) == {str(declared["scheduleToCloseSeconds"] // 60)}, doc.name
+
+
+@pytest.mark.parametrize("doc", [AGENTS_DOC, CHAT_DOC], ids=lambda doc: doc.parent.name)
+def test_문서가_옮겨_적은_층_호출이_실행이_세우는_호출과_같다(doc: Path) -> None:
+    # 값을 그대로 옮겨 적으면 그 값이 계약으로 옮겨간 날 문서만 남는다.
+    source = (
+        Path(__file__).resolve().parents[2] / "src/tracer_agent/worker/agents/runtime/llm/middleware_stack.py"
+    ).read_text(encoding="utf-8")
+    written = set(re.findall(r"`(PromptCacheMiddleware\([^`]*\))`", doc.read_text(encoding="utf-8")))
+
+    assert written, doc.name
+    for call in written:
+        assert call in source, f"{doc.name}: {call}"
