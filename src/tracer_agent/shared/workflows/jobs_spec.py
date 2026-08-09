@@ -46,6 +46,31 @@ JOB_HEARTBEAT_INTERVAL_S = 10.0
 # 원장 갱신 한 문장뿐이라 실행 액티비티보다 훨씬 짧게 잡는다.
 JOB_CANCEL_SETTLE_TIMEOUT_S = 30.0
 
+# 계약이 잡 종류마다 워크플로를 두는 축에 적어 둔 상한이며 그 종류만 이 값으로 실행한다.
+_TITLE_SUGGESTION_GENERATE = (300.0, 1200.0, 30.0, 3)
+
+
+@dataclass(frozen=True)
+class GenerateLimits:
+    """생성 활동 하나를 실을 때 거는 상한과 시도 수다."""
+
+    start_to_close_s: float
+    schedule_to_close_s: float
+    heartbeat_s: float
+    max_attempts: int
+
+
+def generate_limits(kind: AgentJobKind) -> GenerateLimits:
+    """계약이 그 종류에 상한을 적었으면 그 값을, 적지 않았으면 이 축의 한 벌을 낸다."""
+    if kind is AgentJobKind.TITLE_SUGGESTION:
+        return GenerateLimits(*_TITLE_SUGGESTION_GENERATE)
+    return GenerateLimits(
+        JOB_GENERATE_TIMEOUT_S,
+        JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
+        JOB_HEARTBEAT_TIMEOUT_S,
+        JOB_GENERATE_MAX_ATTEMPTS,
+    )
+
 
 def agent_job_workflow_id(kind: AgentJobKind, key: str) -> str:
     """잡 워크플로 식별자를 잡 종류와 접수 키로 만든다."""

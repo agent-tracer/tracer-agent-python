@@ -24,10 +24,6 @@ with workflow.unsafe.imports_passed_through():
         JOB_CANCEL_SETTLE_TIMEOUT_S,
         JOB_FINALIZE_MAX_ATTEMPTS,
         JOB_FINALIZE_TIMEOUT_S,
-        JOB_GENERATE_MAX_ATTEMPTS,
-        JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
-        JOB_GENERATE_TIMEOUT_S,
-        JOB_HEARTBEAT_TIMEOUT_S,
         JOB_PREPARE_MAX_ATTEMPTS,
         JOB_PREPARE_TIMEOUT_S,
         PREPARE_AGENT_JOB_ACTIVITY,
@@ -35,6 +31,7 @@ with workflow.unsafe.imports_passed_through():
         AgentJobRequest,
         AgentJobSettlement,
         GeneratedAgentJob,
+        generate_limits,
     )
 
 
@@ -77,17 +74,18 @@ class AgentJobWorkflow:
         return prepared
 
     async def _generate(self, request: AgentJobRequest) -> GeneratedAgentJob:
+        limits = generate_limits(request.kind)
         generated: GeneratedAgentJob = await workflow.execute_activity(
             GENERATE_AGENT_JOB_ACTIVITY,
             request,
             result_type=GeneratedAgentJob,
             task_queue=GENERATE_TASK_QUEUE,
-            start_to_close_timeout=timedelta(seconds=JOB_GENERATE_TIMEOUT_S),
-            schedule_to_close_timeout=timedelta(seconds=JOB_GENERATE_SCHEDULE_TO_CLOSE_S),
-            heartbeat_timeout=timedelta(seconds=JOB_HEARTBEAT_TIMEOUT_S),
+            start_to_close_timeout=timedelta(seconds=limits.start_to_close_s),
+            schedule_to_close_timeout=timedelta(seconds=limits.schedule_to_close_s),
+            heartbeat_timeout=timedelta(seconds=limits.heartbeat_s),
             # 기본값 TRY_CANCEL은 원장 정리 전에 취소를 확정해 종료 기록을 건너뛰므로 완료를 기다린다.
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-            retry_policy=RetryPolicy(maximum_attempts=JOB_GENERATE_MAX_ATTEMPTS),
+            retry_policy=RetryPolicy(maximum_attempts=limits.max_attempts),
         )
         return generated
 
