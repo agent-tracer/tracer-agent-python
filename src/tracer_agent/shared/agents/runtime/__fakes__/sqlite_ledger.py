@@ -241,7 +241,7 @@ def rewrite(sql: str) -> tuple[str, list[int]]:
 class SqliteLedgerSql(LedgerSql):
     """chat 쓰기 테이블을 메모리에 세우고 원장 문장을 그대로 평가한다."""
 
-    # 연결이 하나뿐이라 동시 트랜잭션과 행 잠금이 없고 CHECK 제약과 열 타입도 세우지 않는다.
+    # 연결이 하나뿐이라 동시 트랜잭션과 행 잠금은 재현하지 않는다.
 
     def __init__(self) -> None:
         # HTTP 테스트는 앱을 다른 스레드에서 실행하므로 연결을 만든 스레드 밖에서도 쓰게 연다.

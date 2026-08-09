@@ -135,7 +135,7 @@ async def job_resources(settings: Settings) -> AsyncIterator[JobWorkerResources]
 
 
 def build_chat_worker(client: Client, opened: ChatWorkerResources, settings: Settings) -> Worker:
-    """chat 워크플로 둘과 액티비티 넷만 소비하는 워커를 만든다."""
+    """chat 큐의 워크플로와 액티비티만 소비하는 워커를 만든다."""
     activities = ChatExecutionActivities(
         PooledSql(opened.ledger, settings.agent_db_acquire_timeout_s),
         opened.http_client,

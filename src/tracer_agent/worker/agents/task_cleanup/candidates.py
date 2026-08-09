@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupTaskStatus,
 )
 
-# ts 축의 cleanup.candidate.model.ts 가 쓰는 값과 맞춘 상수다.
+# 정리 후보를 최근 활동으로 거를 때 쓰는 상한이며 두 축이 같은 값을 쓴다.
 CLEANUP_RECENT_ACTIVITY = timedelta(minutes=30)
 CLEANUP_STALE = timedelta(days=14)
 _PLACEHOLDER_TITLE_PATTERN = re.compile(
