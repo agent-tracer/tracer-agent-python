@@ -137,7 +137,7 @@ task-cleanup.inspect.system
 | --- | --- | --- | ---: | --- |
 | `prepareAgentJob` | `jobs` | 60초 | 5 | 도메인 문맥을 모으고 원장을 실행 중으로 옮긴다 |
 | `generateAgentJob` | `generate` | 600초 | 3 | 30분 schedule-to-close, 30초 heartbeat |
-| `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물과 완료 배달 |
+| `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물 쓰기와 완료 알림 |
 | `failAgentJob` | `jobs` | 60초 | 5 | 어느 단계가 실패하든 원장을 실패로 닫는다 |
 | `settleCanceledAgentJob` | `jobs` | 30초 | — | 액티비티가 돌기 전에 닿은 취소를 접는다 |
 
@@ -176,4 +176,5 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py` |
 | 추적 API 읽기 | `reader.py` |
+| 제안을 자기 원장에 적기 | `outputs.py` |
 | 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |

@@ -85,21 +85,6 @@ sequenceDiagram
 거부된 계획은 `StandardAgentMiddleware`가 궤적에 실은 뒤 구조화 복구가 사유와 함께 한 번 되돌려
 주므로, 겹친 배정은 관측에 남고 조율자는 남은 축을 덮는 계획을 다시 낼 기회를 얻는다.
 
-## 자기 원장에 적는 후보
-
-`outputs.py`의 `_ROW_FIELDS`가 후보의 칸을 `agent-db` 의 `recipes` 열로 옮긴다. 목록에 없는 칸은
-원장에 적히지 않으므로 후보에만 선 값은 저장되지 않는다. 모델의 `revises_recipe_id`는
-`parent_recipe_id`가 되며, 이 실행이 본 판(`provenance.recipeRevs`)이 지금 판과 같을 때만 적고
-어긋나면 부모를 비운다. 적는 칸과 종결 단계가 정하는 값은 계약의
-`conformance/cases/recipe.ledger.json`의 `ledgerWrite`가 소유한다.
-
-후보 한 벌과 그 색인 적재 행은 한 트랜잭션에 함께 적힌다. 같은 `source_job_id` 로 적힌 후보가 이미
-있으면 아무것도 쓰지 않으므로 같은 잡의 재시도가 후보를 두 벌 만들지 않는다.
-
-답변 언어는 후보가 아니라 이 실행이 갖는 값이라 종결이 요청 payload에서 꺼내 쓰기로 넘기고
-`_to_row`가 행마다 적는다. 요청이 언어를 정하지 않았으면 정하지 않았다는 표시를 그대로 적으며
-그 글자는 실제로 쓰인 언어가 아니다. 정본 축도 조건 없이 같은 값을 적는다.
-
 ## 도구 타입
 
 | 도구 | 주요 인자 | 역할 | 근거 기록 |
@@ -109,7 +94,7 @@ sequenceDiagram
 | `list_rules` | `taskId` | 적용 가능한 rule을 조회한다 | rule ID |
 | `search_events` | `q`, `taskId`, `kind`, `toolName`, `limit`, `offset` | task를 가로지르는 event를 검색한다 | event ID, 선택적 task ID |
 | `find_similar_tasks` | `anchorTaskId`, `limit` | 기준 task와 유사한 task를 조회한다 | 없음 |
-| `search_recipes` | `q`, `limit` | 등록된 recipe와 revision을 조회한다 | recipe revision |
+| `search_recipes` | `q`, `limit` | 이 축이 소유한 recipe와 revision을 조회한다 | recipe revision |
 
 전문가별 도구 권한은 `timeline = summary/events/search`, `rules = list_rules/search_recipes`, `repetition = search_events/find_similar`이다. 조율자는 도구를 갖지 않고 인용 가능한 식별자를 요청으로 받는다. `ToolRegistry`는 Pydantic 인자를 검증하고 도구 span과 provenance를 기록한다.
 
@@ -159,6 +144,21 @@ recipe-scan.probe.system
 
 `AgentMiddlewareStack`이 model call limit, context editing, 구조화 복구, standardization, prompt cache, 도구 실패 되돌림, tool retry, 선택적 fallback, model retry를 이 순서로 세운다. 구조화 출력은 `ToolStrategy(output, handle_errors=True)`로 처리하며 `DispatchPlan`, `ProbeReport`, `RecipeDraft`를 사용한다. 최종 검증은 후보의 provenance와 인용 식별자를 결정적으로 대조한다.
 
+## 자기 원장에 적는 후보
+
+`outputs.py`의 `_ROW_FIELDS`가 후보의 칸을 `agent-db` 의 `recipes` 열로 옮긴다. 목록에 없는 칸은
+원장에 적히지 않으므로 후보에만 선 값은 저장되지 않는다. 모델의 `revises_recipe_id`는
+`parent_recipe_id`가 되며, 이 실행이 본 판(`provenance.recipeRevs`)이 지금 판과 같을 때만 적고
+어긋나면 부모를 비운다. 적는 칸과 종결 단계가 정하는 값은 계약의
+`conformance/cases/recipe.ledger.json`의 `ledgerWrite`가 소유한다.
+
+후보 한 벌과 그 색인 적재 행은 한 트랜잭션에 함께 적힌다. 같은 `source_job_id` 로 적힌 후보가 이미
+있으면 아무것도 쓰지 않으므로 같은 잡의 재시도가 후보를 두 벌 만들지 않는다.
+
+답변 언어는 후보가 아니라 이 실행이 갖는 값이라 종결이 요청 payload에서 꺼내 쓰기로 넘기고
+`_to_row`가 행마다 적는다. 요청이 언어를 정하지 않았으면 정하지 않았다는 표시를 그대로 적으며
+그 글자는 실제로 쓰인 언어가 아니다. 정본 축도 조건 없이 같은 값을 적는다.
+
 ## Temporal 워크플로
 
 세 잡 종류를 `agentJobWorkflow` 하나가 받고 준비 → 생성 → 종결 순서로 실행한다. 모델을 부르는
@@ -169,7 +169,7 @@ recipe-scan.probe.system
 | --- | --- | --- | ---: | --- |
 | `prepareAgentJob` | `jobs` | 60초 | 5 | 도메인 문맥을 모으고 원장을 실행 중으로 옮긴다 |
 | `generateAgentJob` | `generate` | 900초 | 3 | 60분 schedule-to-close, 30초 heartbeat |
-| `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물과 완료 배달 |
+| `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물 쓰기와 완료 알림 |
 | `failAgentJob` | `jobs` | 60초 | 5 | 어느 단계가 실패하든 원장을 실패로 닫는다 |
 | `settleCanceledAgentJob` | `jobs` | 30초 | — | 액티비티가 돌기 전에 닿은 취소를 접는다 |
 
@@ -206,6 +206,6 @@ LangGraph 체크포인트에서 이어가므로 실패 지점부터 재개한다
 | 도구 registry | `tools/registry.py` |
 | 프롬프트 조립 | `prompts.py` |
 | 예산·팬아웃 정책 | `policy.py`, `reservation.py` |
-| 추적 API 읽기 | `reader.py`, `search.py`, `summary.py` |
+| 추적과 자기 API 읽기 | `reader.py`, `search.py`, `summary.py` |
 | 후보를 자기 원장에 적기 | `outputs.py` |
 | 워크플로와 액티비티 | `worker/workflows/jobs_workflows.py`, `jobs_activities.py` |

@@ -1,6 +1,6 @@
 # tracer-agent-python
 
-에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 에이전트를 실행합니다. 실행 원장은 이 서비스가 소유하며, 실행에 필요한 기록은 추적 API를 HTTP로 읽고 산출물도 같은 경로로 되돌려 보냅니다.
+에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 에이전트를 실행합니다. 실행 원장과 레시피·정리 제안 원장은 이 서비스가 소유하며, 실행에 필요한 추적 기록만 추적 API를 HTTP로 읽고 잡의 산출물은 자기 원장에 직접 적습니다.
 
 같은 계약을 만족하는 TypeScript 구현이 따로 있고 배포에서 어느 이미지를 올리느냐로 둘 중 하나가 선택됩니다. TypeScript 구현이 계약의 정본이며, 두 구현체 사이에 지금 남아 있는 차이는 계약 저장소의 `conformance/cases/divergence.json`이 갖습니다. 계약을 함께 만족한다는 사실이 모든 동작이 같다는 뜻은 아닙니다.
 
@@ -11,6 +11,7 @@
 - chat, recipe scan, task cleanup, title suggestion 에이전트
 - 대화 도구 확인·재생·장기기억 API
 - 잡 접수·취소·이력·단계 조회 API
+- 레시피와 정리 제안 원장의 조회·해소 API와 `recipes` 검색 색인
 - 자격 증명이 답과 초안과 도구 결과로 새지 않도록 가리는 절차
 - 설정 표면
 - OpenTelemetry와 선택적 LangSmith 연동
@@ -23,6 +24,7 @@ flowchart LR
     API --> AgentDB[(agent-db)]
     API --> Temporal[(Temporal)]
     API --> Kafka[(Redpanda)]
+    API --> Search[(OpenSearch recipes)]
 ```
 
 ### 워커와 LangGraph 실행
@@ -56,9 +58,10 @@ flowchart LR
 | chat 워커 | 대화 턴의 단계와 체크포인트, 대화 복구를 처리합니다 |
 | jobs 워커 | 짧은 잡 액티비티와 상태 정산을 처리합니다 |
 | generate 워커 | 모델을 호출하는 긴 액티비티를 분리해 처리합니다 |
-| `agent-db` | 이 서비스가 소유하는 실행 원장입니다 |
+| `agent-db` | 이 서비스가 소유하는 실행 원장과 레시피·정리 제안 원장입니다 |
+| `recipes` 색인 | 이 서비스가 소유하는 OpenSearch 색인이며 아웃박스 배출기가 채웁니다 |
 
-LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. 추적 데이터베이스와 OpenSearch를 직접 읽지 않습니다.
+LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. 추적 데이터베이스를 직접 읽지 않으며 OpenSearch는 이 서비스가 소유하는 `recipes` 색인만 씁니다.
 
 ## 요구 사항
 
@@ -114,6 +117,7 @@ uv run tracer-agent-worker generate
 | `TEMPORAL_NAMESPACE` | `default` | Temporal 네임스페이스 |
 | `TRACER_API_URL` | `http://tracer-api:3902` | 추적 API |
 | `AGENT_API_URL` | `http://agent-api:8800` | 자기 API base URL |
+| `OPENSEARCH_URL` | `http://opensearch:9200` | 레시피 검색 색인 |
 | `AGENT_TASK_QUEUE_PREFIX` | `agent` | 큐 접두사 |
 | `LANGSMITH_TRACING` | `false` | LangSmith 사용 여부 |
 | `LANGSMITH_ENDPOINT`, `LANGSMITH_API_KEY` | 없음 | LangSmith 주소와 자격 증명 |
