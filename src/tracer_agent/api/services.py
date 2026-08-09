@@ -30,6 +30,5 @@ class AgentServices:
     job_dispatch: TemporalJobDispatch
     scan_anchors: ScanAnchorSource
     read_api_base_url: str
-    agent_api_base_url: str
     execution_updates: UpdateSignal | None = None
     execution_watch: ChatExecutionUpdates | None = None

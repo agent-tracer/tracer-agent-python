@@ -21,7 +21,6 @@ from ..shared.wire import (
     validation_details,
 )
 from .catalog import CATALOG, JOB_KINDS
-from .grants import issue_draft_grant
 from .issue import chat_envelope, job_envelope
 from .models import CHAT_KEY_MISSING, JOB_KEY_MISSING, JobEnvelopeBody, ModelCredentialSource
 
@@ -45,15 +44,8 @@ def get_read_api_base_url(request: Request) -> str:
     return base_url
 
 
-def get_agent_api_base_url(request: Request) -> str:
-    """실행기가 이 서비스로 되돌아올 때 부를 주소를 낸다."""
-    base_url: str = request.app.state.services.agent_api_base_url
-    return base_url
-
-
 ModelCredentials = Annotated[ModelCredentialSource, Depends(get_model_credentials)]
 ReadApiBaseUrl = Annotated[str, Depends(get_read_api_base_url)]
-AgentApiBaseUrl = Annotated[str, Depends(get_agent_api_base_url)]
 
 
 @router.post(CHAT_ENVELOPE_PATH, response_model=SuccessEnvelope, responses=error_responses(400, 404))
@@ -62,7 +54,6 @@ async def issue_chat_execution_envelope(
     source: ExecutionSql,
     credentials: ModelCredentials,
     read_api_base_url: ReadApiBaseUrl,
-    agent_api_base_url: AgentApiBaseUrl,
 ) -> JSONResponse:
     """이번 대화 실행 시도가 쓸 모델과 자격과 단가와 한도를 낸다."""
     async with source.connect() as sql:
@@ -81,8 +72,6 @@ async def issue_chat_execution_envelope(
         api_key=api_key,
         catalog=CATALOG[CHAT_KIND],
         read_api_base_url=read_api_base_url,
-        agent_api_base_url=agent_api_base_url,
-        grant=issue_draft_grant(),
         user_id=str(row["user_id"]),
         now_ms=int(time.time() * 1000),
     )

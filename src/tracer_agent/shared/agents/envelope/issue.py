@@ -7,10 +7,7 @@ from typing import Any
 from ..shared import scope_token
 from ..shared.model_tiering import CHAT_KIND, allowed_models
 from .catalog import ExecutionCatalog, wire_model_rates
-from .grants import DraftGrant
 from .tools import chat_tool_descriptions
-
-DRAFT_PATH = "/api/agent/chat/executions/{execution_id}/drafts"
 
 
 def chat_envelope(
@@ -20,12 +17,10 @@ def chat_envelope(
     api_key: str,
     catalog: ExecutionCatalog,
     read_api_base_url: str,
-    agent_api_base_url: str,
-    grant: DraftGrant,
     user_id: str,
     now_ms: int,
 ) -> dict[str, Any]:
-    """대화 한 시도가 쓸 카탈로그 값과 자격과 draft 창구를 봉투로 낸다."""
+    """대화 한 시도가 쓸 카탈로그 값과 자격을 봉투로 낸다."""
     return {
         "model": _model(CHAT_KIND, catalog, model),
         "apiKey": api_key,
@@ -42,11 +37,6 @@ def chat_envelope(
         )
         or "",
         "toolDescriptions": chat_tool_descriptions(),
-        "draft": {
-            "url": f"{agent_api_base_url.rstrip('/')}{DRAFT_PATH.format(execution_id=execution_id)}",
-            "token": grant.token,
-            "tokenHash": grant.token_hash,
-        },
     }
 
 

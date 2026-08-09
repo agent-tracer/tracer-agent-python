@@ -58,7 +58,6 @@ def client(store: SqliteLedgerSql, credentials: FakeCredentials) -> Iterator[Tes
             execution_sql=SingleSql(store),
             model_credentials=credentials,
             read_api_base_url="http://tracer-api:3902",
-            agent_api_base_url="http://agent-api:8800",
         )
         yield test_client
 
@@ -103,7 +102,6 @@ def test_대화_봉투는_계약이_정한_칸을_모두_싣는다(
         "readApiBaseUrl",
         "scopeToken",
         "toolDescriptions",
-        "draft",
     ]
     assert data["model"] == "claude-sonnet-4-6"
     assert data["apiKey"] == API_KEY
@@ -120,15 +118,12 @@ def test_대화_봉투의_모델은_원장이_고른_값을_우선한다(client:
     assert client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]["model"] == "claude-opus-5"
 
 
-def test_대화_봉투는_시도마다_다른_draft_자격을_낸다(client: TestClient, store: SqliteLedgerSql) -> None:
+def test_계약이_지운_초안_창구의_자격을_봉투가_싣지_않는다(
+    client: TestClient, store: SqliteLedgerSql
+) -> None:
     seed_execution(store)
 
-    first = client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]["draft"]
-    second = client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]["draft"]
-
-    assert first["url"] == "http://agent-api:8800/api/agent/chat/executions/e1/drafts"
-    assert first["token"] != second["token"]
-    assert first["tokenHash"] != first["token"]
+    assert "draft" not in client.post(CHAT_PATH.format(execution_id="e1")).json()["data"]
 
 
 def test_없는_대화_실행은_404를_낸다(client: TestClient) -> None:

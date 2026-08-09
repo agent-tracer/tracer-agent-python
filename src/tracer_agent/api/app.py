@@ -85,7 +85,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         job_dispatch=TemporalJobDispatch(temporal_client),
         scan_anchors=ScanAnchorClient(anchor_http, settings.tracer_api_url),
         read_api_base_url=settings.tracer_api_url,
-        agent_api_base_url=settings.agent_api_url,
         execution_updates=updates,
         execution_watch=watch,
     )

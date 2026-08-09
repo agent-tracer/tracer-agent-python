@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from tracer_agent.shared.agents.envelope.catalog import CATALOG, JOB_KINDS
-from tracer_agent.shared.agents.envelope.grants import DraftGrant
 from tracer_agent.shared.agents.envelope.issue import chat_envelope, job_envelope
 from tracer_agent.shared.agents.shared.model_tiering import CHAT_KIND, allowed_models
 
@@ -19,8 +18,6 @@ def _chat_envelope(model: str | None) -> dict[str, object]:
         api_key="key-1",
         catalog=CATALOG[CHAT_KIND],
         read_api_base_url="http://read",
-        agent_api_base_url="http://agent",
-        grant=DraftGrant(token="t", token_hash="h"),
         user_id="user-1",
         now_ms=0,
     )
@@ -51,3 +48,8 @@ def test_허용_목록_밖_모델은_잡_봉투에도_실리지_않는다(kind: 
 @pytest.mark.parametrize("kind", [*sorted(JOB_KINDS), CHAT_KIND])
 def test_봉투가_싣는_기본_모델은_그_종류가_허용한_값이다(kind: str) -> None:
     assert CATALOG[kind].default_model in allowed_models(kind)
+
+
+def test_계약이_지운_초안_창구의_자격을_봉투가_싣지_않는다() -> None:
+    # 계약의 ChatExecutionEnvelope 에 draft 칸이 없으므로 아무도 쓰지 않을 자격을 만들지 않는다.
+    assert "draft" not in _chat_envelope(None)

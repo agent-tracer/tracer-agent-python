@@ -9,7 +9,7 @@
 - LangGraph와 LangChain 기반 대화 실행과 체크포인트
 - Temporal 기반 chat·jobs·generate 워커 분리
 - chat, recipe scan, task cleanup, title suggestion 에이전트
-- 대화 도구 확인·초안·재생·장기기억 API
+- 대화 도구 확인·재생·장기기억 API
 - 잡 접수·취소·이력·단계 조회 API
 - 자격 증명이 답과 초안과 도구 결과로 새지 않도록 가리는 절차
 - 설정 표면

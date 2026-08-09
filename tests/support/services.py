@@ -53,7 +53,6 @@ def fake_services(**overrides: Any) -> AgentServices:
         "job_dispatch": SilentJobDispatch(),
         "scan_anchors": FakeScanAnchors(),
         "read_api_base_url": READ_API_BASE_URL,
-        "agent_api_base_url": AGENT_API_BASE_URL,
         "execution_updates": None,
         "execution_watch": SilentWatch(),
     }

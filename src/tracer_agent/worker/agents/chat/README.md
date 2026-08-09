@@ -39,7 +39,6 @@ sequenceDiagram
     participant G as chat-conversation agent
     participant M as primary / fallback model
     participant API as agent-api / tracer-api
-    participant S as draft callback
     A->>T: run_chat(ChatRequest)
     T->>C: replay load when request messages are absent
     C-->>T: history + summary + facts
@@ -52,7 +51,6 @@ sequenceDiagram
     API-->>G: tool result
     G->>M: continue tool loop
     M-->>N: final AI message
-    N-->>S: optional cumulative draft stream
     T-->>A: ChatResult + proposedWrites
 ```
 
@@ -187,26 +185,23 @@ stateDiagram-v2
 
 ### 원장에 닿는 리듬
 
-TypeScript 워커는 원장에 직접 쓰지만 이 구현은 실행 창구를 지난다. 실행 코드가 원장을 알지 않고
-전송 경계만 알기 때문이며, 이 차이는 계약의 `divergence.json`이 갖는다.
+두 축 모두 누적분을 원장에 적고 브로커로 열린 연결에 알린다.
 
 ```mermaid
 sequenceDiagram
     participant G as chat turn
     participant P as DraftPublisher
-    participant S as agent-api /drafts
     participant D as agent-db
     participant K as Kafka chat.execution.updates
     participant A as agent-api SSE
 
     G->>P: 첫 조각
-    P-)S: POST 를 뒤로 미루고 곧바로 돌아온다
+    P-)D: 쓰기를 뒤로 미루고 곧바로 돌아온다
     Note over P: 이후 계약이 정한 간격 동안 받은 것은 묶는다
     G->>P: 조각 여럿
-    P-)S: POST 한 번
-    S->>D: checkpoint_running
-    S->>A: 이 프로세스의 연결에 곧바로 알린다
-    S->>K: 다른 replica 에만
+    P-)D: checkpoint_running 한 번
+    P->>A: 이 프로세스의 연결에 곧바로 알린다
+    P->>K: 다른 replica 에만
     K-->>A: 다른 replica
 ```
 
@@ -278,7 +273,7 @@ stateDiagram-v2
 
 ```
 계약   contract/agent/chat/summary.json
-production.trigger · production.target · consumption.recentKeepCount · limits
+production.trigger · production.target · production.recentKeepCount · consumption.maxReplayMessages · limits
 ```
 
 `finalize` 액티비티가 산출물을 적은 뒤 `ChatSummaryProjection`을 실행한다. 취소로 끝난 턴과
@@ -298,8 +293,8 @@ flowchart TD
 
 - 요약은 파생 계산이므로 만들지 못해도 그 턴을 실패로 접지 않는다.
 - 모델을 부르는 동안 원장 연결을 빌리지 않는다. 읽기와 쓰기가 각각 연결을 빌리고 반납한다.
-- 요약이 덮는 마지막 메시지를 원장이 적지 않아 읽는 쪽은 신선도를 판단하지 못한다. 이 구멍은
-  계약이 `knownGap.chat.summary.freshness`로 미해소로 남겼고 해소에는 migration이 함께 간다.
+- 요약이 덮는 마지막 메시지는 `chat_threads.summary_through_message_id`가 갖고 읽는 쪽은 그
+  지점 다음부터 싣는다. 요약과 이 칸은 원장의 CHECK 제약으로 함께 있거나 함께 없다.
 
 ## 관련 코드
 
