@@ -2,37 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.chat_surface import SingleSql
 from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.chat.intake.dispatch import UnwiredExecutionDispatch
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 PATH = "/api/agent/chat/threads/t1/messages"
 BODY: dict[str, Any] = {"clientRequestId": "r1", "content": "안녕"}
-
-
-class SingleSql:
-    """테스트 하나가 쓰는 메모리 원장을 접수 창구에 그대로 빌려 준다."""
-
-    def __init__(self, store: SqliteLedgerSql) -> None:
-        self._store = store
-
-    def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
-        """빌릴 때마다 같은 메모리 원장을 낸다."""
-        return self._lend()
-
-    @asynccontextmanager
-    async def _lend(self) -> AsyncIterator[LedgerSql]:
-        yield self._store
 
 
 @pytest.fixture

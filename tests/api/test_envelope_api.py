@@ -2,40 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support.chat_surface import SingleSql
 from tests.support.contract import conformance_case
 from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
 from tracer_agent.shared.agents.envelope.router import CHAT_KEY_MISSING, JOB_KEY_MISSING
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
-from tracer_agent.shared.agents.runtime.ledger import LedgerSql
 
 CHAT_PATH = "/internal/chat/executions/{execution_id}/envelope"
 JOB_PATH = "/internal/jobs/{kind}/envelope"
 REJECTION = conformance_case("job.intake")["response"]["envelopeRejection"]
 NOW = datetime(2026, 7, 30, tzinfo=UTC)
 API_KEY = "sk-ant-test"
-
-
-class SingleSql:
-    """테스트 하나가 쓰는 메모리 원장을 봉투 창구에 그대로 빌려 준다."""
-
-    def __init__(self, store: SqliteLedgerSql) -> None:
-        self._store = store
-
-    def connect(self) -> AbstractAsyncContextManager[LedgerSql]:
-        """빌릴 때마다 같은 메모리 원장을 낸다."""
-        return self._lend()
-
-    @asynccontextmanager
-    async def _lend(self) -> AsyncIterator[LedgerSql]:
-        yield self._store
 
 
 class FakeCredentials:
