@@ -137,7 +137,7 @@ class StubEnvelopes:
     async def issue(self, execution_id: str, attempt: int) -> ChatExecutionEnvelope:
         """무엇을 몇 번째 시도로 물었는지 기억하고 미리 정한 조각을 낸다."""
         self.issued.append((execution_id, attempt))
-        return ChatExecutionEnvelope(fields=dict(self._fields), draft_token_hash="hash")
+        return ChatExecutionEnvelope(fields=dict(self._fields))
 
 
 @pytest.fixture

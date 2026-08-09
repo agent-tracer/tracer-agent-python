@@ -55,11 +55,10 @@ RETURNING id
 _BEGIN_ATTEMPT = """
 UPDATE chat_executions
    SET attempt = $2,
-       draft_token_hash = COALESCE(draft_token_hash, $3),
        draft_text = '',
        draft_seq = 0,
        phase = 'starting',
-       updated_at = $4
+       updated_at = $3
  WHERE id = $1 AND status = 'running' AND attempt <= $2
 RETURNING id
 """
@@ -209,11 +208,9 @@ class ChatExecutionLedger:
             return THREAD_BUSY
         return CLAIMED if rows else STALE
 
-    async def begin_attempt(
-        self, execution_id: str, attempt: int, draft_token_hash: str, now: datetime
-    ) -> bool:
+    async def begin_attempt(self, execution_id: str, attempt: int, now: datetime) -> bool:
         """시도 회차를 올리고 진행 표시를 비운다."""
-        rows = await self._sql.fetch(_BEGIN_ATTEMPT, execution_id, attempt, draft_token_hash, now)
+        rows = await self._sql.fetch(_BEGIN_ATTEMPT, execution_id, attempt, now)
         return len(rows) == 1
 
     async def checkpoint_running(

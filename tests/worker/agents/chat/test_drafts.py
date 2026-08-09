@@ -34,11 +34,7 @@ def _request(**overrides: Any) -> ChatRequest:
         "language": "ko",
         "messages": [{"role": "user", "content": "task-1 아카이브해줘"}],
         "agentApiBaseUrl": "http://agent-api.test",
-        "draftCallback": {
-            "url": "http://agent-api.test/api/agent/chat/executions/execution-1/drafts",
-            "token": "grant",
-            "attempt": 2,
-        },
+        "attempt": 2,
     }
     values.update(overrides)
     return ChatRequest.model_validate(values)
@@ -219,7 +215,7 @@ async def test_답변이_흐르는_동안에는_사고로_되돌리지_않는다
 async def _system_content(turns: list[Any], **overrides: Any) -> tuple[FakeToolLoopChat, list[Any]]:
     chat = FakeToolLoopChat(turns)
     chats = ChatPair(chat, None)
-    req = _request(draftCallback=None, **overrides)
+    req = _request(**overrides)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:
         await chat_mod.run_chat(req, client, ExecutionTrace(), CHAT_PROMPT, None, chats)
     return chat, list(chat.requests[0][0].content)
@@ -262,7 +258,6 @@ async def test_이전_대화가_있는_턴에서도_시스템_메시지는_선�
         ],
         summary="앞선 대화 요약",
         facts=[{"key": "editor", "content": "vim을 쓴다"}],
-        draftCallback=None,
     )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200))) as client:

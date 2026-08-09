@@ -95,16 +95,6 @@ class ChatTurnFields(BaseModel):
     toolDescriptions: dict[str, str] = Field(default_factory=dict)
 
 
-class DraftCallback(BaseModel):
-    """실행 도중 누적 답변을 되돌려 보내는 창구이며 실행 시도 하나에만 유효하다."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    url: TrimmedStr = Field(min_length=1)
-    token: TrimmedStr = Field(min_length=1)
-    attempt: int = Field(ge=1)
-
-
 class ChatRequest(ChatTurnFields, AgentExecutionEnvelope):
     """대화 턴 하나를 실행하는 내구성 실행 봉투."""
 
@@ -112,7 +102,8 @@ class ChatRequest(ChatTurnFields, AgentExecutionEnvelope):
 
     executionId: TrimmedStr = Field(min_length=1)
     deadlineMs: int = 120_000
-    draftCallback: DraftCallback | None = None
+    # 궤적이 이번 시도를 잇는 값이며 재시도마다 접수가 올린다.
+    attempt: int | None = Field(default=None, ge=1)
 
 
 class ProposedWrite(BaseModel):

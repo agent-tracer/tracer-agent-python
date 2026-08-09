@@ -27,7 +27,6 @@ class ChatExecutionEnvelope:
     """실행 봉투로 실릴 값과, 원장이 draft 창구를 알아보게 할 지문이다."""
 
     fields: dict[str, Any]
-    draft_token_hash: str
 
 
 class ChatEnvelopeSource(Protocol):
@@ -50,11 +49,8 @@ class ChatEnvelopeClient(InternalEnvelopeClient):
         return self._envelope(data, attempt)
 
     def _envelope(self, data: JsonObject, attempt: int) -> ChatExecutionEnvelope:
-        draft = data.get("draft")
-        if not isinstance(draft, dict):
-            raise self._failed("has no draft grant", final=True)
-        fields = {key: value for key, value in data.items() if key != "draft"}
+        fields = dict(data)
         # 되읽기와 확인 창구는 에이전트의 것이므로 실행기가 자기 배포 단위의 주소로 그것을 부른다.
         fields["agentApiBaseUrl"] = self._base_url
-        fields["draftCallback"] = {"url": draft["url"], "token": draft["token"], "attempt": attempt}
-        return ChatExecutionEnvelope(fields=fields, draft_token_hash=str(draft["tokenHash"]))
+        fields["attempt"] = attempt
+        return ChatExecutionEnvelope(fields=fields)

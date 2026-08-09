@@ -22,7 +22,7 @@ ENVELOPE: dict[str, Any] = {
     "readApiBaseUrl": READ_API,
     "scopeToken": "ms1.scope",
     "toolDescriptions": {"get_timeline": "설명"},
-    "draftCallback": {"url": f"{READ_API}/api/agent/chat/executions/e1/drafts", "token": "tok", "attempt": 1},
+    "attempt": 1,
 }
 
 PREPARED = PreparedChatExecution("e1", "t1", "u1", "ko", "claude-opus-5")
@@ -39,8 +39,7 @@ def test_봉투와_원장의_사실이_한_턴의_실행_요청이_된다() -> N
     assert request.limits.maxTurns == 14
     assert request.readApiBaseUrl == READ_API
     assert request.scopeToken == "ms1.scope"
-    assert request.draftCallback is not None
-    assert request.draftCallback.attempt == 1
+    assert request.attempt == 1
     # 이력은 봉투가 아니라 재생 API에서 오므로 여기서는 비어 있다.
     assert request.messages == []
 

@@ -157,8 +157,8 @@ class ConverseStep:
         )
 
     def _attempt_id(self) -> str | None:
-        callback = self._req.draftCallback
-        return None if callback is None else str(callback.attempt)
+        attempt = self._req.attempt
+        return None if attempt is None else str(attempt)
 
     async def _seed(
         self,

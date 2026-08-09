@@ -99,7 +99,7 @@ class AgentExecutionEnvelope(BaseModel):
                 "modelRates",
                 "limits",
                 "completionCallback",
-                "draftCallback",
+                "attempt",
             },
         )
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)

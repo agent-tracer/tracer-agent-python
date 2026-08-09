@@ -21,7 +21,6 @@ DATA: dict[str, Any] = {
     "readApiBaseUrl": BASE_URL,
     "scopeToken": "ms1.x.y",
     "toolDescriptions": {"get_timeline": "설명"},
-    "draft": {"url": f"{BASE_URL}/api/agent/chat/executions/e1/drafts", "token": "tok", "tokenHash": "h"},
 }
 
 
@@ -30,7 +29,7 @@ def client(handler: Any) -> ChatEnvelopeClient:
     return ChatEnvelopeClient(httpx.AsyncClient(transport=transport), BASE_URL)
 
 
-async def test_받은_값을_봉투_조각과_지문으로_가른다() -> None:
+async def test_받은_값을_봉투_조각으로_옮긴다() -> None:
     calls: list[str] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -40,12 +39,10 @@ async def test_받은_값을_봉투_조각과_지문으로_가른다() -> None:
     envelope = await client(respond).issue("e1", 2)
 
     assert calls == [f"{BASE_URL}/internal/chat/executions/e1/envelope"]
-    assert envelope.draft_token_hash == "h"
     assert envelope.fields["apiKey"] == "sk-test"
     assert envelope.fields["limits"]["maxTurns"] == 14
-    assert "draft" not in envelope.fields
-    # draft 창구는 이 시도에만 유효하므로 시도 번호가 봉투에 함께 실린다.
-    assert envelope.fields["draftCallback"] == {"url": DATA["draft"]["url"], "token": "tok", "attempt": 2}
+    # 궤적이 이번 시도를 잇도록 시도 번호를 봉투가 싣는다.
+    assert envelope.fields["attempt"] == 2
 
 
 async def test_서버가_거절하면_다시_태우지_않는다() -> None:
@@ -67,13 +64,3 @@ async def test_서버가_흔들리면_다시_태운다() -> None:
         await client(fail).issue("e1", 1)
 
     assert raised.value.non_retryable is False
-
-
-async def test_봉투에_draft_자격이_없으면_시도를_열지_않는다() -> None:
-    def respond(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True, "data": {key: DATA[key] for key in ("model",)}})
-
-    with pytest.raises(ApplicationError) as raised:
-        await client(respond).issue("e1", 1)
-
-    assert raised.value.non_retryable is True

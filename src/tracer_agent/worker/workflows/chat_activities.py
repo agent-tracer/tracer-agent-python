@@ -102,7 +102,7 @@ class ChatExecutionActivities:
         # 단가도 한도도 자격도 이 서비스가 지어내지 않으므로 시도마다 서버에서 받아 봉투를 세운다.
         envelope = await self._envelopes.issue(prepared.execution_id, attempt)
         request = turn_request(prepared, envelope.fields)
-        await self._begin_attempt(prepared, attempt, envelope.draft_token_hash)
+        await self._begin_attempt(prepared, attempt)
         # 취소가 걸려도 그때까지의 궤적을 읽을 수 있도록 실행이 쓸 궤적을 이 액티비티가 소유한다.
         trace = ExecutionTrace()
         heartbeat = asyncio.ensure_future(_heartbeat())
@@ -207,13 +207,9 @@ class ChatExecutionActivities:
                 f"chat thread {request.thread_id} is busy", type=THREAD_BUSY_FAILURE, non_retryable=True
             )
 
-    async def _begin_attempt(
-        self, prepared: PreparedChatExecution, attempt: int, draft_token_hash: str
-    ) -> None:
+    async def _begin_attempt(self, prepared: PreparedChatExecution, attempt: int) -> None:
         async with self._sql.connect() as sql:
-            opened = await ChatExecutionLedger(sql).begin_attempt(
-                prepared.execution_id, attempt, draft_token_hash, _now()
-            )
+            opened = await ChatExecutionLedger(sql).begin_attempt(prepared.execution_id, attempt, _now())
         if not opened:
             raise RuntimeError("chat execution attempt is stale")
         # 이 쓰기가 초안을 비우므로 알리지 않으면 화면이 이전 시도의 글을 재전송 주기까지 그대로 둔다.

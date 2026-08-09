@@ -10,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support.chat_surface import (
-    DRAFT_TOKEN,
     DRAFT_TOKEN_HASH,
     NOW,
     seed_execution,
@@ -201,22 +200,6 @@ class Test창구의_칸:
         data = self._data(client.post(f"{THREADS}/t1/confirmations/c1", json={"decision": "reject"}))
         self._assert_shape(data, WINDOWS[self.window]["data"])
 
-    def test_누적_답변_통지가_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
-        self.window = ("POST", "/api/agent/chat/executions/{executionId}/drafts")
-        data = self._data(
-            client.post(
-                "/api/agent/chat/executions/e1/drafts",
-                json={
-                    "token": DRAFT_TOKEN,
-                    "attempt": 1,
-                    "draftSeq": 1,
-                    "text": "쌓이는 답변",
-                    "phase": "responding",
-                },
-            )
-        )
-        self._assert_shape(data, WINDOWS[self.window]["data"])
-
     def test_턴_중단이_케이스가_적은_칸을_낸다(self, client: TestClient) -> None:
         self.window = (
             "POST",
@@ -400,18 +383,6 @@ class Test거절:
         rejection = next(one for one in CASE["rejections"] if one["status"] == 400)
 
         res = client.post(THREADS, json={})
-
-        assert res.status_code == rejection["status"]
-        assert res.json()["error"]["code"] == rejection["code"]
-        assert res.json()["error"]["message"] == rejection["message"]
-
-    def test_다른_시도의_토큰은_케이스가_적은_거절을_낸다(self, client: TestClient) -> None:
-        rejection = next(one for one in CASE["rejections"] if one["status"] == 403)
-
-        res = client.post(
-            "/api/agent/chat/executions/e1/drafts",
-            json={"token": "다른 토큰", "attempt": 1, "draftSeq": 1, "text": "답변", "phase": "responding"},
-        )
 
         assert res.status_code == rejection["status"]
         assert res.json()["error"]["code"] == rejection["code"]

@@ -118,7 +118,7 @@ async def test_chat_턴이_실행을_가리키는_trace_metadata와_안정_run_i
 ) -> None:
     config = await _chat_config(
         monkeypatch,
-        draftCallback={"url": "http://agent-api.test/drafts", "token": "grant", "attempt": 2},
+        attempt=2,
     )
 
     assert config["run_name"] == AGENT_NAME

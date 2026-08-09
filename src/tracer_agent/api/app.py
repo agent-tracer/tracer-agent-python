@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 
 from ..shared.agents.chat.intake.router import router as chat_intake_router
 from ..shared.agents.chat.surface.confirmations import router as chat_confirmation_router
-from ..shared.agents.chat.surface.drafts import router as chat_draft_router
 from ..shared.agents.chat.surface.executions import router as chat_execution_router
 from ..shared.agents.chat.surface.memories import router as chat_memory_router
 from ..shared.agents.chat.surface.stream import router as chat_stream_router
@@ -139,7 +138,6 @@ def create_app() -> FastAPI:
     application.include_router(chat_thread_router)
     application.include_router(chat_confirmation_router)
     application.include_router(chat_execution_router)
-    application.include_router(chat_draft_router)
     application.include_router(chat_memory_router)
     application.include_router(job_query_router)
     application.include_router(job_intake_router)
