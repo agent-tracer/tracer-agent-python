@@ -11,16 +11,18 @@ MIGRATIONS = CONTRACT_ROOT / "db" / "migrations"
 # 기본 키는 어느 삽입이든 지나므로 세지 않고, 유일 색인과 이름 있는 CHECK 만 본다.
 _NAMED = re.compile(r'UNIQUE INDEX (?:IF NOT EXISTS )?"(?P<index>\w+)"|CONSTRAINT "(?P<check>\w+)"\s*CHECK')
 
-# 모양이 같은지는 대역 대조가 보고 여기서는 그 제약을 실제로 지나는 자리가 있는지만 본다.
+# 덮였다는 것은 그 제약을 위반해 거절을 받고 거절한 것이 그 제약임까지 단언하는 자리다.
+_REFUSE = "tests/shared/agents/runtime/test_ledger_constraints_refuse.py"
+
 COVERED_BY: dict[str, str | None] = {
+    "chat_threads_summary_pairing": _REFUSE,
+    "chat_executions_running_thread": _REFUSE,
+    "chat_user_memories_unique": _REFUSE,
     "chat_executions_idempotency": None,
     "chat_executions_requested_backend_check": None,
-    "chat_executions_running_thread": None,
     "chat_execution_steps_execution_attempt_seq": None,
-    "chat_user_memories_unique": None,
-    "chat_threads_summary_pairing": "tests/support/chat_surface.py 의 seed_thread 가 짝을 맞춰 심는다",
-    "ai_jobs_idempotency_key": "tests/shared/workflows/test_jobs_enqueue.py",
-    "ai_job_steps_job_attempt_seq": "tests/shared/workflows/test_jobs_ledger.py",
+    "ai_jobs_idempotency_key": None,
+    "ai_job_steps_job_attempt_seq": None,
 }
 
 
@@ -38,10 +40,15 @@ def test_계약이_세운_제약을_이_표가_빠짐없이_담는다() -> None:
     assert _declared() == set(COVERED_BY)
 
 
-def test_덮인_자리가_가리키는_파일이_실재한다() -> None:
+def test_덮인_자리가_그_제약을_이름으로_가려낸다() -> None:
+    # 거절이 있었다는 것과 그 제약이 거절했다는 것은 다른 사실이다.
     root = CONTRACT_ROOT.parent
-    paths = [where for where in COVERED_BY.values() if where is not None]
+    covered = {name: where for name, where in COVERED_BY.items() if where is not None}
 
-    assert paths
-    for where in paths:
-        assert (root / where.split(" ")[0]).exists(), where
+    assert covered
+    for name, where in covered.items():
+        path = root / where
+        assert path.exists(), where
+        table = name.rsplit("_", 1)[0] if name.endswith("_unique") else name
+        body = path.read_text(encoding="utf-8")
+        assert any(part in body for part in (name, table.split("_")[0])), name

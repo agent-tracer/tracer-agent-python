@@ -250,6 +250,11 @@ class SqliteLedgerSql(LedgerSql):
         self._connection.row_factory = sqlite3.Row
         self._connection.executescript(SCHEMA)
 
+    @property
+    def raw(self) -> sqlite3.Connection:
+        """창구를 지나지 않고 원장의 제약에 직접 부딪히는 자리다."""
+        return self._connection
+
     async def fetch(self, sql: str, *args: Any) -> list[SqlRow]:
         """문장 하나를 실행하고 돌아온 행을 원장 열의 형태로 낸다."""
         # 관측 INSERT는 jsonb 연산자와 형변환으로 적혀 이 대역이 파이썬으로 대신하므로 평가되지 않는다.
