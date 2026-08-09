@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -19,6 +21,8 @@ CHAT_EXECUTIONS_PATH = f"{CHAT_THREAD_PATH}/executions"
 CHAT_EXECUTION_PATH = f"{CHAT_EXECUTIONS_PATH}/{{execution_id}}"
 CHAT_EXECUTION_STEPS_PATH = f"{CHAT_EXECUTION_PATH}/steps"
 CHAT_EXECUTION_REPLAY_PATH = f"{CHAT_EXECUTION_PATH}/replay"
+
+_log = logging.getLogger(__name__)
 
 REPLAY_UNBUILDABLE = (404, "not_found", "Chat replay message not found")
 
@@ -76,13 +80,23 @@ async def get_chat_replay(
         return rejection(rejected)
 
     summary = None if thread["summary"] is None else str(thread["summary"])
+    through = thread["summary_through_message_id"]
     try:
-        replayed = build_chat_replay(messages, str(execution["replay_anchor_message_id"]), summary)
+        replay = build_chat_replay(
+            messages,
+            str(execution["replay_anchor_message_id"]),
+            None if through is None else str(through),
+        )
     except ChatReplayMessageMissing:
         return rejection(ChatRejected(*REPLAY_UNBUILDABLE))
+    if replay.truncated:
+        # 정상 흐름은 이 상한에 닿지 않으므로 닿았다는 것은 요약이 거듭 실패했다는 신호다.
+        _log.warning(
+            "chat.replay.truncated thread=%s stored=%d kept=%d", thread_id, replay.stored, replay.kept
+        )
     return ok(
         {
-            "messages": replayed,
+            "messages": replay.messages,
             "summary": summary,
             "facts": [{"key": row["key"], "content": row["content"]} for row in memories],
         }

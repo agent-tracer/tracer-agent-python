@@ -1,7 +1,8 @@
-"""한 턴이 모델에게 되돌려 줄 이력을 창 자르기와 도구 호출 짝 맞추기로 만든다."""
+"""한 턴이 모델에게 되돌려 줄 이력을 요약 지점과 절대 상한과 도구 호출 짝 맞추기로 만든다."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from ...runtime.ledger import SqlRow
@@ -17,25 +18,52 @@ class ChatReplayMessageMissing(LookupError):
     """실행이 가리키는 앵커 메시지가 이력에 없어 재생을 만들 수 없다."""
 
 
+@dataclass(frozen=True)
+class ChatReplay:
+    """이번 턴이 되돌려 줄 이력과, 절대 상한에 닿아 앞을 버렸는지다."""
+
+    messages: list[dict[str, Any]]
+    stored: int
+    kept: int
+
+    @property
+    def truncated(self) -> bool:
+        """상한에 닿아 앞을 자른 재생이며 요약이 거듭 실패했다는 신호다."""
+        return self.kept < self.stored
+
+
 def build_chat_replay(
-    messages: list[SqlRow], replay_anchor_message_id: str, summary: str | None
-) -> list[dict[str, Any]]:
+    messages: list[SqlRow], replay_anchor_message_id: str, summary_through_message_id: str | None
+) -> ChatReplay:
     """이번 턴의 재생 이력을 만드는 유일한 규칙이며 자르기와 접기를 함께 소유한다."""
-    window = select_replay_messages(
-        _until_anchor(messages, replay_anchor_message_id),
-        summary is not None and bool(summary.strip()),
-    )
+    until_anchor = _until_anchor(messages, replay_anchor_message_id)
+    window = select_replay_messages(until_anchor, summary_through_message_id)
     paired = _paired_call_ids(window)
     replayed: list[dict[str, Any]] = []
     for row in window:
         replayed.extend(_replay_message(row, paired))
-    return replayed
+    return ChatReplay(messages=replayed, stored=len(until_anchor), kept=len(window))
 
 
-def select_replay_messages(messages: list[SqlRow], has_summary: bool) -> list[SqlRow]:
-    """요약이 있으면 계약이 정한 수만큼의 최근 대화 턴만 남기고 도구 결과는 턴으로 세지 않는다."""
-    if not has_summary:
+def select_replay_messages(messages: list[SqlRow], summary_through_message_id: str | None) -> list[SqlRow]:
+    """요약이 덮은 지점 다음부터 싣되 어느 경우에도 계약이 정한 절대 상한을 넘기지 않는다."""
+    after_summary = _after_summary(messages, summary_through_message_id)
+    ceiling = chat_summary_spec().max_replay_messages
+    return after_summary[-ceiling:] if len(after_summary) > ceiling else after_summary
+
+
+def _after_summary(messages: list[SqlRow], summary_through_message_id: str | None) -> list[SqlRow]:
+    if summary_through_message_id is None:
         return messages
+    for index, row in enumerate(messages):
+        if row["id"] == summary_through_message_id:
+            return messages[index + 1 :]
+    # 앵커가 지점보다 앞이면 그 지점이 이 창에 없으므로 자르면 이 턴이 볼 앞부분이 사라진다.
+    return messages
+
+
+def select_messages_to_keep(messages: list[SqlRow]) -> list[SqlRow]:
+    """쓰는 쪽이 접지 않고 남길 최근 턴이며 도구 결과는 턴으로 세지 않는다."""
     keep = chat_summary_spec().recent_keep_count
     turns = 0
     for index in range(len(messages) - 1, -1, -1):
@@ -48,8 +76,8 @@ def select_replay_messages(messages: list[SqlRow], has_summary: bool) -> list[Sq
 
 
 def select_messages_to_fold(messages: list[SqlRow]) -> list[SqlRow]:
-    """요약이 접을 대상은 재생 창 바깥에 남는 오래된 메시지다."""
-    kept = len(select_replay_messages(messages, True))
+    """요약이 접을 대상은 남길 최근 턴 바깥의 오래된 메시지다."""
+    kept = len(select_messages_to_keep(messages))
     return messages[: len(messages) - kept]
 
 

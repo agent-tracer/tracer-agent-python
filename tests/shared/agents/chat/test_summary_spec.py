@@ -9,7 +9,7 @@ from contract.conformance.runner.contract import read_json
 from tracer_agent.shared.agents.chat.summary_spec import chat_summary_spec, should_summarize
 from tracer_agent.shared.agents.chat.surface.replay import (
     select_messages_to_fold,
-    select_replay_messages,
+    select_messages_to_keep,
 )
 
 DECLARED: dict[str, Any] = read_json("agent/chat/summary.json")
@@ -32,7 +32,10 @@ class Test계약이_가진_값:
 
         assert spec.trigger_messages == DECLARED["production"]["trigger"]["messages"]
         assert spec.trigger_chars == DECLARED["production"]["trigger"]["chars"]
-        assert spec.recent_keep_count == DECLARED["consumption"]["recentKeepCount"]
+        assert spec.recent_keep_count == DECLARED["production"]["recentKeepCount"]
+        assert spec.max_replay_messages == DECLARED["consumption"]["maxReplayMessages"]
+        # 상한이 트리거보다 좁으면 정상 흐름이 늘 닿아 관측이 신호가 아니라 잡음이 된다.
+        assert spec.max_replay_messages > spec.trigger_messages
 
     def test_요약_호출의_상한을_계약에서_읽는다(self) -> None:
         spec = chat_summary_spec()
@@ -72,7 +75,13 @@ class Test접을_대상:
         folded = select_messages_to_fold(messages)
 
         assert [row["content"] for row in folded] == [f"말{index}" for index in range(5)]
-        assert len(select_replay_messages(messages, True)) == keep
+        assert len(select_messages_to_keep(messages)) == keep
+
+    def test_접을_것과_남길_것이_서로의_여집합이다(self) -> None:
+        # 쓰는 쪽의 두 규칙이 한 창을 나누므로 합이 전체이며 읽는 쪽은 지점을 보아 여기 끼지 않는다.
+        messages = [user(f"말{index}") for index in range(chat_summary_spec().recent_keep_count + 5)]
+
+        assert select_messages_to_fold(messages) + select_messages_to_keep(messages) == messages
 
     def test_접을_것이_없으면_대상이_비어_있다(self) -> None:
         messages = [user(f"말{index}") for index in range(chat_summary_spec().recent_keep_count)]

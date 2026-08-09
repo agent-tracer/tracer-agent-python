@@ -28,9 +28,12 @@ CREATE TABLE chat_threads (
     user_id TEXT NOT NULL,
     title TEXT NOT NULL,
     summary TEXT,
+    summary_through_message_id TEXT,
     backend TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    -- 실물의 CHECK 제약이며 짝이 어긋난 행을 읽는 쪽이 다룰 필요가 없게 한다.
+    CHECK ((summary IS NULL) = (summary_through_message_id IS NULL))
 );
 
 CREATE TABLE app_settings (

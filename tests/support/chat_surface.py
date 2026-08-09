@@ -111,6 +111,14 @@ class RecordingExecutor:
         return self._sentence
 
 
+def _through(extra: Any) -> str | None:
+    """요약을 기록한 자리는 그 요약이 덮는 지점도 함께 갖는다."""
+    if extra.get("summary") is None:
+        return None
+    through: str = extra.get("summary_through_message_id") or "m0"
+    return through
+
+
 def seed_thread(store: SqliteLedgerSql, thread_id: str = "t1", user_id: str = "local", **extra: Any) -> None:
     """조회가 읽을 스레드 한 행을 기록한다."""
     store.seed(
@@ -121,6 +129,8 @@ def seed_thread(store: SqliteLedgerSql, thread_id: str = "t1", user_id: str = "l
                 "user_id": user_id,
                 "title": extra.get("title", "첫 대화"),
                 "summary": extra.get("summary"),
+                # 원장이 요약과 지점의 짝을 강제하므로 대역도 요약만 기록하지 않는다.
+                "summary_through_message_id": _through(extra),
                 "backend": extra.get("backend"),
                 "created_at": NOW,
                 "updated_at": extra.get("updated_at", NOW),

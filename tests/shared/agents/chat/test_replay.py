@@ -13,8 +13,6 @@ from tracer_agent.shared.agents.chat.surface.replay import (
     select_replay_messages,
 )
 
-RECENT_KEEP_COUNT = chat_summary_spec().recent_keep_count
-
 CALL = {"id": "call-1", "name": "propose_task_write", "args": {"action": "archive", "taskId": "task-1"}}
 
 
@@ -48,7 +46,7 @@ class Test재생_이력:
             None,
         )
 
-        assert [message["content"] for message in replay] == ["안녕", "네", "이어서"]
+        assert [message["content"] for message in replay.messages] == ["안녕", "네", "이어서"]
 
     def test_결과가_이어진_도구_호출은_인용을_그대로_남긴다(self) -> None:
         replay = build_chat_replay(
@@ -57,8 +55,8 @@ class Test재생_이력:
             None,
         )
 
-        assert replay[0]["toolCalls"] == [CALL]
-        assert replay[1]["toolCallId"] == "call-1"
+        assert replay.messages[0]["toolCalls"] == [CALL]
+        assert replay.messages[1]["toolCallId"] == "call-1"
 
     def test_짝을_잃은_도구_결과는_인용을_지우고_평문으로_남긴다(self) -> None:
         replay = build_chat_replay(
@@ -72,14 +70,19 @@ class Test재생_이력:
             None,
         )
 
-        assert all("toolCalls" not in message for message in replay)
-        assert all("toolCallId" not in message for message in replay)
-        assert [message["content"] for message in replay] == ["부른다", "잠깐", "뒤늦은 결과", "이어서"]
+        assert all("toolCalls" not in message for message in replay.messages)
+        assert all("toolCallId" not in message for message in replay.messages)
+        assert [message["content"] for message in replay.messages] == [
+            "부른다",
+            "잠깐",
+            "뒤늦은 결과",
+            "이어서",
+        ]
 
     def test_호출만_남은_빈_어시스턴트_메시지는_재생하지_않는다(self) -> None:
         replay = build_chat_replay([assistant("m1", "", [CALL]), user("m2", "이어서")], "m2", None)
 
-        assert [message["content"] for message in replay] == ["이어서"]
+        assert [message["content"] for message in replay.messages] == ["이어서"]
 
     def test_이력에_없는_사용자_메시지를_가리키면_거절한다(self) -> None:
         with pytest.raises(ChatReplayMessageMissing):
@@ -87,24 +90,45 @@ class Test재생_이력:
 
 
 class Test재생_창:
-    def test_요약이_없으면_창을_자르지_않는다(self) -> None:
+    def test_요약이_없으면_지점이_없어_창을_자르지_않는다(self) -> None:
         rows = [user(f"m{index}", "말") for index in range(30)]
 
-        assert len(select_replay_messages(rows, False)) == 30
+        assert len(select_replay_messages(rows, None)) == 30
 
-    def test_요약이_있으면_최근_대화_턴만_남긴다(self) -> None:
+    def test_요약이_덮은_지점_다음부터_싣는다(self) -> None:
         rows = [user(f"m{index}", "말") for index in range(30)]
 
-        assert len(select_replay_messages(rows, True)) == RECENT_KEEP_COUNT
+        window = select_replay_messages(rows, "m19")
 
-    def test_도구_결과는_대화_턴으로_세지_않는다(self) -> None:
-        rows = [user(f"m{index}", "말") for index in range(RECENT_KEEP_COUNT)]
-        rows += [tool("t1", "결과", "call-1"), tool("t2", "결과", "call-2")]
+        assert [row["id"] for row in window] == [f"m{index}" for index in range(20, 30)]
 
-        assert len(select_replay_messages(rows, True)) == len(rows)
-
-    def test_요약이_공백뿐이면_창을_자르지_않는다(self) -> None:
+    def test_지점을_창에서_못_찾으면_자르지_않는다(self) -> None:
+        # 앵커가 지점보다 앞이면 그 지점이 이 창에 없으므로 자르면 이 턴이 볼 앞부분이 사라진다.
         rows = [user(f"m{index}", "말") for index in range(30)]
-        replay = build_chat_replay(rows, "m29", "   ")
 
-        assert len(replay) == 30
+        assert len(select_replay_messages(rows, "m99")) == 30
+
+    def test_지점이_없어도_절대_상한을_넘기지_않는다(self) -> None:
+        ceiling = chat_summary_spec().max_replay_messages
+        rows = [user(f"m{index}", "말") for index in range(ceiling + 5)]
+
+        window = select_replay_messages(rows, None)
+
+        assert len(window) == ceiling
+        assert window[0]["id"] == "m5"
+
+    def test_상한에_닿아_앞을_자른_것은_재생이_스스로_밝힌다(self) -> None:
+        ceiling = chat_summary_spec().max_replay_messages
+        rows = [user(f"m{index}", "말") for index in range(ceiling + 5)]
+
+        replay = build_chat_replay(rows, f"m{ceiling + 4}", None)
+
+        assert replay.truncated
+        assert (replay.stored, replay.kept) == (ceiling + 5, ceiling)
+
+    def test_상한_안이면_자르지_않았다고_밝힌다(self) -> None:
+        rows = [user(f"m{index}", "말") for index in range(3)]
+
+        replay = build_chat_replay(rows, "m2", None)
+
+        assert not replay.truncated

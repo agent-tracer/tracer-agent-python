@@ -32,7 +32,7 @@ RETURNING *
 """
 
 _FOLD_THREAD_SUMMARY = """
-UPDATE chat_threads SET summary = $2, updated_at = $3
+UPDATE chat_threads SET summary = $2, summary_through_message_id = $3, updated_at = $4
  WHERE id = $1
 RETURNING id
 """
@@ -150,9 +150,11 @@ class ChatSurfaceLedger:
         rows = await self._sql.fetch(_RENAME_THREAD, thread_id, title, now)
         return rows[0]
 
-    async def fold_thread_summary(self, thread_id: str, summary: str, now: datetime) -> bool:
-        """스레드의 요약 칸을 새 본문으로 덮고 덮었는지 낸다."""
-        rows = await self._sql.fetch(_FOLD_THREAD_SUMMARY, thread_id, summary, now)
+    async def fold_thread_summary(
+        self, thread_id: str, summary: str, through_message_id: str, now: datetime
+    ) -> bool:
+        """요약 본문과 그 요약이 덮는 지점을 한 문장으로 덮고 덮었는지 낸다."""
+        rows = await self._sql.fetch(_FOLD_THREAD_SUMMARY, thread_id, summary, through_message_id, now)
         return len(rows) == 1
 
     async def delete_thread(self, thread_id: str) -> None:

@@ -14,11 +14,12 @@ CHAT_SUMMARY_PATH = CONTRACT_ROOT / "agent" / "chat" / "summary.json"
 
 @dataclass(frozen=True)
 class ChatSummarySpec:
-    """요약을 접는 문턱과 재생 창의 크기와 요약 호출의 상한이다."""
+    """요약을 접는 문턱과 접지 않고 남길 턱과 재생의 절대 상한과 요약 호출의 상한이다."""
 
     trigger_messages: int
     trigger_chars: int
     recent_keep_count: int
+    max_replay_messages: int
     max_output_tokens: int
     deadline_ms: int
 
@@ -32,7 +33,8 @@ def chat_summary_spec() -> ChatSummarySpec:
     return ChatSummarySpec(
         trigger_messages=int(trigger["messages"]),
         trigger_chars=int(trigger["chars"]),
-        recent_keep_count=int(declared["consumption"]["recentKeepCount"]),
+        recent_keep_count=int(declared["production"]["recentKeepCount"]),
+        max_replay_messages=int(declared["consumption"]["maxReplayMessages"]),
         max_output_tokens=int(limits["maxOutputTokens"]),
         deadline_ms=int(limits["deadlineMs"]),
     )

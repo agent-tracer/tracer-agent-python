@@ -76,7 +76,8 @@ class ChatSummaryProjection:
         summary = await self._summarizer.summarize(build_summary_prompt(older, existing))
         if not summary.strip():
             return False
-        return await self._fold(thread_id, summary.strip(), now)
+        # 접은 마지막 메시지가 이 요약이 덮는 지점이며 읽는 쪽은 그 뒤부터 싣는다.
+        return await self._fold(thread_id, summary.strip(), str(older[-1]["id"]), now)
 
     async def _read(self, thread_id: str) -> tuple[str | None, list[SqlRow]] | None:
         """요약 호출이 원장 연결을 기다리지 않도록 이 자리에서 읽기를 끝낸다."""
@@ -93,9 +94,9 @@ class ChatSummaryProjection:
             return None
         return _existing_summary(thread), older
 
-    async def _fold(self, thread_id: str, summary: str, now: datetime) -> bool:
+    async def _fold(self, thread_id: str, summary: str, through: str, now: datetime) -> bool:
         async with self._source.connect() as sql:
-            return await ChatSurfaceLedger(sql).fold_thread_summary(thread_id, summary, now)
+            return await ChatSurfaceLedger(sql).fold_thread_summary(thread_id, summary, through, now)
 
 
 def _existing_summary(thread: SqlRow) -> str | None:
