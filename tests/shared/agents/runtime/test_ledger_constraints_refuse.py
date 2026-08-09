@@ -178,3 +178,26 @@ class Test단계의_순번:
         _step(raw, table, owner, "s1", 1, 1)
 
         _step(raw, table, owner, "s2", 2, 1)
+
+    @pytest.mark.parametrize(
+        ("table", "owner"),
+        [("chat_execution_steps", "execution_id"), ("ai_job_steps", "job_id")],
+    )
+    def test_같은_시도의_다음_순번을_받는다(self, raw: Any, table: str, owner: str) -> None:
+        _step(raw, table, owner, "s1", 1, 1)
+
+        _step(raw, table, owner, "s2", 1, 2)
+
+    @pytest.mark.parametrize(
+        ("table", "owner"),
+        [("chat_execution_steps", "execution_id"), ("ai_job_steps", "job_id")],
+    )
+    def test_다른_실행은_같은_순번을_따로_센다(self, raw: Any, table: str, owner: str) -> None:
+        # 색인에서 주인이 빠지면 한 실행의 순번이 다른 실행의 순번을 막는다.
+        _step(raw, table, owner, "s1", 1, 1)
+
+        raw.execute(
+            f"INSERT INTO {table} (id, {owner}, user_id, attempt, seq, role, content, created_at)"
+            " VALUES ('s2', 'x2', 'u1', 1, 1, 'assistant', '말', ?)",
+            (NOW,),
+        )
