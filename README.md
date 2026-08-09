@@ -80,6 +80,12 @@ uv sync --frozen --extra dev
 # 이미 clone 한 경우
 git submodule update --init --recursive
 
+# agent-db 스키마 적용 — 계약의 DDL 을 Flyway 가 적용하며 도커를 요구한다
+docker run --rm -v "$PWD/contract/db/migrations:/flyway/sql:ro" \
+  -e FLYWAY_URL=jdbc:postgresql://host.docker.internal:5434/agent \
+  -e FLYWAY_USER=root -e FLYWAY_PASSWORD=root \
+  flyway/flyway:11-alpine migrate
+
 # API 서버
 uv run tracer-agent
 

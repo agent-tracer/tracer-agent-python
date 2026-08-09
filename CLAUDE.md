@@ -21,6 +21,11 @@ LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소
 uv sync --frozen --extra dev
 git submodule update --init --recursive
 
+docker run --rm -v "$PWD/contract/db/migrations:/flyway/sql:ro" \
+  -e FLYWAY_URL=jdbc:postgresql://host.docker.internal:5434/agent \
+  -e FLYWAY_USER=root -e FLYWAY_PASSWORD=root \
+  flyway/flyway:11-alpine migrate
+
 uv run tracer-agent
 uv run tracer-agent-worker chat
 uv run tracer-agent-worker jobs
@@ -28,6 +33,8 @@ uv run tracer-agent-worker generate
 ```
 
 기본 API 포트는 `8800`입니다. API와 각 워커는 별도의 프로세스로 실행합니다. 배포에서는 워커의 큐를 명시합니다. 큐 인자를 주지 않은 워커 명령은 chat 큐를 사용합니다.
+
+계약의 `db/migrations`는 Flyway 가 적용하며 이 구현체는 DDL 을 실행하지 않습니다. 배포도 같은 도구를 쓰므로 두 구현체 어느 쪽도 스키마 적용에 관여하지 않습니다.
 
 ## 구조와 경계
 
