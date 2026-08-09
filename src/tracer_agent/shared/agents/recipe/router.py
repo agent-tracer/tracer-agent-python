@@ -137,8 +137,10 @@ async def get_recipe_window(recipe_id: str, source: ExecutionSql, user_id: UserI
 async def accept_recipe_window(recipe_id: str, source: ExecutionSql, user_id: UserId) -> JSONResponse:
     """후보 레시피를 채택하고 부모가 있으면 그 부모를 대체됨으로 함께 옮긴다."""
     now = datetime.now(UTC)
-    ids = [generate_ulid(now), generate_ulid(now)]
-    return await _commit(source, lambda ledger: accept_recipe(ledger, ids, user_id, recipe_id, now))
+    outbox_row_ids = [generate_ulid(now), generate_ulid(now)]
+    return await _commit(
+        source, lambda ledger: accept_recipe(ledger, outbox_row_ids, user_id, recipe_id, now)
+    )
 
 
 @router.post(RECIPE_DISMISS_PATH, response_model=SuccessEnvelope, responses=error_responses(404, 409))

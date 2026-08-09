@@ -34,7 +34,7 @@ from ...runtime.node import GraphNode
 from ...runtime.validation_nodes import ValidationNode
 from ...shared.prompt_source_port import directive_for
 from ..deps import AGENT_NAME, CleanupDeps
-from ..policy import validate_suggestions
+from ..policy import filter_valid_suggestions
 from ..prompts import build_user_prompt
 from ..tools import COORDINATOR_TOOL_NAMES
 
@@ -201,5 +201,5 @@ class ValidateDecisionsNode(ValidationNode[TaskCleanupState, ValidateDecisionsUp
     name = "validate_decisions"
 
     def validate(self, state: TaskCleanupState) -> tuple[ValidateDecisionsUpdate, list[str]]:
-        valid, errors = validate_suggestions(state["suggestions"], state)
+        valid, errors = filter_valid_suggestions(state["suggestions"], state)
         return {"suggestions": valid, "validation_errors": errors}, errors

@@ -14,7 +14,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 
 # 정리 후보를 최근 활동으로 거를 때 쓰는 상한이며 두 축이 같은 값을 쓴다.
 CLEANUP_RECENT_ACTIVITY = timedelta(minutes=30)
-CLEANUP_STALE = timedelta(days=14)
+CLEANUP_STALE_AFTER = timedelta(days=14)
 _PLACEHOLDER_TITLE_PATTERN = re.compile(
     r"^(test|fix\s*bug|todo|wip|session started|정리해줘|테스트|임시)$", re.IGNORECASE
 )
@@ -90,7 +90,7 @@ def _candidate_reasons(
     if _PLACEHOLDER_TITLE_PATTERN.fullmatch(task["title"].strip()):
         reasons.append(CandidateReason.PLACEHOLDER_TITLE)
     is_active_status = task["status"] in tuple(CleanupTaskStatus)
-    if is_active_status and now - last_activity >= CLEANUP_STALE:
+    if is_active_status and now - last_activity >= CLEANUP_STALE_AFTER:
         reasons.append(CandidateReason.STALE)
     return reasons
 

@@ -16,7 +16,7 @@ MAX_IDS_PER_CALL = 100
 class RecipeTaskReader(Protocol):
     """인용된 태스크의 제목을 한 번에 읽는 창구이며 닿지 않는 식별자는 결과에서 빠진다."""
 
-    async def titles_by_ids(self, user_id: str, ids: list[str]) -> dict[str, str]:
+    async def find_titles_by_ids(self, user_id: str, ids: list[str]) -> dict[str, str]:
         """식별자를 제목으로 푸는 표를 낸다."""
         ...
 
@@ -27,7 +27,7 @@ class TracerTaskReader:
     def __init__(self, tracer: TracerWindow) -> None:
         self._tracer = tracer
 
-    async def titles_by_ids(self, user_id: str, ids: list[str]) -> dict[str, str]:
+    async def find_titles_by_ids(self, user_id: str, ids: list[str]) -> dict[str, str]:
         """식별자를 제목으로 푸는 표를 내며 상한을 넘으면 나눠 부른다."""
         titles: dict[str, str] = {}
         for index in range(0, len(ids), MAX_IDS_PER_CALL):

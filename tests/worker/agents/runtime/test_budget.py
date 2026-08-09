@@ -13,8 +13,8 @@ from tracer_agent.worker.agents.runtime.errors import BudgetExceeded
 from tracer_agent.worker.agents.runtime.llm.budget import (
     AgentBudgetLease,
     ExecutionBudget,
-    lease_shares,
     pool_spend,
+    quote_shares,
     reserved_spend,
     single_loop_budget,
 )
@@ -165,7 +165,7 @@ def _assert_lease(lease: AgentBudgetLease, expect: dict[str, Any]) -> None:
 )
 def test_팬아웃_배분이_weight_배열마다_계약이_적은_턴과_달러를_낸다(case: dict[str, Any]) -> None:
     # 실행이 실제로 부르는 배분 함수이며 팬아웃은 이 결과를 그대로 전문가의 상한으로 싣는다.
-    leases = lease_shares(case["requestedTurns"], case["availableTurns"], case["availableUsd"])
+    leases = quote_shares(case["requestedTurns"], case["availableTurns"], case["availableUsd"])
 
     assert [lease.max_turns for lease in leases] == case["expect"]["grantedTurns"]
     assert [lease.max_cost_usd for lease in leases] == pytest.approx(case["expect"]["grantedUsd"])
@@ -177,7 +177,7 @@ def _pool_state(turns: int, usd: float) -> dict[str, Any]:
 
 def test_사용량을_모르는_호출은_떼어준_몫_전부를_쓴_것으로_적는다() -> None:
     # 팬아웃 노드가 실패하면 실제 턴을 모르므로 배분받은 턴 전부를 풀 소모로 낸다.
-    lease = lease_shares([10], 10, 1.0)[0]
+    lease = quote_shares([10], 10, 1.0)[0]
     state = _pool_state(10, 1.0)
 
     spend = pool_spend(cost_usd=lease.max_cost_usd, turns_used=lease.max_turns)
@@ -220,7 +220,7 @@ def test_전문가가_예산을_소진해도_종합과_수리의_몫은_예약�
 
     # 전문가 팬아웃이 남은 잔량 전부를 요청해 소진한다.
     state = _pool_state(execution.remaining_turns, execution.remaining_budget_usd)
-    for lease in lease_shares([10, 10, 10], execution.remaining_turns, execution.remaining_budget_usd):
+    for lease in quote_shares([10, 10, 10], execution.remaining_turns, execution.remaining_budget_usd):
         state = {
             **state,
             "pool_turns_used": state.get("pool_turns_used", 0) + lease.max_turns,

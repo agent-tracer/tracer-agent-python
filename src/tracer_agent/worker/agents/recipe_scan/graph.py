@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.shared.graph_state import remaining_cost_usd, re
 
 from ..runtime.durable_graph import DurableGraph
 from ..runtime.errors import is_retryable_node_failure
-from ..runtime.llm.budget import lease_shares
+from ..runtime.llm.budget import quote_shares
 from ..runtime.routes import EMPTY
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import add_validation_tail, declared_node_names, new_graph, observed
@@ -60,7 +60,7 @@ def _remaining(state: RecipeScanState) -> tuple[int, float]:
 def _fan_out(probes: list[ProbeAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
     if not probes or remaining_turns <= 0 or remaining_usd <= 0.0:
         return []
-    leases = lease_shares([assignment.share for assignment in probes], remaining_turns, remaining_usd)
+    leases = quote_shares([assignment.share for assignment in probes], remaining_turns, remaining_usd)
     return [
         Send(
             ProbeNode.name,

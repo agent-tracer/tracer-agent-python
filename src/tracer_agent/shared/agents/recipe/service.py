@@ -77,7 +77,7 @@ async def _task_titles(tasks: RecipeTaskReader, user_id: str, recipes: list[Reci
     if not ids:
         return {}
     wanted = set(ids)
-    found = await tasks.titles_by_ids(user_id, ids)
+    found = await tasks.find_titles_by_ids(user_id, ids)
     return {task_id: title for task_id, title in found.items() if task_id in wanted}
 
 
@@ -120,18 +120,18 @@ async def get_recipe(ledger: RecipeLedger, user_id: str, recipe_id: str) -> Json
 
 
 async def accept_recipe(
-    ledger: RecipeLedger, ids: list[str], user_id: str, recipe_id: str, now: datetime
+    ledger: RecipeLedger, outbox_row_ids: list[str], user_id: str, recipe_id: str, now: datetime
 ) -> JsonObject:
     """후보를 채택하고 고쳐 쓴 부모가 있으면 그 부모를 대체됨으로 함께 옮긴다."""
     recipe = await owned_recipe(ledger.recipes, user_id, recipe_id)
     parent = await _owned_parent(ledger.recipes, user_id, recipe.parent_recipe_id)
     recipe.accept(now)
     await ledger.recipes.upsert(recipe)
-    await ledger.search_outbox.enqueue(ids[0], user_id, recipe.id, now)
+    await ledger.search_outbox.enqueue(outbox_row_ids[0], user_id, recipe.id, now)
     if parent is not None:
         parent.supersede(now)
         await ledger.recipes.upsert(parent)
-        await ledger.search_outbox.enqueue(ids[1], user_id, parent.id, now)
+        await ledger.search_outbox.enqueue(outbox_row_ids[1], user_id, parent.id, now)
     return {"recipe": recipe_view(recipe)}
 
 

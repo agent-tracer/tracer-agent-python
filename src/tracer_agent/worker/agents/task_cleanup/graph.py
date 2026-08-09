@@ -15,7 +15,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 
 from ..runtime.durable_graph import DurableGraph
 from ..runtime.errors import is_retryable_node_failure
-from ..runtime.llm.budget import lease_shares
+from ..runtime.llm.budget import quote_shares
 from ..runtime.routes import EMPTY
 from ..runtime.timeouts import deadline_fraction_s
 from ..runtime.validation_graph import add_validation_tail, declared_node_names, new_graph, observed
@@ -43,7 +43,7 @@ _NODE_RETRY = RetryPolicy(max_attempts=3, retry_on=is_retryable_node_failure)
 def _fan_out(assignments: list[InspectAssignment], remaining_turns: int, remaining_usd: float) -> list[Send]:
     if not assignments or remaining_turns <= 0 or remaining_usd <= 0.0:
         return []
-    leases = lease_shares([item.share for item in assignments], remaining_turns, remaining_usd)
+    leases = quote_shares([item.share for item in assignments], remaining_turns, remaining_usd)
     return [
         Send(
             InspectNode.name,

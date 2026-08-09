@@ -79,7 +79,7 @@ def floor_then_pool_spend(floor: AgentBudgetLease, *, cost_usd: float, turns_use
     }
 
 
-def lease_shares(
+def quote_shares(
     requested_turns: Sequence[int], available_turns: int, available_usd: float
 ) -> list[AgentBudgetLease]:
     """몫의 나머지 배분 규칙대로 요청 턴을 가용 턴과 달러로 나눈다."""

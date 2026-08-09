@@ -50,7 +50,7 @@ def test_한_번에_묻는_식별자의_상한이_계약과_같다() -> None:
 async def test_인용된_식별자를_한_번에_묻는다() -> None:
     window, seen = _window(_ok([{"id": "task-1", "title": "첫 태스크"}]))
 
-    titles = await TracerTaskReader(window).titles_by_ids("user-1", ["task-1", "task-2"])
+    titles = await TracerTaskReader(window).find_titles_by_ids("user-1", ["task-1", "task-2"])
 
     assert titles == {"task-1": "첫 태스크"}
     assert len(seen) == 1
@@ -62,7 +62,7 @@ async def test_상한을_넘는_식별자는_나눠_묻는다() -> None:
     window, seen = _window(_ok([]))
     ids = [f"task-{index}" for index in range(MAX_IDS_PER_CALL + 1)]
 
-    await TracerTaskReader(window).titles_by_ids("user-1", ids)
+    await TracerTaskReader(window).find_titles_by_ids("user-1", ids)
 
     assert [len(request.url.params["ids"].split(",")) for request in seen] == [MAX_IDS_PER_CALL, 1]
 

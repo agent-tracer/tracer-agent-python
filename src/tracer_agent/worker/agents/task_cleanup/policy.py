@@ -11,7 +11,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
 from ..runtime.routing import ValidationReasons
 
 
-def validate_suggestions(
+def filter_valid_suggestions(
     suggestions: list[CleanupDraftSuggestion],
     state: TaskCleanupState,
 ) -> tuple[list[CleanupDraftSuggestion], list[str]]:

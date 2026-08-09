@@ -16,7 +16,7 @@ from tracer_agent.worker.agents.task_cleanup.candidates import (
     qualify_candidates,
     without_active_children,
 )
-from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
+from tracer_agent.worker.agents.task_cleanup.policy import filter_valid_suggestions
 
 
 def _candidate(task_id: str, *, has_events: bool) -> CleanupCandidate:
@@ -72,7 +72,7 @@ def test_노출되지_않은_후보와_읽지_않은_이벤트_후보를_버리�
         CleanupDraftSuggestion(kind="archive", taskId="ghost", rationale="없는 태스크", evidenceEventIds=[]),
     ]
 
-    valid, errors = validate_suggestions(suggestions, state)
+    valid, errors = filter_valid_suggestions(suggestions, state)
 
     # 검토자가 읽고 인용까지 맞춘 후보만 유지된다.
     assert [item.taskId for item in valid] == ["task-1"]

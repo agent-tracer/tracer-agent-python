@@ -14,7 +14,7 @@ from tracer_agent.shared.agents.recipe_scan.models import (
 from tracer_agent.shared.agents.task_cleanup.models import CleanupDraftSuggestion, TaskCleanupState
 from tracer_agent.shared.agents.title_suggestion.models import TitleSuggestionDraft
 from tracer_agent.worker.agents.recipe_scan.policy import validate_recipe_candidates
-from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
+from tracer_agent.worker.agents.task_cleanup.policy import filter_valid_suggestions
 from tracer_agent.worker.agents.title_suggestion.policy import normalize_title_candidate
 
 from .harness import RESULT_KEYS, CaseRun, CaseSources
@@ -163,7 +163,7 @@ def _validate_task_cleanup(data: dict[str, Any], run: CaseRun) -> list[str]:
             "max_suggestions": run.case.input.get("maxSuggestions", 5),
         },
     )
-    _, errors = validate_suggestions(suggestions, state)
+    _, errors = filter_valid_suggestions(suggestions, state)
     return errors
 
 

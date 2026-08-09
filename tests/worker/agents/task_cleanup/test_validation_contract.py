@@ -12,7 +12,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     CleanupDraftSuggestion,
     TaskCleanupState,
 )
-from tracer_agent.worker.agents.task_cleanup.policy import validate_suggestions
+from tracer_agent.worker.agents.task_cleanup.policy import filter_valid_suggestions
 
 _CONTRACT = agent_cases("task-cleanup")["cases"]
 
@@ -45,7 +45,7 @@ def _suggestions(case: dict[str, Any]) -> list[CleanupDraftSuggestion]:
 
 @pytest.mark.parametrize("case", _CONTRACT["cases"], ids=lambda case: str(case["name"]))
 def test_계약의_케이스마다_같은_판정과_같은_사유를_낸다(case: dict[str, Any]) -> None:
-    valid, errors = validate_suggestions(_suggestions(case), _state(case))
+    valid, errors = filter_valid_suggestions(_suggestions(case), _state(case))
 
     assert [item.taskId for item in valid] == case["expect"]["validTaskIds"]
     assert errors == case["expect"]["errors"]

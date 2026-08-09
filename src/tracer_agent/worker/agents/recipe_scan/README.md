@@ -53,7 +53,7 @@ sequenceDiagram
     end
 ```
 
-예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `lease_shares`로 전문가가 고른 depth의 몫에 따라 배분한다. `survey` 실패는 빈 계획으로 낮춰져 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
+예약 순서는 `repair → survey → synthesisFloor`이다. 남은 turn·cost는 `quote_shares`로 전문가가 고른 depth의 몫에 따라 배분한다. `survey` 실패는 빈 계획으로 낮춰져 `empty`로 이동한다. `probe` 예외는 실패 보고로 변환되며, fan-out 이후 보고와 provenance를 병합한다.
 
 ## 노드와 이동
 

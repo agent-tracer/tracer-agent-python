@@ -99,7 +99,7 @@ class RecordingTaskReader:
     titles: dict[str, str] = field(default_factory=dict)
     calls: list[list[str]] = field(default_factory=list)
 
-    async def titles_by_ids(self, _user_id: str, ids: list[str]) -> dict[str, str]:
+    async def find_titles_by_ids(self, _user_id: str, ids: list[str]) -> dict[str, str]:
         """부른 식별자를 기록하고 그중 아는 제목만 낸다."""
         self.calls.append(list(ids))
         return {task_id: self.titles[task_id] for task_id in ids if task_id in self.titles}
