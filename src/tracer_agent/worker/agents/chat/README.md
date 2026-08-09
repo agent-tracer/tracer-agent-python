@@ -135,7 +135,7 @@ chat.assistant.system
 층의 순서는 네 에이전트가 함께 쓰는 `AgentMiddlewareStack`이 갖고, `chat_stack`은 대화가 무엇을 세우고 무엇을 세우지 않는지만 정한다. 대화가 실제로 받는 층은 다음과 같다.
 
 1. `TurnLimitMiddleware(exit_behavior="end")` — `max_turns` 위에 계약의 `landingReserve.calls` 만큼 얹은 값을 호출 상한으로 삼고, 상한에 닿으면 루프를 끝내되 그 사유를 어시스턴트 발화로 남기지 않는다
-2. `context_editing_middleware()` — 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 보존한다
+2. `context_editing_middleware()` — 167,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 보존한다
 3. `StandardAgentMiddleware(serialize_tools=True)` — 공유 장부를 사용하는 도구 호출을 직렬화한다
 4. `PromptCacheMiddleware(ttl=cache_write_ttl())` — 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다
 5. `ToolRetryMiddleware` — `httpx.TransportError`, `ConnectionError`, `TimeoutError`를 최대 2회 재시도한다

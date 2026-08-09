@@ -108,7 +108,7 @@ Python 구현에서 미들웨어는 LangChain agent의 실행 전·후 정책이
 | 미들웨어 | 구현 또는 외부 타입 | 적용 범위 | 책임 |
 | --- | --- | --- | --- |
 | 모델 호출 상한 | `ModelCallLimitMiddleware`·`TurnLimitMiddleware` | 전체 | `maxTurns` 위에 계약의 `landingReserve.calls` 만큼 얹은 값을 호출 상한으로 적용한다 |
-| 컨텍스트 편집 | `context_editing_middleware()` | 전체 | 100,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
+| 컨텍스트 편집 | `context_editing_middleware()` | 전체 | 167,000 token부터 앞선 도구 결과를 정리하고 최근 2개를 유지한다 |
 | 산출 복구 | `StructuredOutputRepairMiddleware` | 잡 셋 | 공급자가 강제하지 않는 제약에 걸린 산출을 사유와 함께 한 번 되먹인다 |
 | 실행 표준화 | `StandardAgentMiddleware` | 전체 | 비용·메시지·출력 절단·도구 결과·직렬화를 기록하고 모델 호출마다 남은 몫을 알린다 |
 | 프롬프트 캐시 | `PromptCacheMiddleware(ttl=cache_write_ttl())` | 전체 | 시스템 prompt와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다 |

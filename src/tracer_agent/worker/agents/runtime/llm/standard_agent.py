@@ -26,8 +26,8 @@ from .pacing import finalize_directive, progress_notice
 from .prompt_cache import volatile
 from .trajectory import is_truncated
 
-# 이 토큰 수를 넘는 실행에서 오래된 도구 결과를 정리한다.
-CONTEXT_EDITING_TRIGGER_TOKENS = 100_000
+# 이 토큰 수를 넘는 실행에서 오래된 도구 결과를 정리하며 값은 SDK 축의 기본 문턱과 같다.
+CONTEXT_EDITING_TRIGGER_TOKENS = 167_000
 # 정리 대상에서 최근 도구 결과 이만큼은 남긴다.
 CONTEXT_EDITING_KEEP_TOOL_RESULTS = 2
 
