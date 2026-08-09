@@ -1,4 +1,4 @@
-"""실행 도중 누적한 어시스턴트 답변을 서버의 실행 창구로 되돌려 보낸다."""
+"""실행 도중 누적한 어시스턴트 답변을 원장에 적고 열린 연결에 알린다."""
 
 from __future__ import annotations
 
@@ -7,18 +7,21 @@ import contextlib
 import logging
 import time
 from collections.abc import Callable
-from typing import Any, Protocol
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Protocol
 
-import httpx
-
-from tracer_agent.shared.agents.chat.models import ChatExecutionPhase, DraftCallback
+from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger
+from tracer_agent.shared.agents.chat.models import (
+    TERMINAL_CHAT_EXECUTION_STATUSES,
+    ChatExecutionPhase,
+)
 from tracer_agent.shared.agents.chat.surface.contract import chat_draft_rules
+from tracer_agent.shared.agents.runtime.ledger import SqlSource
+from tracer_agent.shared.agents.runtime.wakeup import UpdatePublisher
 from tracer_agent.shared.agents.shared.redaction import RedactionStage, redact_text
-from tracer_agent.shared.agents.shared.wire import MalformedEnvelope, unwrap_envelope
 
 _log = logging.getLogger(__name__)
-
-DRAFT_TIMEOUT_S = 5.0
 
 
 class ChatExecutionClosed(Exception):
@@ -66,17 +69,29 @@ def tool_marker(tool_name: str) -> str:
     return f"\n\n`{tool_name}`\n\n"
 
 
+@dataclass(frozen=True)
+class DraftAck:
+    """이 조각이 원장에 남았는지와, 그 실행이 이미 종결되었는지다."""
+
+    stored: bool
+    terminal: bool
+
+
+class DraftDelivery(Protocol):
+    """누적분 하나를 원장에 옮기는 자리이며 리듬과 순번은 부르는 쪽이 소유한다."""
+
+    async def __call__(self, seq: int, phase: ChatExecutionPhase, text: str) -> DraftAck: ...
+
+
 class DraftPublisher:
-    """누적 답변을 간격으로 묶어 실행 창구에 보내며, 실패해도 실행을 멈추지 않는다."""
+    """누적 답변을 간격으로 묶어 원장에 적으며, 실패해도 실행을 멈추지 않는다."""
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
-        callback: DraftCallback,
+        deliver: DraftDelivery,
         elapsed: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._client = client
-        self._callback = callback
+        self._deliver = deliver
         self._elapsed = elapsed
         self._text = ""
         self._seq = 0
@@ -139,44 +154,55 @@ class DraftPublisher:
         """모델이 토큰을 소비하는 루프를 막지 않도록 전송을 뒤로 미루고 순서만 지킨다."""
         self._pending = False
         self._sent_at = self._elapsed()
-        body = {
-            "token": self._callback.token,
-            "attempt": self._callback.attempt,
-            "draftSeq": self._seq,
-            "phase": self._phase,
-            # 누적 전문을 가리므로 자격이 조각 경계에 걸쳐 있어도 온전한 모양으로 걸린다.
-            "text": redact_text(self._text, stage=RedactionStage.OUTPUT),
-        }
+        # 누적 전문을 가리므로 자격이 조각 경계에 걸쳐 있어도 온전한 모양으로 걸린다.
+        text = redact_text(self._text, stage=RedactionStage.OUTPUT)
         previous = self._tail
-        self._tail = asyncio.ensure_future(self._after(previous, body))
+        self._tail = asyncio.ensure_future(self._after(previous, self._seq, self._phase, text))
 
-    async def _after(self, previous: asyncio.Future[None] | None, body: dict[str, Any]) -> None:
+    async def _after(
+        self,
+        previous: asyncio.Future[None] | None,
+        seq: int,
+        phase: ChatExecutionPhase,
+        text: str,
+    ) -> None:
         if previous is not None:
             with contextlib.suppress(Exception):
                 await previous
-        await self._send(body)
+        await self._send(seq, phase, text)
 
-    async def _send(self, body: dict[str, Any]) -> None:
+    async def _send(self, seq: int, phase: ChatExecutionPhase, text: str) -> None:
         try:
-            response = await self._client.post(self._callback.url, json=body, timeout=DRAFT_TIMEOUT_S)
-            response.raise_for_status()
-        except httpx.HTTPError as err:
-            # draft는 정본이 아니라 진행 표시라, 못 보내도 최종 결과 배달을 막지 않는다.
-            _log.warning("chat draft callback failed: %s", err)
+            ack = await self._deliver(seq, phase, text)
+        except Exception as err:
+            # draft는 정본이 아니라 진행 표시라, 못 적어도 최종 결과 배달을 막지 않는다.
+            _log.warning("chat draft checkpoint failed: %s", err)
             return
-        if _terminal(response):
-            # 창구가 종결을 알렸으므로 다음 조각에서 실행을 접는다.
+        if ack.terminal:
+            # 원장이 이미 종결이라 다음 조각에서 실행을 접는다.
             self._closed = True
 
 
-def _terminal(response: httpx.Response) -> bool:
-    """실행이 이미 끝났다는 사실은 계약이 정한 성공 봉투 안에서만 읽는다."""
-    try:
-        payload = response.json()
-    except ValueError:
-        return False
-    try:
-        data = unwrap_envelope(payload)
-    except MalformedEnvelope:
-        return False
-    return isinstance(data, dict) and data.get("terminal") is True
+@dataclass(frozen=True)
+class LedgerDraftDelivery:
+    """누적분을 원장에 적고 다른 프로세스의 열린 연결에 브로커로 알린다."""
+
+    sql: SqlSource
+    execution_id: str
+    attempt: int
+    wakeup: UpdatePublisher | None = None
+    now: Callable[[], datetime] = lambda: datetime.now(UTC)
+
+    async def __call__(self, seq: int, phase: ChatExecutionPhase, text: str) -> DraftAck:
+        # 모델 루프가 분 단위로 실행하는 동안 연결을 쥐지 않도록 조각마다 빌리고 놓는다.
+        async with self.sql.connect() as sql:
+            ledger = ChatExecutionLedger(sql)
+            stored = await ledger.checkpoint_running(
+                self.execution_id, self.attempt, text, seq, phase, self.now()
+            )
+            row = None if stored else await ledger.find_by_id(self.execution_id)
+        if stored and self.wakeup is not None:
+            await self.wakeup.publish(self.execution_id, {"executionId": self.execution_id})
+        # 앞선 순번이라 안 적혔을 수도 있으므로 종결은 원장의 상태로만 읽는다.
+        terminal = row is not None and str(row["status"]) in TERMINAL_CHAT_EXECUTION_STATUSES
+        return DraftAck(stored=stored, terminal=terminal)

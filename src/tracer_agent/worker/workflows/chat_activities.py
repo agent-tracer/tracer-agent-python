@@ -31,6 +31,7 @@ from ...shared.workflows.chat_spec import (
     PreparedChatExecution,
 )
 from ..agents.chat.agent import AGENT_NAME, run_chat
+from ..agents.chat.drafts import DraftPublisher, DraftSink, LedgerDraftDelivery
 from ..agents.chat.execution_writer import ChatExecutionWriter
 from ..agents.chat.prompts import build_system_prompt
 from ..agents.chat.summary import ChatSummaryProjection, ModelChatSummarizer
@@ -116,7 +117,17 @@ class ChatExecutionActivities:
                     execution_id=prepared.execution_id,
                     attempt_id=str(attempt),
                 ),
-                _body(request, self._http, self._checkpoints, self._prompt, self._make_chats),
+                _body(
+                    request,
+                    self._http,
+                    self._checkpoints,
+                    self._prompt,
+                    self._make_chats,
+                    # 초안은 워커가 원장에 직접 적고 다른 프로세스의 연결에는 브로커가 알린다.
+                    DraftPublisher(
+                        LedgerDraftDelivery(self._sql, prepared.execution_id, attempt, self._wakeup)
+                    ),
+                ),
                 trace,
             )
         except asyncio.CancelledError:
@@ -229,10 +240,11 @@ def _body(
     checkpoints: GraphCheckpointProvider,
     prompt: AgentPrompt,
     make_chats: Callable[[ChatRequest], ChatPair] | None,
+    drafts: DraftSink | None = None,
 ) -> AgentBody:
     chats = None if make_chats is None else make_chats(request)
 
     async def run(trace: ExecutionTrace) -> JsonObject:
-        return await run_chat(request, http_client, trace, prompt, checkpoints, chats)
+        return await run_chat(request, http_client, trace, prompt, checkpoints, chats, drafts)
 
     return run

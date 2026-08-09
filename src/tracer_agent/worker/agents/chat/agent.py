@@ -18,7 +18,7 @@ from ..runtime.timeouts import deadline_fraction_s
 from ..shared.prompt_source_port import AgentPrompt
 from .agent_cache import CHAT_AGENTS, ChatAgentSource, GivenModelChatAgents
 from .backends import ChatTurnBackends
-from .drafts import DraftPublisher, DraftSink, NullDraftPublisher
+from .drafts import DraftSink, NullDraftPublisher
 from .prompts import build_system_prompt
 from .steps import (
     CONTEXT_ATTEMPTS,
@@ -45,12 +45,11 @@ async def run_chat(
     prompt: AgentPrompt,
     checkpoints: GraphCheckpointProvider | None = None,
     chats: ChatPair | None = None,
+    drafts: DraftSink | None = None,
 ) -> dict[str, Any]:
     """대화 한 턴의 문맥 적재와 도구 루프와 종결을 차례로 수행해 결과 계약을 낸다."""
-    # 대화는 토큰을 이어 받는 것이 본체이므로 창구 유무와 무관하게 스트리밍 모델로 조립한다.
-    drafts: DraftSink = (
-        NullDraftPublisher() if req.draftCallback is None else DraftPublisher(http_client, req.draftCallback)
-    )
+    # 대화는 토큰을 이어 받는 것이 본체이므로 받는 자리 유무와 무관하게 스트리밍 모델로 조립한다.
+    sink: DraftSink = NullDraftPublisher() if drafts is None else drafts
     agents: ChatAgentSource = CHAT_AGENTS if chats is None else GivenModelChatAgents(chats)
     converse = ConverseStep(
         req,
@@ -59,7 +58,7 @@ async def run_chat(
         usage,
         agents,
         agent_name=AGENT_NAME,
-        drafts=drafts,
+        drafts=sink,
         system_prompt=build_system_prompt(prompt),
         prompt_version=prompt.version(),
         tool_contract_version=prompt.tool_contract_version,
