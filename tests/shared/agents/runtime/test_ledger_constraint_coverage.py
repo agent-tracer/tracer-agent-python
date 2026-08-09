@@ -21,7 +21,7 @@ COVERED_BY: dict[str, str | None] = {
     "chat_executions_idempotency": None,
     "chat_executions_requested_backend_check": None,
     "chat_execution_steps_execution_attempt_seq": None,
-    "ai_jobs_idempotency_key": None,
+    "ai_jobs_idempotency_key": _REFUSE,
     "ai_job_steps_job_attempt_seq": None,
 }
 

@@ -90,3 +90,31 @@ class Test사용자_사실:
             )
 
         assert "chat_user_memories.user_id" in str(refused.value)
+
+
+def _job(raw: Any, job_id: str, key: str | None) -> None:
+    raw.execute(
+        "INSERT INTO ai_jobs"
+        " (id, user_id, kind, executor, backend, status, attempts, idempotency_key,"
+        "  input, created_at, updated_at)"
+        " VALUES (?, 'u1', 'title.suggestion', 'temporal', 'python', 'pending', 0, ?, '{}', ?, ?)",
+        (job_id, key, NOW, NOW),
+    )
+
+
+class Test잡의_멱등_열쇠:
+    def test_같은_열쇠를_두_번_넣으면_거절한다(self, raw: Any) -> None:
+        # 접수는 먼저 조회해 답하므로 경합에서 두 조회가 함께 비었을 때 이 색인이 마지막 방어다.
+        _job(raw, "j1", "key-1")
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _job(raw, "j2", "key-1")
+
+        assert "ai_jobs.idempotency_key" in str(refused.value)
+
+    def test_열쇠가_없는_접수는_몇_번이든_선다(self, raw: Any) -> None:
+        # 원장이 유일 색인에서 NULL 을 서로 다른 값으로 보므로, 부분 조건이 아니라 NULL 이 이것을 정한다.
+        _job(raw, "j1", None)
+        _job(raw, "j2", None)
+
+        assert len(raw.execute("SELECT id FROM ai_jobs").fetchall()) == 2
