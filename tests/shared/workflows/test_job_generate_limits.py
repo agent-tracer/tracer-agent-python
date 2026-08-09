@@ -6,13 +6,7 @@ import pytest
 
 from tests.support.contract import workflow_contract
 from tracer_agent.shared.workflows.jobs_kinds import AgentJobKind
-from tracer_agent.shared.workflows.jobs_spec import (
-    JOB_GENERATE_MAX_ATTEMPTS,
-    JOB_GENERATE_SCHEDULE_TO_CLOSE_S,
-    JOB_GENERATE_TIMEOUT_S,
-    JOB_HEARTBEAT_TIMEOUT_S,
-    generate_limits,
-)
+from tracer_agent.shared.workflows.jobs_spec import generate_limits
 
 _JOBS = workflow_contract("queues.yaml")["jobWorkflows"]
 _PER_KIND = _JOBS["perKind"]
@@ -33,11 +27,11 @@ def _declared_generate(key: str) -> dict[str, int] | None:
     return None
 
 
-def test_계약이_세_종류를_모두_적지는_않는다() -> None:
-    # 셋 다 적혔으면 아래 두 갈래 중 하나가 실행되지 않으면서 통과한다.
+def test_계약이_세_종류를_모두_적는다() -> None:
+    # 한 종류라도 비면 이 축이 그 상한을 스스로 골라야 하므로 그 사실을 여기서 드러낸다.
     declared = {key for key in _CONTRACT_KEY.values() if _declared_generate(key) is not None}
 
-    assert declared == {"titleSuggestion"}
+    assert declared == set(_CONTRACT_KEY.values())
 
 
 @pytest.mark.parametrize("kind", list(AgentJobKind), ids=lambda kind: kind.wire)
@@ -51,15 +45,3 @@ def test_계약이_상한을_적은_종류는_그_값을_싣는다(kind: AgentJo
     assert limits.schedule_to_close_s == declared["scheduleToCloseSeconds"]
     assert limits.heartbeat_s == declared["heartbeatTimeoutSeconds"]
     assert limits.max_attempts == declared["maximumAttempts"]
-
-
-@pytest.mark.parametrize("kind", list(AgentJobKind), ids=lambda kind: kind.wire)
-def test_계약이_상한을_적지_않은_종류는_이_축의_한_벌을_싣는다(kind: AgentJobKind) -> None:
-    if _declared_generate(_CONTRACT_KEY[kind]) is not None:
-        pytest.skip("계약이 이 종류의 상한을 적는다")
-    limits = generate_limits(kind)
-
-    assert limits.start_to_close_s == JOB_GENERATE_TIMEOUT_S
-    assert limits.schedule_to_close_s == JOB_GENERATE_SCHEDULE_TO_CLOSE_S
-    assert limits.heartbeat_s == JOB_HEARTBEAT_TIMEOUT_S
-    assert limits.max_attempts == JOB_GENERATE_MAX_ATTEMPTS
