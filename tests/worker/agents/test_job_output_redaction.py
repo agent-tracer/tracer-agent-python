@@ -151,7 +151,7 @@ def test_제목은_제목과_근거를_가린다() -> None:
 async def test_창구로_배달되는_후보도_같은_가림을_지난_값이다() -> None:
     tracer = FakeTracerApi()
 
-    await RECIPE_SCAN_JOB.settle_outputs(tracer, "job-1", _recipe_scan_result())
+    await RECIPE_SCAN_JOB.settle_outputs(tracer, "job-1", _recipe_scan_result(), {})
 
     draft = tracer.posts[0]["body"]["recipes"][0]
     assert CREDENTIAL not in json.dumps(draft, ensure_ascii=False)
@@ -161,7 +161,7 @@ async def test_창구로_배달되는_후보도_같은_가림을_지난_값이�
 async def test_창구로_배달되는_제안도_같은_가림을_지난_값이다() -> None:
     tracer = FakeTracerApi()
 
-    await TASK_CLEANUP_JOB.settle_outputs(tracer, "job-2", _task_cleanup_result())
+    await TASK_CLEANUP_JOB.settle_outputs(tracer, "job-2", _task_cleanup_result(), {})
 
     suggestion = tracer.posts[0]["body"]["suggestions"][0]
     assert suggestion["rationale"] == f"{marker()} 만 남기고 끝난 태스크다"

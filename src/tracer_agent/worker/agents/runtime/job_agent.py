@@ -47,7 +47,11 @@ class JobGraphAgent[RequestT: AgentExecutionRequest, StateT](ABC):
         """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
 
     async def settle_outputs(
-        self, _tracer: TracerApiPort, _execution_id: str, _data: JsonObject | None
+        self,
+        _tracer: TracerApiPort,
+        _execution_id: str,
+        _data: JsonObject | None,
+        _payload: JsonObject,
     ) -> None:
         """종결한 잡의 산출물을 배달하며 보낼 것이 없는 잡은 아무 창구도 부르지 않는다."""
         return

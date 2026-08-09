@@ -19,7 +19,7 @@ _JOBS: tuple[JobGraphAgent[object, object], ...] = (
 async def test_배달할_창구가_없는_잡은_창구를_부르지_않는다() -> None:
     tracer = FakeTracerApi()
 
-    await TITLE_SUGGESTION_JOB.settle_outputs(tracer, "job-6", {"suggestions": [{"title": "제목"}]})
+    await TITLE_SUGGESTION_JOB.settle_outputs(tracer, "job-6", {"suggestions": [{"title": "제목"}]}, {})
 
     assert tracer.posts == []
 
@@ -28,8 +28,8 @@ async def test_산출물이_없으면_배달을_부르지_않는다() -> None:
     for job in _JOBS:
         tracer = FakeTracerApi()
 
-        await job.settle_outputs(tracer, "job-7", None)
-        await job.settle_outputs(tracer, "job-8", {})
+        await job.settle_outputs(tracer, "job-7", None, {})
+        await job.settle_outputs(tracer, "job-8", {}, {})
 
         assert tracer.posts == [], job.kind
 
@@ -37,7 +37,7 @@ async def test_산출물이_없으면_배달을_부르지_않는다() -> None:
 async def test_산출물이_있는_잡만_자기_창구를_부른다() -> None:
     tracer = FakeTracerApi()
 
-    await RECIPE_SCAN_JOB.settle_outputs(tracer, "job-9", {"recipes": [{"title": "하나"}]})
+    await RECIPE_SCAN_JOB.settle_outputs(tracer, "job-9", {"recipes": [{"title": "하나"}]}, {})
 
     assert [post["path"] for post in tracer.posts] == ["/api/v1/recipes"]
 

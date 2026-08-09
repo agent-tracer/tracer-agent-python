@@ -94,9 +94,9 @@ sequenceDiagram
 `http/tracer-dependency.openapi.yaml`의 `RecipeDraft`와
 `conformance/cases/tracer.outputs.json`의 `drafts.recipe`가 소유한다.
 
-이 자리는 요청 payload를 받지 않아 답변 언어에 닿지 못하므로 초안이 그 칸을 싣지 않는다.
-계약이 optional로 두어 본문은 유효하고, 두 축이 갈린 사실과 좁히는 조건은
-`divergence.json`의 `recipe.draft.language`가 갖는다.
+답변 언어는 후보가 아니라 이 실행이 갖는 값이라 종결이 요청 payload에서 꺼내 배달로 넘기고
+`_to_draft`가 초안마다 싣는다. 요청이 언어를 정하지 않았으면 정하지 않았다는 표시를 그대로 실으며
+그 글자는 실제로 쓰인 언어가 아니다. 정본 축도 조건 없이 같은 값을 싣는다.
 
 ## 도구 타입
 

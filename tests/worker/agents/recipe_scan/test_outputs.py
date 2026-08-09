@@ -9,6 +9,7 @@ import pytest
 
 from tests.support.contract import conformance_case
 from tracer_agent.shared.agents.recipe_scan.models import (
+    Language,
     ProvenanceWire,
     RecipeCandidate,
     RecipeScanResult,
@@ -73,11 +74,11 @@ def _scan_result(**overrides: Any) -> dict[str, Any]:
     return dumped(result, exclude_none=True)
 
 
-async def _delivered_draft(**overrides: Any) -> dict[str, Any]:
+async def _delivered_draft(language: Language = "ko", **overrides: Any) -> dict[str, Any]:
     """후보 하나를 실제로 배달해 창구가 받은 draft를 낸다."""
     tracer = FakeTracerApi()
 
-    await deliver_recipes(tracer, "job-draft", _scan_result(**overrides))  # type: ignore[arg-type]
+    await deliver_recipes(tracer, "job-draft", _scan_result(**overrides), language)  # type: ignore[arg-type]
 
     draft: dict[str, Any] = tracer.posts[0]["body"]["recipes"][0]
     return draft
@@ -202,3 +203,11 @@ async def test_draft가_계약이_적은_칸만_쓰고_요구한_칸을_모두_�
     assert set(draft) <= declared
     assert set(_DRAFT["required"]) <= set(draft)
     assert set(draft["contributingSlices"][0]) == set(_DRAFT["slice"])
+
+
+@pytest.mark.parametrize("language", ["ko", "auto"])
+async def test_초안이_이_실행의_답변_언어를_함께_싣는다(language: Language) -> None:
+    # 정본 축이 auto 도 그대로 실으므로 값이 언어가 아닌 경우까지 같은 글자를 낸다.
+    draft = await _delivered_draft(language)
+
+    assert draft["language"] == language

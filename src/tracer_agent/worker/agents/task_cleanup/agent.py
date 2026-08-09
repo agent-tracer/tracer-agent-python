@@ -61,7 +61,13 @@ class TaskCleanupJob(JobGraphAgent[TaskCleanupRequest, TaskCleanupState]):
         """문맥과 봉투가 실린 입력으로 이 시도의 요청을 세운다."""
         return TaskCleanupRequest.model_validate(payload)
 
-    async def settle_outputs(self, tracer: TracerApiPort, execution_id: str, data: JsonObject | None) -> None:
+    async def settle_outputs(
+        self,
+        tracer: TracerApiPort,
+        execution_id: str,
+        data: JsonObject | None,
+        _payload: JsonObject,
+    ) -> None:
         """정리 제안을 창구로 보내며 보낼 것이 없으면 아무 창구도 부르지 않는다."""
         if not data:
             return

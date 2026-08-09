@@ -154,7 +154,12 @@ class AgentJobActivities:
                 _blocked(settlement.kind, outcome.job_id, outcome.status)
         if settled and outcome.status == "completed":
             job = JOB_AGENTS[settlement.kind]
-            await job.settle_outputs(self._tracer(outcome.user_id), outcome.job_id, settlement.response.data)
+            await job.settle_outputs(
+                self._tracer(outcome.user_id),
+                outcome.job_id,
+                settlement.response.data,
+                settlement.payload,
+            )
         # 완료 콜백은 실행기에게 자기 토큰으로 종료를 알리는 자리이므로 원장 가드가 가르지 않는다.
         await deliver_completion(self._http, _callback_of(settlement.payload), settlement.response)
 

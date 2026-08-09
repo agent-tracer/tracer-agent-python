@@ -34,7 +34,7 @@ from .nodes.candidate import InvestigateNode, RepairNode, ValidateCandidateNode
 from .nodes.probe import ProbeNode
 from .nodes.result import empty_result, finalize_result, wire_provenance
 from .nodes.survey import SurveyNode
-from .outputs import deliver_recipes
+from .outputs import DEFAULT_LANGUAGE, deliver_recipes
 from .policy import VALIDATION_REASONS
 from .prompts import build_prompt_bundle
 from .reader import RecipeLedgerReader
@@ -54,11 +54,17 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
         """접수가 실은 값만으로 스캔 요청을 세운다."""
         return RecipeScanRequest.model_validate(payload)
 
-    async def settle_outputs(self, tracer: TracerApiPort, execution_id: str, data: JsonObject | None) -> None:
+    async def settle_outputs(
+        self,
+        tracer: TracerApiPort,
+        execution_id: str,
+        data: JsonObject | None,
+        payload: JsonObject,
+    ) -> None:
         """레시피 후보를 창구로 보내며 보낼 것이 없으면 아무 창구도 부르지 않는다."""
         if not data:
             return
-        await deliver_recipes(tracer, execution_id, data)
+        await deliver_recipes(tracer, execution_id, data, _language_of(payload))
 
     def compose(
         self,
@@ -127,3 +133,9 @@ class RecipeScanJob(JobGraphAgent[RecipeScanRequest, RecipeScanState]):
 
 
 RECIPE_SCAN_JOB = RecipeScanJob()
+
+
+def _language_of(payload: JsonObject) -> str:
+    """이 실행이 요청받은 답변 언어이며 요청이 정하지 않았으면 정하지 않았다는 표시를 낸다."""
+    language = payload.get("language")
+    return language if isinstance(language, str) and language else DEFAULT_LANGUAGE
