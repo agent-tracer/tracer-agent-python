@@ -16,7 +16,7 @@ from contract.conformance.runner.contract import (
     read_version,
 )
 
-PINNED_VERSION = "0.61.0"
+PINNED_VERSION = "0.61.1"
 
 
 def contract_version() -> str:
