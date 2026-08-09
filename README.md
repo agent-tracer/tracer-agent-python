@@ -1,6 +1,6 @@
 # tracer-agent-python
 
-에이전트 서비스의 Python 구현입니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 에이전트를 실행합니다. 실행 원장과 레시피·정리 제안 원장은 이 서비스가 소유하며, 실행에 필요한 추적 기록만 추적 API를 HTTP로 읽고 잡의 산출물은 자기 원장에 직접 적습니다.
+에이전트 서비스의 Python 구현입니다. 배포 단위 셋을 냅니다. FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공하고, Temporal 워커가 chat·jobs·generate 큐를 각각 소비해 에이전트를 실행하며, `agent-projector`가 `recipes` 색인 세우기와 검색 아웃박스 배출과 `ingest.events` 투영을 맡습니다. 실행 원장과 레시피·정리 제안 원장은 이 서비스가 소유하며, 실행에 필요한 추적 기록만 추적 API를 HTTP로 읽고 잡의 산출물은 자기 원장에 직접 적습니다.
 
 같은 계약을 만족하는 TypeScript 구현이 따로 있고 배포에서 어느 이미지를 올리느냐로 둘 중 하나가 선택됩니다. TypeScript 구현이 계약의 정본이며, 두 구현체 사이에 지금 남아 있는 차이는 계약 저장소의 `conformance/cases/divergence.json`이 갖습니다. 계약을 함께 만족한다는 사실이 모든 동작이 같다는 뜻은 아닙니다.
 
@@ -11,7 +11,8 @@
 - chat, recipe scan, task cleanup, title suggestion 에이전트
 - 대화 도구 확인·재생·장기기억 API
 - 잡 접수·취소·이력·단계 조회 API
-- 레시피와 정리 제안 원장의 조회·해소 API와 `recipes` 검색 색인
+- 레시피와 정리 제안 원장의 조회·해소 API
+- `recipes` 색인을 세우고 채우는 프로젝터 배포 단위
 - 자격 증명이 답과 초안과 도구 결과로 새지 않도록 가리는 절차
 - 설정 표면
 - OpenTelemetry와 선택적 LangSmith 연동
@@ -25,6 +26,21 @@ flowchart LR
     API --> Temporal[(Temporal)]
     API --> Kafka[(Redpanda)]
     API --> Search[(OpenSearch recipes)]
+    Projector[agent-projector :8801] --> AgentDB
+    Projector --> Kafka
+    Projector --> Search
+```
+
+### 배경 작업 배포 단위
+
+```mermaid
+flowchart LR
+    Contract[[contract wire/search.index.json]] --> Ensure[색인 세우기]
+    Ensure --> Search[(OpenSearch recipes)]
+    Outbox[(search_outbox)] --> Drain[아웃박스 배출]
+    Drain --> Search
+    Ledger[(ingest.events)] --> Project[사건 투영]
+    Project --> Applications[(recipe_applications)]
 ```
 
 ### 워커와 LangGraph 실행
@@ -59,7 +75,8 @@ flowchart LR
 | jobs 워커 | 짧은 잡 액티비티와 상태 정산을 처리합니다 |
 | generate 워커 | 모델을 호출하는 긴 액티비티를 분리해 처리합니다 |
 | `agent-db` | 이 서비스가 소유하는 실행 원장과 레시피·정리 제안 원장입니다 |
-| `recipes` 색인 | 이 서비스가 소유하는 OpenSearch 색인이며 아웃박스 배출기가 채웁니다 |
+| `agent-projector` | 색인 세우기와 검색 아웃박스 배출과 `ingest.events` 투영을 맡으며 계약의 창구는 열지 않습니다 |
+| `recipes` 색인 | 이 서비스가 소유하는 OpenSearch 색인이며 `agent-projector`가 세우고 채웁니다 |
 
 LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. 추적 데이터베이스를 직접 읽지 않으며 OpenSearch는 이 서비스가 소유하는 `recipes` 색인만 씁니다.
 
@@ -96,9 +113,12 @@ uv run tracer-agent
 uv run tracer-agent-worker chat
 uv run tracer-agent-worker jobs
 uv run tracer-agent-worker generate
+
+# 색인 세우기와 배출과 투영을 맡는 프로세스
+uv run tracer-agent-projector
 ```
 
-큐 인자를 주지 않은 워커 명령은 chat 큐를 사용합니다. 배포에서는 큐를 명시하고 API와 각 워커를 별도의 프로세스로 실행합니다. 이미지의 기본 API 포트는 `8800`입니다.
+큐 인자를 주지 않은 워커 명령은 chat 큐를 사용합니다. 배포에서는 큐를 명시하고 API와 각 워커와 프로젝터를 별도의 프로세스로 실행합니다. 이미지의 기본 API 포트는 `8800`이고 프로젝터 프로브 포트는 `8801`입니다.
 
 ## 환경변수
 
@@ -108,6 +128,8 @@ uv run tracer-agent-worker generate
 | `MONITOR_SETTINGS_ENCRYPTION_KEY` | 없음 | 저장 설정 암호화 |
 | `TRACER_AGENT_HOST` | `0.0.0.0` | API bind host |
 | `TRACER_AGENT_PORT` | `8800` | API 포트 |
+| `AGENT_PROJECTOR_HOST` | `0.0.0.0` | 프로젝터 bind host |
+| `AGENT_PROJECTOR_PORT` | `8801` | 프로젝터 프로브 포트 |
 | `AGENT_DB_HOST` | `agent-db` | agent-db host |
 | `AGENT_DB_PORT` | `5432` | agent-db 포트 |
 | `AGENT_DB_NAME` | `agent` | 데이터베이스 |
@@ -163,11 +185,12 @@ tracer-agent-python/
 ├── contract/                     tracer-agent-contract submodule
 ├── src/tracer_agent/
 │   ├── api/                      FastAPI 애플리케이션과 진입점
+│   ├── projector/                배경 작업 셋의 진입점과 배선
 │   ├── shared/                   설정·HTTP 표면·공통 워크플로와 에이전트
 │   └── worker/
 │       ├── agents/               대화·레시피·정리·제목 구현
 │       └── workflows/            Temporal 워크플로와 액티비티
-├── tests/{api,worker,shared,support,quality}
+├── tests/{api,projector,worker,shared,support,quality}
 ├── scripts/                      주석·내부 의존·커밋 메시지 검사와 그래프 그리기
 ├── pyproject.toml                프로젝트·Ruff·mypy·pytest 설정
 ├── uv.lock
@@ -176,7 +199,7 @@ tracer-agent-python/
 
 ## 개발 컨벤션
 
-API 표면과 데이터 모델은 계약의 camelCase 필드와 응답 봉투를 유지합니다. 내부 모듈은 `shared`·`agents`·`workflows` 경계를 따르며, 금지된 상대 import와 의존 방향은 `scripts/check_internal_dependencies.py`가 검사합니다. 워커는 큐 하나만 소비하도록 프로세스를 분리하고 chat·jobs·generate를 한 프로세스로 합치지 않습니다.
+API 표면과 데이터 모델은 계약의 camelCase 필드와 응답 봉투를 유지합니다. 내부 모듈은 `shared`·`agents`·`workflows` 경계를 따르며, 금지된 상대 import와 의존 방향은 `scripts/check_internal_dependencies.py`가 검사합니다. 워커는 큐 하나만 소비하도록 프로세스를 분리하고 chat·jobs·generate를 한 프로세스로 합치지 않습니다. 색인 세우기와 아웃박스 배출과 사건 투영은 `agent-projector`가 맡고 접수 창구는 이 셋을 배선하지 않습니다.
 
 LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유한 원장 표와 분리합니다. 환경변수와 시스템 시계와 난수는 도메인 로직에 퍼뜨리지 않고 설정·런타임 경계에서 읽습니다. 주석은 한국어 규칙을 따르며 Ruff와 mypy strict 설정을 통과해야 합니다.
 

@@ -4,7 +4,7 @@
 
 ## 저장소 역할
 
-FastAPI가 대화와 잡의 접수와 조회와 취소와 스트림을 제공합니다. Temporal 워커는 chat·jobs·generate 큐를 각각 소비합니다. 실행 원장과 레시피·정리 제안 원장은 이 서비스가 소유하며 잡의 산출물도 자기 원장에 적습니다. 추적 데이터는 추적 API의 공개 HTTP 경로만 사용합니다.
+이 저장소는 배포 단위 셋을 냅니다. `agent-api`는 HTTP 창구만 맡고, Temporal 워커는 chat·jobs·generate 큐를 각각 소비하며, `agent-projector`는 색인 세우기와 검색 아웃박스 배출과 `ingest.events` 투영을 맡습니다. 실행 원장과 레시피·정리 제안 원장은 이 서비스가 소유하며 잡의 산출물도 자기 원장에 적습니다. 추적 데이터는 추적 API의 공개 HTTP 경로만 사용합니다.
 
 LangGraph 체크포인트는 `agent_langgraph` 스키마에 두고 계약이 소유하는 원장 표와 분리합니다. TypeScript 구현이 계약의 정본이며 두 구현체의 현재 차이는 `contract/conformance/cases/divergence.json`에서 확인합니다. 모든 동작이 같다고 가정하지 않습니다.
 
@@ -30,14 +30,16 @@ uv run tracer-agent
 uv run tracer-agent-worker chat
 uv run tracer-agent-worker jobs
 uv run tracer-agent-worker generate
+uv run tracer-agent-projector
 ```
 
-기본 API 포트는 `8800`입니다. API와 각 워커는 별도의 프로세스로 실행합니다. 배포에서는 워커의 큐를 명시합니다. 큐 인자를 주지 않은 워커 명령은 chat 큐를 사용합니다.
+기본 API 포트는 `8800`이고 프로젝터 프로브 포트는 `8801`입니다. API와 각 워커와 프로젝터는 별도의 프로세스로 실행합니다. 배포에서는 워커의 큐를 명시합니다. 큐 인자를 주지 않은 워커 명령은 chat 큐를 사용합니다.
 
 계약의 `db/migrations`는 Flyway 가 적용하며 이 구현체는 DDL 을 실행하지 않습니다. 배포도 같은 도구를 쓰므로 두 구현체 어느 쪽도 스키마 적용에 관여하지 않습니다.
 
 ## 구조와 경계
 
+- `src/tracer_agent/projector`는 배경 작업 셋의 진입점과 배선을 소유하고 계약의 창구는 열지 않습니다.
 - `src/tracer_agent/api`는 FastAPI 애플리케이션과 진입점을 소유합니다. 창구가 요청마다 빌리는 협력자는 `api/services.py`의 `AgentServices` 한 칸에 담고 `app.state`에 이름을 늘리지 않습니다.
 - `src/tracer_agent/shared`는 설정·HTTP 표면·공통 워크플로와 에이전트를 제공합니다.
 - `src/tracer_agent/worker/agents`는 대화·레시피·정리·제목 에이전트를 제공합니다.
@@ -54,6 +56,9 @@ uv run tracer-agent-worker generate
 ## 변경 규칙
 
 - chat·jobs·generate 워커를 한 프로세스로 합치지 않습니다.
+- 색인 세우기와 아웃박스 배출과 사건 투영은 `agent-projector`가 맡습니다. 접수 창구에 배경 작업을 다시 얹지 않습니다.
+- `recipes` 색인의 별칭과 물리 이름과 설정과 매핑은 계약의 `wire/search.index.json`이 갖습니다. 두 축이 동시에 세우므로 이미 있는 색인은 다시 세우지 않습니다.
+- 소비자 그룹과 자문 잠금 열쇠와 배출 주기는 두 구현체가 같은 값을 씁니다. `compare` 프로파일에서 두 축의 프로젝터가 함께 서므로 값이 갈리면 한 축이 다른 축을 덮습니다.
 - 엔드포인트·워크플로·도구·프롬프트·DB 필드를 더하기 전에 계약을 확인합니다.
 - 새 동작은 테스트와 적합성 케이스와 구현을 함께 갱신합니다.
 - 추적 API는 공개 경로만 쓰고 추적 데이터베이스에 직접 접근하지 않습니다. OpenSearch는 이 서비스가 소유한 `recipes` 색인만 직접 씁니다.
