@@ -14,7 +14,12 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from tracer_agent.worker.agents.runtime.errors import BudgetExceeded, OutputTruncated
 from tracer_agent.worker.agents.runtime.llm.fallback import FallbackModelMiddleware
-from tracer_agent.worker.agents.runtime.llm.retry import model_retry_middleware, tool_retry_middleware
+from tracer_agent.worker.agents.runtime.llm.retry import (
+    MAX_RETRIES,
+    model_retry_middleware,
+    tool_retry_middleware,
+)
+from tracer_agent.worker.agents.shared.execution_reservation import execution_budget_contract
 
 _PRIMARY = GenericFakeChatModel(messages=iter([]))
 _FALLBACK = GenericFakeChatModel(messages=iter([]))
@@ -50,7 +55,7 @@ def _composed() -> Callable[
 ]:
     """FallbackModelMiddleware를 바깥에, ModelRetryMiddleware를 안쪽에 둔 합성 핸들러를 만든다."""
     fallback = FallbackModelMiddleware(_FALLBACK)
-    retry = model_retry_middleware(max_retries=2)
+    retry = model_retry_middleware()
     composed = _chain_async_model_call_handlers([fallback.awrap_model_call, retry.awrap_model_call])
     assert composed is not None
     return composed
@@ -86,3 +91,19 @@ def test_재시도_대기는_지터를_섞는다() -> None:
     # 팬아웃이 함께 529를 받으면 고정 백오프는 모두를 같은 시각에 다시 부딪히게 한다.
     assert model_retry_middleware().jitter is True
     assert tool_retry_middleware(()).jitter is True
+
+
+def test_일시_재시도_규칙을_계약에서_읽는다() -> None:
+    declared = execution_budget_contract()["runnerRetry"]["transient"]
+    retry = model_retry_middleware()
+
+    assert retry.max_retries == declared["attempts"]
+    assert retry.initial_delay == declared["initialDelayMs"] / 1000
+    assert retry.backoff_factor == declared["backoffFactor"]
+    assert retry.jitter is declared["jitter"]
+
+
+def test_도구_재시도는_모델과_다른_층이라_수를_따로_센다() -> None:
+    # 두 층이 같은 칸을 쓰면 하나를 고칠 때 다른 하나가 따라 움직인다.
+    assert tool_retry_middleware(()).max_retries == MAX_RETRIES
+    assert "tool" not in execution_budget_contract()["runnerRetry"]

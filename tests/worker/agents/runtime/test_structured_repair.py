@@ -14,8 +14,11 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 from tracer_agent.worker.agents.runtime.llm.structured_repair import (
     REPAIR_DIRECTIVE,
+    SUPPORTED_ATTEMPTS,
     StructuredOutputRepairMiddleware,
+    schema_violation_attempts,
 )
+from tracer_agent.worker.agents.shared.execution_reservation import execution_budget_contract
 
 # 공급자가 강제하지 못하는 제약 하나를 스키마에 둔다.
 _LIMIT = 10
@@ -92,3 +95,21 @@ async def test_스키마를_지킨_산출은_다시_묻지_않는다() -> None:
 
     assert result["structured_response"].verdict == "짧다"
     assert len(model.seen) == 1
+
+
+def test_되받기_횟수를_계약에서_읽는다() -> None:
+    declared = execution_budget_contract()["runnerRetry"]["schemaViolation"]
+
+    assert schema_violation_attempts() == declared["attempts"]
+
+
+def test_계약이_이_기계가_실행할_수_없는_수를_적으면_층을_세우지_않는다(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tracer_agent.worker.agents.runtime.llm.structured_repair.schema_violation_attempts",
+        lambda: SUPPORTED_ATTEMPTS + 1,
+    )
+
+    with pytest.raises(ValueError, match="counting middleware"):
+        StructuredOutputRepairMiddleware()

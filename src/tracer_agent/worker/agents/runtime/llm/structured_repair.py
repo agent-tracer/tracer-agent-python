@@ -9,7 +9,18 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResp
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
 
+from ...shared.execution_reservation import execution_budget_contract
 from .prompt_cache import volatile
+
+# 상태가 되받기를 세지 않고 한 번만 부르므로 이 기계가 실행하는 횟수다.
+SUPPORTED_ATTEMPTS = 1
+
+
+def schema_violation_attempts() -> int:
+    """규격을 어긴 산출을 다시 받는 횟수이며 계약이 갖는다."""
+    # reservation.repair 는 도메인 검증 갈래라 층이 다르므로 그 수를 쓰지 않는다.
+    return int(execution_budget_contract()["runnerRetry"]["schemaViolation"]["attempts"])
+
 
 # 공급자는 JSON 의 모양은 강제하지만 길이와 개수 같은 제약까지는 강제하지 않는다.
 REPAIR_DIRECTIVE = (
@@ -21,6 +32,16 @@ REPAIR_DIRECTIVE = (
 
 class StructuredOutputRepairMiddleware(AgentMiddleware[Any, Any, Any]):
     """스키마를 어긴 산출을 사유와 함께 한 번 되돌려 주고 그 자리에서 다시 받는다."""
+
+    def __init__(self) -> None:
+        """계약이 이 기계가 실행할 수 없는 횟수를 적으면 층을 세우지 않는다."""
+        super().__init__()
+        declared = schema_violation_attempts()
+        if declared != SUPPORTED_ATTEMPTS:
+            raise ValueError(
+                f"execution.budget.json: runnerRetry.schemaViolation.attempts {declared} "
+                f"needs a counting middleware, this one repairs {SUPPORTED_ATTEMPTS} time"
+            )
 
     async def awrap_model_call(
         self,

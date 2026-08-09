@@ -5,6 +5,8 @@ from __future__ import annotations
 from anthropic import APIConnectionError, OverloadedError, RateLimitError
 from langchain.agents.middleware import ModelRetryMiddleware, ToolRetryMiddleware
 
+from ...shared.execution_reservation import execution_budget_contract
+
 # BudgetExceeded·OutputTruncated·취소는 anthropic 예외 계층 밖이라 이미 이 목록에서 빠져 있다.
 PROVIDER_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
     OverloadedError,
@@ -12,19 +14,27 @@ PROVIDER_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
     APIConnectionError,
 )
 
-# 같은 자리를 다시 부르는 횟수이며 모델과 도구가 같은 값을 쓴다.
+# 도구를 같은 인자로 다시 부르는 횟수이며 계약이 갖지 않는 층이라 이 축이 정한다.
 MAX_RETRIES = 2
 
 
-def model_retry_middleware(*, max_retries: int = MAX_RETRIES) -> ModelRetryMiddleware:
+def transient_retry() -> dict[str, float | bool]:
+    """공급자가 잠시 받지 못한 질의를 다시 부르는 규칙이며 계약이 갖는다."""
+    declared = execution_budget_contract()["runnerRetry"]["transient"]
+    return {
+        "max_retries": int(declared["attempts"]),
+        "initial_delay": float(declared["initialDelayMs"]) / 1000,
+        "backoff_factor": float(declared["backoffFactor"]),
+        "jitter": bool(declared["jitter"]),
+    }
+
+
+def model_retry_middleware() -> ModelRetryMiddleware:
     """공급자 일시 오류만 같은 모델로 재시도하고 소진되면 예외를 그대로 다시 던진다."""
     return ModelRetryMiddleware(
-        max_retries=max_retries,
         retry_on=PROVIDER_TRANSIENT_ERRORS,
         on_failure="error",
-        backoff_factor=2.0,
-        initial_delay=0.5,
-        jitter=True,
+        **transient_retry(),  # type: ignore[arg-type]
     )
 
 
