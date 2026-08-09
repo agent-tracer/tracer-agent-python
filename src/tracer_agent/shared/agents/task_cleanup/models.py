@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import operator
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -160,6 +160,15 @@ def reject_duplicate_slots(assignments: Sequence[InspectAssignment]) -> None:
     repeated = duplicate_slots(assignments)
     if repeated:
         raise ValueError(f"assign each {_slot_field()} at most once in one plan: {sorted(set(repeated))}")
+
+
+def split_out_of_batch(plan: TriagePlan, exposed: Container[str]) -> tuple[TriagePlan, list[str]]:
+    """계약의 batchScope 대로 배치 밖 배정을 파견에서 빼고 뺀 이름을 부르는 자리에 함께 낸다."""
+    kept = [assignment for assignment in plan.assignments if assignment.taskId in exposed]
+    dropped = [assignment.taskId for assignment in plan.assignments if assignment.taskId not in exposed]
+    if not dropped:
+        return plan, []
+    return plan.model_copy(update={"assignments": kept}), dropped
 
 
 class TriagePlan(BaseModel):

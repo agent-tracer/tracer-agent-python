@@ -365,3 +365,56 @@ def test_산출이_계약이_적은_칸을_빠짐없이_싣는다() -> None:
     result = CleanupResult(suggestions=[], tasksScanned=3)
 
     assert sorted(result.model_dump(mode="json")) == sorted(declared["required"])
+
+
+async def test_배치_밖_태스크를_배정한_계획은_그_배정을_파견하지_않는다() -> None:
+    ledger = FakeTracerApi()
+    candidates = [_candidate("task-1", has_events=False)]
+    # 조율자가 배치에 없는 outsider 를 함께 배정하지만 그 배정은 파견되지 않는다.
+    worker_turns = {
+        **_triage(
+            {"taskId": "task-1", "depth": "shallow"},
+            {"taskId": "outsider", "depth": "deep"},
+        ),
+        **_reviewer(
+            "task-1",
+            {"taskId": "task-1", "archivable": True, "reason": "빈 껍데기다", "citedEventIds": []},
+            read=False,
+        ),
+    }
+    chat = FakeToolLoopChat(
+        [
+            {
+                "suggestions": [
+                    {
+                        "kind": "archive",
+                        "taskId": "task-1",
+                        "rationale": "생성 뒤 이벤트가 없다",
+                        "evidenceEventIds": [],
+                    }
+                ]
+            }
+        ],
+        worker_turns=worker_turns,
+    )
+
+    res = await _run(chat, ledger, *candidates)
+
+    assert res.error is None
+    assert res.data == {
+        "suggestions": [
+            {
+                "kind": "archive",
+                "taskId": "task-1",
+                "rationale": "생성 뒤 이벤트가 없다",
+                "evidenceEventIds": [],
+            }
+        ],
+        "tasksScanned": 0,
+    }
+    routes = [step for step in res.steps if step.eventKind == "route.selected"]
+    dropped = [step for step in routes if "dropped out of batch" in step.content]
+    chosen = [step for step in routes if step.content.startswith("triage -> ")]
+    assert dropped and "outsider" in dropped[0].content
+    assert chosen and "outsider" not in chosen[0].content
+    narrate("task-cleanup :: 배치 밖 배정은 파견에서 빠지고 그 사실이 궤적에 남는다", res)

@@ -16,6 +16,7 @@ from tracer_agent.shared.agents.task_cleanup.models import (
     TaskCleanupState,
     TriagePlan,
     TriageUpdate,
+    split_out_of_batch,
 )
 
 from ...runtime.errors import exception_summary
@@ -70,7 +71,14 @@ class TriageNode(GraphNode[TaskCleanupState, TriageUpdate]):
             exposed_candidates=exposed,
             event_ids_by_task=event_ids,
         )
-        plan = call.response
+        plan, dropped = split_out_of_batch(call.response, exposed)
+        # 조용히 빼면 계획과 실제 조사 범위가 어긋난 것을 아무도 알지 못한다.
+        if dropped:
+            deps.usage.record_orchestration_event(
+                "route.selected",
+                f"{self.name} dropped out of batch -> {', '.join(sorted(dropped))}",
+                node_name=self.name,
+            )
         chosen = ", ".join(f"{item.taskId}:{item.depth}" for item in plan.assignments) or "없음"
         deps.usage.record_orchestration_event(
             "route.selected",

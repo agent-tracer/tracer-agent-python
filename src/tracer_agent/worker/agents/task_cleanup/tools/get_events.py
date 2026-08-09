@@ -67,6 +67,9 @@ class GetTaskEventsTool(AgentTool[GetTaskEventsArgs, CleanupToolContext]):
     transient_errors = TRANSIENT_TRACER_ERRORS
 
     async def execute(self, args: GetTaskEventsArgs, context: CleanupToolContext) -> str:
+        # 계약의 batchScope 는 이 실행이 볼 자리를 후보 배치로 좁히므로 사용자 범위 안이라도 밖은 읽지 않는다.
+        if args.taskId not in {candidate.id for candidate in context.batch.candidates}:
+            return f"Task {args.taskId} not found."
         events = await context.reader.task_events(
             args.taskId,
             args.limit,
