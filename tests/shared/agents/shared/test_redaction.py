@@ -52,6 +52,16 @@ class Test값_쪽_절차:
     def test_낱말_뒤에_몸통이_이어지면_걸린다(self) -> None:
         assert is_suspect_text(f"Authorization: Bearer {_BODY}")
 
+    def test_계약이_공백으로_적은_글자가_사이에_있어도_걸린다(self) -> None:
+        for space in _RULES["values"]["requiresTrailingBody"]["spaceCharacters"]:
+            assert is_suspect_text(f"Authorization: Bearer{space}{_BODY}")
+
+    def test_계약이_공백으로_적지_않은_글자_뒤는_몸통으로_보지_않는다(self) -> None:
+        non_breaking = "\u00a0"
+
+        assert non_breaking not in _RULES["values"]["requiresTrailingBody"]["spaceCharacters"]
+        assert not is_suspect_text(f"Authorization: Bearer{non_breaking}{_BODY}")
+
     def test_구분자를_지키므로_대시를_지운_모양은_걸리지_않는다(self) -> None:
         assert is_suspect_text(f"sk-ant-{_BODY}")
         assert not is_suspect_text(f"skant{_BODY}")

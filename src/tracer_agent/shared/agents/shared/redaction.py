@@ -79,6 +79,12 @@ def _skips_space_between() -> bool:
     return bool(_rules()[Inspected.VALUES]["requiresTrailingBody"]["skipSpaceBetween"])
 
 
+@lru_cache(maxsize=1)
+def _space_characters() -> frozenset[str]:
+    """낱말과 몸통 사이에서 건너뛰는 글자이며 무엇이 공백인지는 계약이 갖는다."""
+    return frozenset(_rules()[Inspected.VALUES]["requiresTrailingBody"]["spaceCharacters"])
+
+
 @lru_cache(maxsize=len(RedactionStage))
 def _stage_rule(stage: RedactionStage) -> tuple[SuspectAction, frozenset[Inspected]]:
     declared: dict[str, Any] = _rules()["stages"][stage.value]
@@ -137,7 +143,8 @@ def _carries_body(folded: str, word: str) -> bool:
 def _body_bounds(folded: str, index: int) -> tuple[int, int]:
     """낱말 뒤에서 자격의 몸통이 차지하는 길이와 그 끝자리를 낸다."""
     if _skips_space_between():
-        while index < len(folded) and folded[index] == " ":
+        spaces = _space_characters()
+        while index < len(folded) and folded[index] in spaces:
             index += 1
     end = index
     while end < len(folded) and folded[end] in _BODY_CHARACTERS:
