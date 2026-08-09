@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Literal
+from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_anthropic import ChatAnthropic
@@ -31,8 +31,8 @@ def volatile[MessageT: BaseMessage](message: MessageT) -> MessageT:
 class PromptCacheMiddleware(AgentMiddleware[Any, Any, Any]):
     """시스템 프롬프트와 도구 선언과 안정된 메시지 앞부분에 캐시 경계를 놓는다."""
 
-    def __init__(self, *, ttl: Literal["5m", "1h"] = "1h") -> None:
-        """캐시 항목이 살아 있는 시간을 정한다."""
+    def __init__(self, *, ttl: str) -> None:
+        """캐시 항목이 살아 있는 시간을 정하며 값은 부르는 쪽이 계약에서 가져온다."""
         super().__init__()
         self._cache_control: _CacheControl = {"type": "ephemeral", "ttl": ttl}
 

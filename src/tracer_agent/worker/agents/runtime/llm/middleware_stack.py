@@ -8,6 +8,8 @@ from typing import Any
 from langchain.agents.middleware import AgentMiddleware, ModelCallLimitMiddleware
 from langchain_core.language_models import BaseChatModel
 
+from tracer_agent.shared.agents.shared.model_rates import cache_write_ttl
+
 from .fallback import FallbackModelMiddleware
 from .pacing import landing_reserve_calls
 from .prompt_cache import PromptCacheMiddleware
@@ -44,7 +46,7 @@ class AgentMiddlewareStack:
             middleware.append(StructuredOutputRepairMiddleware())
         middleware.append(StandardAgentMiddleware(serialize_tools=self.serializes_tools))
         # 남은 몫을 알리는 꼬리가 붙은 뒤에 서야 경계를 그 꼬리 앞에 놓을 수 있다.
-        middleware.append(PromptCacheMiddleware(ttl="1h"))
+        middleware.append(PromptCacheMiddleware(ttl=cache_write_ttl()))
         if self.tool_failure_text is not None:
             # 재시도 바깥이어야 소진된 뒤에만 실패가 모델이 읽는 결과로 바뀐다.
             middleware.append(ToolFailureMiddleware(self.tool_failure_text))

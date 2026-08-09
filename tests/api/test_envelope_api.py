@@ -12,6 +12,7 @@ from tests.support.chat_surface import SingleSql
 from tests.support.contract import conformance_case
 from tests.support.services import fake_services
 from tracer_agent.api import app as app_module
+from tracer_agent.shared.agents.envelope.catalog import MODEL_RATES
 from tracer_agent.shared.agents.envelope.router import CHAT_KEY_MISSING, JOB_KEY_MISSING
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 
@@ -173,12 +174,7 @@ def test_잡_봉투는_계약이_정한_칸을_모두_싣는다(client: TestClie
     assert data["fallbackModel"] == "claude-haiku-4-5"
     assert data["limits"] == {"budgetUsd": 2.0, "maxTurns": 15, "maxOutputTokens": 16000}
     assert data["deadlineMs"] == 720_000
-    assert data["modelRates"]["claude-haiku-4-5"] == {
-        "input": 1.0,
-        "output": 5.0,
-        "cacheWrite": 2.0,
-        "cacheRead": 0.1,
-    }
+    assert data["modelRates"]["claude-haiku-4-5"] == MODEL_RATES["claude-haiku-4-5"].model_dump()
 
 
 def test_잡_봉투는_종류마다_다른_기본_모델과_한도를_낸다(client: TestClient) -> None:

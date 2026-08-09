@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 
-from tracer_agent.shared.agents.envelope.catalog import CACHE_WRITE_TTL, MODEL_RATES
-from tracer_agent.shared.agents.shared.model_rates import MODEL_RATES_PATH, contract_model_rates
+from tracer_agent.shared.agents.envelope.catalog import MODEL_RATES
+from tracer_agent.shared.agents.shared.model_rates import (
+    MODEL_RATES_PATH,
+    cache_write_ttl,
+    contract_model_rates,
+)
 from tracer_agent.worker.agents.runtime.llm.middleware_stack import AgentMiddlewareStack
 from tracer_agent.worker.agents.runtime.llm.prompt_cache import PromptCacheMiddleware
 
@@ -30,9 +34,14 @@ def test_계약이_적은_모델을_빠짐없이_같은_단가로_안다() -> No
 
 
 def test_단가가_실제로_요청하는_캐시_수명의_배수다() -> None:
-    assert _stack_cache_ttl() == CACHE_WRITE_TTL
+    assert _stack_cache_ttl() == cache_write_ttl()
 
     declared = contract_model_rates()
     for rate in MODEL_RATES.values():
-        assert rate.cacheWrite == rate.input * declared.write_multiplier_for(CACHE_WRITE_TTL)
+        assert rate.cacheWrite == rate.input * declared.write_multiplier_for(cache_write_ttl())
         assert rate.cacheRead == rate.input * declared.read_multiplier
+
+
+def test_요청하는_수명이_두_축이_함께_만들_수_있는_수명이다() -> None:
+    # 다른 축의 실행기는 수명을 실을 자리가 없어 기본 수명만 만들며, 같은 실행이 두 축에서 같은 값으로 청구된다.
+    assert cache_write_ttl() == contract_model_rates().default_ttl

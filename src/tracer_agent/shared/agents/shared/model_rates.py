@@ -25,6 +25,12 @@ class ContractModelRates:
         return self.write_multiplier[ttl]
 
 
+def cache_write_ttl() -> str:
+    """실행 기계가 모든 캐시 경계에 요청하는 수명이다."""
+    # 수명을 고를 수 있는 축이 기본 수명에 맞추어야 같은 실행이 두 축에서 같은 값으로 청구된다.
+    return contract_model_rates().default_ttl
+
+
 @lru_cache(maxsize=1)
 def contract_model_rates() -> ContractModelRates:
     """계약이 소유한 단가표를 낸다."""

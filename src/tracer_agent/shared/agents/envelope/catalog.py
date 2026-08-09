@@ -6,12 +6,9 @@ from dataclasses import dataclass
 
 from ..shared.execution_limits import contract_execution_limits
 from ..shared.job_kinds import AgentJobKind
-from ..shared.model_rates import contract_model_rates
+from ..shared.model_rates import cache_write_ttl, contract_model_rates
 from ..shared.model_tiering import CHAT_KIND
 from ..shared.models import ExecutionLimitsDTO, ModelRateDTO
-
-# 실행 기계가 모든 캐시 경계에 요청하는 수명이며 청구하는 배수는 계약이 이 수명에 적은 값이다.
-CACHE_WRITE_TTL = "1h"
 
 
 def _rate(input_rate: float, output_rate: float) -> ModelRateDTO:
@@ -20,7 +17,7 @@ def _rate(input_rate: float, output_rate: float) -> ModelRateDTO:
     return ModelRateDTO(
         input=input_rate,
         output=output_rate,
-        cacheWrite=input_rate * declared.write_multiplier_for(CACHE_WRITE_TTL),
+        cacheWrite=input_rate * declared.write_multiplier_for(cache_write_ttl()),
         cacheRead=input_rate * declared.read_multiplier,
     )
 
