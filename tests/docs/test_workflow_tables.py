@@ -27,6 +27,19 @@ JOB_DOCS = (
     AGENTS_ROOT / "title_suggestion" / "README.md",
 )
 
+# 생성 상한은 종류마다 다르므로 문서마다 자기 종류의 값과 맞춘다.
+_JOB_DOC_KIND = {
+    AGENTS_ROOT / "recipe_scan" / "README.md": "recipeScan",
+    AGENTS_ROOT / "task_cleanup" / "README.md": "taskCleanup",
+    AGENTS_ROOT / "title_suggestion" / "README.md": "titleSuggestion",
+}
+
+
+def _kind_generate(doc: Path) -> dict[str, Any]:
+    """계약이 그 종류의 생성 활동에 적은 상한이다."""
+    declared = _CONTRACT["jobWorkflows"]["perKind"][_JOB_DOC_KIND[doc]]["activities"]
+    return next(one for one in declared if one["name"].startswith("generate"))
+
 
 _ROW = re.compile(r"^\|\s*`(?P<name>\w+)`\s*\|(?P<rest>.+)\|\s*$", re.M)
 _SECONDS = re.compile(r"^(\d+)초$")
@@ -74,6 +87,9 @@ def test_문서의_액티비티_표가_계약이_적은_상한과_시도_수를_
     doc: Path, workflow_keys: tuple[str, ...]
 ) -> None:
     declared = _declared(*workflow_keys)
+    if doc in _JOB_DOC_KIND:
+        # 생성만 종류마다 값이 달라 축의 기본값이 아니라 그 종류의 값과 맞춘다.
+        declared = {**declared, "generateAgentJob": _kind_generate(doc)}
     rows = _rows(doc)
 
     assert rows, doc.name
@@ -135,8 +151,8 @@ def test_비고가_적은_하트비트_상한이_계약이_적은_값과_같다(
 
 
 @pytest.mark.parametrize("doc", JOB_DOCS, ids=lambda doc: doc.parent.name)
-def test_비고가_적은_전체_상한이_계약이_적은_값과_같다(doc: Path) -> None:
-    declared = _generate_activity("agentJob", "generateAgentJob")
+def test_비고가_적은_전체_상한이_그_종류의_값과_같다(doc: Path) -> None:
+    declared = _kind_generate(doc)
     written = re.findall(r"(\d+)분 schedule-to-close", doc.read_text(encoding="utf-8"))
 
     assert written, doc.name

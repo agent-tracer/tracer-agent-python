@@ -116,7 +116,7 @@ title-suggestion.investigator.repair
 | 액티비티 | 큐 | start-to-close | 재시도 | 비고 |
 | --- | --- | --- | ---: | --- |
 | `prepareAgentJob` | `jobs` | 60초 | 5 | 도메인 문맥을 모으고 원장을 실행 중으로 옮긴다 |
-| `generateAgentJob` | `generate` | 900초 | 3 | 20분 schedule-to-close, 30초 heartbeat |
+| `generateAgentJob` | `generate` | 300초 | 3 | 20분 schedule-to-close, 30초 heartbeat |
 | `finalizeAgentJob` | `jobs` | 60초 | 5 | 원장 종결과 산출물과 완료 배달 |
 | `failAgentJob` | `jobs` | 60초 | 5 | 어느 단계가 실패하든 원장을 실패로 닫는다 |
 | `settleCanceledAgentJob` | `jobs` | 30초 | — | 액티비티가 돌기 전에 닿은 취소를 접는다 |
