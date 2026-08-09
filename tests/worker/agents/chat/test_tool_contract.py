@@ -132,3 +132,21 @@ def test_열거와_수치와_배열의_상한이_모델이_보는_스키마에_�
                 assert (variant["minimum"], variant["maximum"]) == (declared["min"], declared["max"])
             if declared["type"] == "array":
                 assert variant["maxItems"] == declared["maxItems"]
+
+
+def test_계약이_적은_인자_상한이_모델_스키마에_선다() -> None:
+    # 스키마 생성기가 그 칸을 읽지 않으면 계약에 상한을 적어도 아무 일도 일어나지 않는다.
+    bounded = {
+        (tool, arg): int(spec["maxLength"])
+        for tool, body in _contract()["tools"].items()
+        for arg, spec in body.get("args", {}).items()
+        if isinstance(spec, dict) and spec.get("maxLength") is not None
+    }
+
+    assert bounded, "계약이 상한을 적은 도구 인자가 없다"
+    for (tool, arg), limit in bounded.items():
+        schema = convert_to_openai_tool(_langchain_tools()[tool])["function"]["parameters"]
+        declared = _variants(schema["properties"][arg])
+
+        assert [one.get("maxLength") for one in declared] == [limit]
+        assert str(limit) in declared[0]["description"]

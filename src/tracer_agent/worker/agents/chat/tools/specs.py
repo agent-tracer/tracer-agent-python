@@ -89,10 +89,12 @@ def _object_field(_declared: Mapping[str, Any], required: bool, field: _FieldArg
 
 
 def _string_field(declared: Mapping[str, Any], required: bool, field: _FieldArgs) -> tuple[Any, Any]:
-    minimum = int(declared.get("minLength") or 1)
+    bounds: _FieldArgs = {"min_length": int(declared.get("minLength") or 1)}
+    if declared.get("maxLength") is not None:
+        bounds["max_length"] = int(declared["maxLength"])
     if required:
-        return TrimmedStr, Field(min_length=minimum, **field)
-    return TrimmedStr | None, Field(default=None, min_length=minimum, **field)
+        return TrimmedStr, Field(**bounds, **field)
+    return TrimmedStr | None, Field(default=None, **bounds, **field)
 
 
 _FIELD_BY_ARG_KIND: dict[ArgKind, _FieldBuilder] = {
