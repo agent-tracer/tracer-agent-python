@@ -5,8 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ..shared.execution_reservation import repair_attempts
 from .execution.trace import ExecutionTrace
 from .routes import EMPTY, FINALIZE, REPAIR, ValidatedState, ValidationRoute, ValidationRouteName
+
+# 상태가 수리를 불리언으로 세므로 이 기계가 실행하는 횟수다.
+SUPPORTED_REPAIR_ATTEMPTS = 1
 
 
 @dataclass(frozen=True)
@@ -26,6 +30,12 @@ def build_validation_router[StateT: ValidatedState](
     has_result: Callable[[StateT], bool] | None = None,
 ) -> ValidationRoute[StateT]:
     """검증 통과·수리 전·수리 후 소진 세 경우를 정해진 사유 문구와 함께 경로로 구분한다."""
+    declared = repair_attempts()
+    if declared != SUPPORTED_REPAIR_ATTEMPTS:
+        raise ValueError(
+            f"execution.budget.json: reservation.repair.attempts {declared} needs a counting router, "
+            f"this one repairs {SUPPORTED_REPAIR_ATTEMPTS} time"
+        )
 
     def route_validation(state: StateT) -> ValidationRouteName:
         if not state["validation_errors"]:

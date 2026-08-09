@@ -38,6 +38,12 @@ def execution_budget_contract() -> dict[str, Any]:
 
 
 @lru_cache(maxsize=1)
+def repair_attempts() -> int:
+    """검증에 걸린 산출을 다시 받는 횟수이며 계약이 갖는다."""
+    return int(execution_budget_contract()["reservation"]["repair"]["attempts"])
+
+
+@lru_cache(maxsize=1)
 def load_reservation_policy() -> ReservationPolicy:
     """계약의 뗄 순서를 검증하고 예약 셋을 읽는다."""
     reservation = execution_budget_contract()["reservation"]
