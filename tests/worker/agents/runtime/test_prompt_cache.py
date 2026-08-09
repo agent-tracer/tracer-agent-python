@@ -6,6 +6,7 @@ from typing import Any
 
 from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain_anthropic import ChatAnthropic
+from langchain_anthropic.chat_models import convert_to_anthropic_tool
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
@@ -79,6 +80,32 @@ async def test_시스템_프롬프트와_도구_선언에_경계가_선다() -> 
     # 도구 선언은 한 덩어리로 실리므로 마지막 하나의 경계가 그 전부를 덮는다.
     assert passed.tools[-1].extras["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert "cache_control" not in (passed.tools[0].extras or {})
+
+
+async def test_도구_선언의_경계가_공급자에게_보내는_모양까지_남는다() -> None:
+    # 경계를 extras 에 담는 것은 어댑터와의 약속이라 어댑터가 그 칸을 옮기지 않으면 도구 선언이 캐시되지 않는다.
+    request: ModelRequest[Any] = ModelRequest(
+        model=_anthropic(), messages=[HumanMessage(content="질문")], tools=[_tool("search_tasks")]
+    )
+
+    passed = await _bounded(request)
+
+    assert convert_to_anthropic_tool(passed.tools[-1])["cache_control"] == {
+        "type": "ephemeral",
+        "ttl": "1h",
+    }
+
+
+async def test_시스템_프롬프트의_다른_칸은_경계를_놓아도_남는다() -> None:
+    request: ModelRequest[Any] = ModelRequest(
+        model=_anthropic(),
+        messages=[HumanMessage(content="질문")],
+        system_message=SystemMessage(content="너는 조사자다", additional_kwargs={"origin": "계약"}),
+    )
+
+    passed = await _bounded(request)
+
+    assert passed.system_message.additional_kwargs == {"origin": "계약"}
 
 
 async def test_추론_블록에는_경계를_놓지_않는다() -> None:

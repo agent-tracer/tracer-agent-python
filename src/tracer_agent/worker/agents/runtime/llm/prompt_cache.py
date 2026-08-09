@@ -66,7 +66,10 @@ def _tagged_system(system_message: Any, cache_control: _CacheControl) -> SystemM
     if system_message is None:
         return None
     content = _tagged_content(system_message.content, cache_control)
-    return None if content is None else SystemMessage(content=content)
+    if content is None:
+        return None
+    tagged: SystemMessage = system_message.model_copy(update={"content": content})
+    return tagged
 
 
 def _tagged_tools(tools: Sequence[Any] | None, cache_control: _CacheControl) -> list[Any] | None:
