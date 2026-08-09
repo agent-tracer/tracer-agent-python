@@ -9,6 +9,7 @@ from pathlib import Path
 
 _CONTRACT_ROOT = Path(__file__).resolve().parents[6] / "contract"
 _MODEL_ENVELOPE_PATH = _CONTRACT_ROOT / "agent" / "shared" / "model.envelope.json"
+_EXECUTION_LIMITS_PATH = _CONTRACT_ROOT / "agent" / "shared" / "execution.limits.json"
 
 
 @dataclass(frozen=True)
@@ -22,10 +23,20 @@ class ModelEnvelope:
 
 _EMPTY_ENVELOPE = ModelEnvelope()
 
-# claude-opus-5는 사고와 응답이 max_tokens 하나를 나눠 쓰므로 기능의 기본 출력 한도보다 넉넉히 준다.
-_MODEL_ENVELOPE: dict[str, ModelEnvelope] = {
-    "claude-opus-5": ModelEnvelope(max_output_tokens=32_000, effort="low"),
-}
+
+@lru_cache(maxsize=1)
+def _declared_envelope() -> dict[str, ModelEnvelope]:
+    """모델 이름으로 기능의 기본 한도를 덮는 값을 계약에서 읽는다."""
+    declared = json.loads(_EXECUTION_LIMITS_PATH.read_text(encoding="utf-8"))["modelEnvelope"]
+    return {
+        model: ModelEnvelope(
+            max_output_tokens=values.get("maxOutputTokens"),
+            effort=values.get("effort"),
+            thinking=values.get("thinking"),
+        )
+        for model, values in declared.items()
+        if isinstance(values, dict)
+    }
 
 
 @lru_cache(maxsize=1)
@@ -39,7 +50,8 @@ def _contract_vocabulary() -> tuple[frozenset[str], frozenset[str]]:
 @lru_cache(maxsize=1)
 def _validated_envelope() -> dict[str, ModelEnvelope]:
     effort_values, thinking_values = _contract_vocabulary()
-    for model, envelope in _MODEL_ENVELOPE.items():
+    declared = _declared_envelope()
+    for model, envelope in declared.items():
         if envelope.effort is not None and envelope.effort not in effort_values:
             raise ValueError(
                 f"model.envelope.json: {model} effort {envelope.effort!r} not in {sorted(effort_values)}"
@@ -49,7 +61,7 @@ def _validated_envelope() -> dict[str, ModelEnvelope]:
                 f"model.envelope.json: {model} thinking {envelope.thinking!r} "
                 f"not in {sorted(thinking_values)}"
             )
-    return _MODEL_ENVELOPE
+    return declared
 
 
 def model_envelope(model: str) -> ModelEnvelope:
