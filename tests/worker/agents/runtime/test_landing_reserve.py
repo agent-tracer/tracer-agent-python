@@ -29,7 +29,8 @@ def _call(output_tokens: int) -> AIMessage:
 
 class Test마무리몫예약:
     def test_계약이_마무리_호출_몫을_갖는다(self) -> None:
-        assert landing_reserve_calls() >= 2
+        # 정확한 수는 상한 공식을 보는 자리가 대조하므로 여기서는 몫이 있다는 것만 본다.
+        assert landing_reserve_calls() > 0
 
     def test_마무리_호출_몫이_모자라면_그_전에_도구를_닫는다(self) -> None:
         # 30_000 토큰은 0.45 달러라 예약 없이는 상한 1.0 에 닿지 않지만 마무리 몫까지 세면 닿는다.
