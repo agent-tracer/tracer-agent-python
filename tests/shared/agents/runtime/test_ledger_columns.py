@@ -18,6 +18,7 @@ _RENAME = re.compile(r'ALTER TABLE\s+"?(\w+)"?\s*\n?\s*RENAME COLUMN\s+"?(\w+)"?
 _DROP = re.compile(r'ALTER TABLE\s+"?(\w+)"?\s+DROP COLUMN(?: IF EXISTS)?\s+"?(\w+)"?')
 _COLUMN = re.compile(r'^"?(\w+)"?\s+\w')
 _INSERT = re.compile(r"INSERT INTO\s+(\w+)\s*\(([^)]*)\)", re.S)
+_ARITY = re.compile(r"INSERT INTO\s+(\w+)\s*\(([^)]*)\)\s*(?:VALUES\s*\((.*?)\)|SELECT(.*?)FROM)", re.S)
 
 # 열이 아니라 표 전체에 걸리는 선언이라 열 이름으로 세지 않는다.
 _TABLE_LEVEL = frozenset({"PRIMARY", "UNIQUE", "CONSTRAINT", "FOREIGN", "CHECK", "EXCLUDE"})
@@ -46,6 +47,33 @@ def _columns() -> dict[str, set[str]]:
     return tables
 
 
+def _split(text: str) -> list[str]:
+    """괄호 안의 쉼표는 세지 않고 같은 층의 항목만 나눈다."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for letter in text:
+        depth += (letter == "(") - (letter == ")")
+        if letter == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(letter)
+    if "".join(current).strip():
+        parts.append("".join(current))
+    return parts
+
+
+def _arities() -> list[tuple[str, str, int, int]]:
+    """적재 문장마다 적은 열의 수와 실을 값의 수를 낸다."""
+    found = []
+    for source in sorted(SOURCE_ROOT.rglob("*.py")):
+        for table, columns, values, selected in _ARITY.findall(source.read_text(encoding="utf-8")):
+            body = values or selected
+            found.append((source.name, table, len(_split(columns)), len(_split(body))))
+    return found
+
+
 def _statements() -> list[tuple[str, str, frozenset[str]]]:
     """소스가 적는 적재 문장마다 표 이름과 열 이름을 낸다."""
     found = []
@@ -58,6 +86,7 @@ def _statements() -> list[tuple[str, str, frozenset[str]]]:
 
 TABLES = _columns()
 STATEMENTS = _statements()
+ARITIES = _arities()
 
 
 def test_문장을_실제로_찾는다() -> None:
@@ -71,3 +100,19 @@ def test_문장을_실제로_찾는다() -> None:
 def test_적재_문장이_계약의_표에_있는_열만_쓴다(source: str, table: str, columns: frozenset[str]) -> None:
     assert table in TABLES, f"{source}: {table}"
     assert not columns - TABLES[table], f"{source}: {table}"
+
+
+def test_실을_값을_적는_문장을_실제로_찾는다() -> None:
+    # 뽑히는 문장이 없으면 아래 검사가 아무것도 보지 않으면서 통과한다.
+    assert len(ARITIES) >= 13
+
+
+@pytest.mark.parametrize(
+    ("source", "table", "columns", "values"),
+    ARITIES,
+    ids=[f"{name}-{table}" for name, table, _, _ in ARITIES],
+)
+def test_적재_문장이_적은_열의_수와_실을_값의_수가_같다(
+    source: str, table: str, columns: int, values: int
+) -> None:
+    assert columns == values, f"{source}: {table}"
