@@ -51,6 +51,13 @@ def default_language() -> str:
     return str(_inputs()[LANGUAGE_FIELD]["default"])
 
 
+@lru_cache(maxsize=1)
+def fallback_language() -> str:
+    """계약의 onUnknown 대로 목록 밖의 언어를 받았을 때 대신 쓰는 언어다."""
+    declared: Mapping[str, Any] = json.loads(LANGUAGES_PATH.read_text(encoding="utf-8"))
+    return str(declared["default"])
+
+
 def default_max_suggestions() -> int:
     """설정도 요청도 없을 때 쓰는 정리 제안 개수다."""
     return int(_inputs()[MAX_SUGGESTIONS_FIELD]["default"])

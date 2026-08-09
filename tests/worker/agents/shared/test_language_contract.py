@@ -16,6 +16,7 @@ from tests.support.prompts import (
 )
 from tracer_agent.shared.agents.chat.models import ChatTurnFields
 from tracer_agent.shared.agents.recipe_scan.models import RecipeScanRequest
+from tracer_agent.shared.agents.settings.execution import fallback_language
 from tracer_agent.shared.agents.shared.models import Language
 from tracer_agent.shared.agents.task_cleanup.models import TaskCleanupRequest
 from tracer_agent.shared.agents.title_suggestion.models import (
@@ -135,3 +136,17 @@ def test_대화의_출력_언어는_선행_컨텍스트_메시지의_첫_줄이�
     carried = _carrier("chat", CHAT_PROMPT, "ko")
 
     assert carried.splitlines()[0] == CHAT_PROMPT.directive("ko")
+
+
+class Test목록_밖의_언어:
+    """계약의 onUnknown 은 목록 밖의 값에 실행을 세우지 않고 기본 언어로 낮추게 한다."""
+
+    @pytest.mark.parametrize("agent_id", AGENT_IDS)
+    def test_계약이_적은_기본_언어의_지시문으로_낮춘다(self, agent_id: str) -> None:
+        prompt = PROMPTS[agent_id]
+
+        assert prompt.directive("kl") == prompt.directive(fallback_language())
+
+    @pytest.mark.parametrize("agent_id", AGENT_IDS)
+    def test_목록_밖의_값에도_지시문을_낸다(self, agent_id: str) -> None:
+        assert PROMPTS[agent_id].directive("kl")

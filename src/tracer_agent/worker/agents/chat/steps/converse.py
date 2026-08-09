@@ -26,6 +26,7 @@ from ...runtime.llm.structured_agent import recursion_limit_for
 from ...runtime.llm.trajectory import step_content_text
 from ...runtime.pricing import ModelRates
 from ...runtime.telemetry.disclosure import TraceSafeMetadata
+from ...shared.prompt_source_port import directive_for
 from ..agent_cache import ChatAgentSource
 from ..backends import ChatTurnBackends
 from ..checkpointer import seed_checkpoint
@@ -131,7 +132,7 @@ class ConverseStep:
         # 판이 바뀌기 전에 선 체크포인트에는 이 칸이 없으므로 없으면 실린 이력으로 되돌린다.
         history = state.get("history") or self._req.messages
         context_prompt = build_context_prompt(
-            self._language_directives[state["language"]],
+            directive_for(self._language_directives, state["language"]),
             state["summary"],
             state["facts"],
             bool(history) and history[-1].role == "tool",

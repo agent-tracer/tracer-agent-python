@@ -38,6 +38,7 @@ from ...runtime.telemetry.execution_metrics import (
 )
 from ...runtime.validation_nodes import ValidationNode
 from ...shared.empty_result import DEGRADED
+from ...shared.prompt_source_port import directive_for
 from ..deps import AGENT_NAME, RecipeDeps
 from ..policy import validate_recipe_candidates
 from ..prompts import build_user_prompt
@@ -116,7 +117,7 @@ class InvestigateNode(_CandidateAgent[InvestigateUpdate]):
                         deps.prompt,
                         state["task_id"],
                         state["user_prompt"],
-                        deps.language_directives[state["language"]],
+                        directive_for(deps.language_directives, state["language"]),
                         state["plan"],
                         state["reports"],
                         state["provenance"],

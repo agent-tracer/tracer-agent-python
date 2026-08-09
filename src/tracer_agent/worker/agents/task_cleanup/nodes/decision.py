@@ -32,6 +32,7 @@ from ...runtime.llm.budget import (
 )
 from ...runtime.node import GraphNode
 from ...runtime.validation_nodes import ValidationNode
+from ...shared.prompt_source_port import directive_for
 from ..deps import AGENT_NAME, CleanupDeps
 from ..policy import validate_suggestions
 from ..prompts import build_user_prompt
@@ -106,7 +107,7 @@ class InvestigateNode(_DecisionAgent[InvestigateUpdate]):
                     content=build_user_prompt(
                         state["scanned_at"],
                         state["max_suggestions"],
-                        deps.language_directives[state["language"]],
+                        directive_for(deps.language_directives, state["language"]),
                         state["reports"],
                     )
                 )

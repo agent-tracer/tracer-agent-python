@@ -21,6 +21,7 @@ from tracer_agent.shared.agents.title_suggestion.models import (
 from ...runtime.llm.budget import AgentBudgetLease, pool_spend, reserved_spend
 from ...runtime.node import GraphNode
 from ...runtime.validation_nodes import ValidationNode
+from ...shared.prompt_source_port import directive_for
 from ..deps import TitleDeps
 from ..policy import normalize_title_candidate
 from ..prompts import build_user_prompt
@@ -55,7 +56,7 @@ class InvestigateNode(GraphNode[TitleSuggestionState, InvestigateUpdate]):
                     content=build_user_prompt(
                         state["task_id"],
                         state["context"],
-                        self._deps.language_directives[state["language"]],
+                        directive_for(self._deps.language_directives, state["language"]),
                     )
                 )
             ],

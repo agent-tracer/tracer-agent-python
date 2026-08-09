@@ -7,12 +7,25 @@ from dataclasses import dataclass
 from string import Template
 from typing import Protocol
 
+from tracer_agent.shared.agents.settings.execution import fallback_language
+
 # 조립 시점에 값을 알 수 없고 slot 을 부르는 자리가 채우는 자리표시자다.
 RUNTIME_PLACEHOLDERS: frozenset[str] = frozenset({"turns"})
 
 
 class PromptSlotMissing(LookupError):
     """조립 함수가 부른 template 이나 slot 을 프롬프트가 갖고 있지 않다."""
+
+
+def directive_for(directives: Mapping[str, str], language: str) -> str:
+    """출력 언어 하나의 지시문이며 계약의 onUnknown 대로 목록 밖의 값은 기본 언어로 낮춘다."""
+    found = directives.get(language)
+    if found is not None:
+        return found
+    fallback = directives.get(fallback_language())
+    if fallback is None:
+        raise PromptSlotMissing(f"language directive is missing: {fallback_language()}")
+    return fallback
 
 
 class PromptVersionDiverged(ValueError):
@@ -70,11 +83,8 @@ class AgentPrompt:
         return found
 
     def directive(self, language: str) -> str:
-        """출력 언어 하나의 지시문을 내며 없으면 던진다."""
-        found = self.language_directives.get(language)
-        if found is None:
-            raise PromptSlotMissing(f"language directive is missing: {language}")
-        return found
+        """출력 언어 하나의 지시문이며 계약의 onUnknown 대로 목록 밖의 값은 기본 언어로 낮춘다."""
+        return directive_for(self.language_directives, language)
 
 
 class PromptSourcePort(Protocol):

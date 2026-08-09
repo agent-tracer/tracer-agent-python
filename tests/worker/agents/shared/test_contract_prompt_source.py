@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.support.contract import agent_prompt, agent_tools
+from tracer_agent.shared.agents.settings.execution import fallback_language
 from tracer_agent.worker.agents.shared.contract_prompt_source import (
     ContractPromptSource,
     ContractPromptUnavailable,
@@ -16,7 +17,6 @@ from tracer_agent.worker.agents.shared.contract_prompt_source import (
 from tracer_agent.worker.agents.shared.prompt_source_port import (
     RUNTIME_PLACEHOLDERS,
     AgentPrompt,
-    PromptSlotMissing,
     PromptTemplate,
     PromptVersionDiverged,
 )
@@ -102,11 +102,10 @@ def test_상한과_조사_깊이_어휘가_계약에서_온다() -> None:
     assert "Your request lists every identifier" in investigator.slot("evidenceSourcing")
 
 
-def test_없는_언어를_물으면_던진다() -> None:
+def test_계약의_목록에_없는_언어는_기본_언어로_낮춘다() -> None:
     resolved = ContractPromptSource().resolve("chat")
 
-    with pytest.raises(PromptSlotMissing):
-        resolved.directive("de")
+    assert resolved.directive("de") == resolved.directive(fallback_language())
 
 
 def test_계약을_읽지_못하면_프롬프트를_세우지_않는다(tmp_path: Path) -> None:
