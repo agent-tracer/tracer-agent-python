@@ -10,7 +10,7 @@ from tracer_agent.shared.agents.shared.contract_root import CONTRACT_ROOT
 MIGRATIONS = CONTRACT_ROOT / "db" / "migrations"
 
 _CHECK = re.compile(r"CHECK\s*\((?P<body>.+?)\)\s*[;,\n]", re.S)
-_UNIQUE = re.compile(r'UNIQUE INDEX IF NOT EXISTS "(?P<name>\w+)"')
+_UNIQUE = re.compile(r'UNIQUE INDEX (?:IF NOT EXISTS )?"?(?P<name>\w+)"?\s*ON\s+(?P<body>[^;]+);', re.S)
 
 
 def _normalized(sql: str) -> str:
@@ -38,14 +38,16 @@ def test_실물이_거는_CHECK_를_대역도_건다() -> None:
         assert body in fake, body
 
 
-def test_실물이_거는_UNIQUE_를_대역도_건다() -> None:
+def test_실물이_거는_UNIQUE_를_대역도_같은_모양으로_건다() -> None:
+    # 이름만 맞추면 부분 색인의 조건이 빠져도 통과해, 대역이 실물보다 좁거나 넓어진다.
     declared = {
-        found["name"]
+        found["name"]: _normalized(found["body"])
         for path in sorted(MIGRATIONS.glob("*.sql"))
         for found in _UNIQUE.finditer(path.read_text(encoding="utf-8"))
     }
-    fake = _fake_schema()
+    fake = {found["name"]: _normalized(found["body"]) for found in _UNIQUE.finditer(_fake_schema())}
 
     assert declared
-    for name in sorted(declared):
-        assert name in fake, name
+    assert set(declared) <= set(fake)
+    for name, body in sorted(declared.items()):
+        assert fake[name] == body, name
