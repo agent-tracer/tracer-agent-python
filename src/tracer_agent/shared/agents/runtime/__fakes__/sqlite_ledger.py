@@ -53,7 +53,7 @@ CREATE TABLE chat_executions (
     input_hash TEXT NOT NULL,
     status TEXT NOT NULL,
     phase TEXT NOT NULL DEFAULT 'starting',
-    requested_backend TEXT,
+    requested_backend TEXT CHECK (requested_backend IS NULL OR requested_backend IN ('ts', 'python')),
     model TEXT,
     language TEXT,
     draft_text TEXT NOT NULL DEFAULT '',
