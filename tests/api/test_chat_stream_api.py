@@ -6,6 +6,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -19,6 +20,8 @@ from tests.support.chat_surface import (
     seed_thread,
 )
 from tracer_agent.shared.agents.chat.execution_ledger import ChatExecutionLedger
+from tracer_agent.shared.agents.chat.surface import stream
+from tracer_agent.shared.agents.chat.surface.contract import ChatStreamRules, chat_stream_rules
 from tracer_agent.shared.agents.chat.surface.stream import frames, watch_chat_execution
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, LedgerUnavailable
@@ -28,6 +31,10 @@ THREADS = "/api/agent/chat/threads"
 
 def _frames(body: str) -> list[dict[str, object]]:
     return [json.loads(chunk.split("data: ", 1)[1]) for chunk in body.split("\n\n") if "data: " in chunk]
+
+
+# 계약이 정한 20초를 그대로 기다리지 않도록 이 시험만 짧은 주기를 쓴다.
+RESEND_S = 0.2
 
 
 class WakingWatch:
@@ -211,6 +218,26 @@ class Test끊김과_취소와_재생:
             await anext(stream)
         assert watch.released
 
+    async def test_정본이_그대로인_신호가_와도_재전송_주기를_넘기지_않는다(
+        self, store: SqliteLedgerSql, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seed_thread(store)
+        seed_execution(store, "e1", status="running")
+        watch = WakingWatch()
+        monkeypatch.setattr(stream, "chat_stream_rules", lambda: _shortened(RESEND_S))
+
+        frames_of = stream.frames(watch, SingleSql(store), "local", "t1", "e1")
+        await anext(frames_of)
+        opened = asyncio.get_running_loop().time()
+        waker = asyncio.create_task(_wake_until(watch, RESEND_S * 0.6))
+        try:
+            # 신호가 시계를 다시 시작하면 프레임이 오지 않으므로 상한을 걸어 그 사실을 드러낸다.
+            await asyncio.wait_for(anext(frames_of), RESEND_S * 3)
+        finally:
+            waker.cancel()
+
+        assert asyncio.get_running_loop().time() - opened < RESEND_S * 3
+
     async def test_연결이_끊기면_구독을_놓는다(self, store: SqliteLedgerSql) -> None:
         seed_thread(store)
         seed_execution(store, "e1", status="running")
@@ -235,3 +262,18 @@ class Test끊김과_취소와_재생:
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(anext(stream), 0.2)
         await stream.aclose()
+
+
+_DECLARED = chat_stream_rules()
+
+
+def _shortened(seconds: float) -> ChatStreamRules:
+    """계약이 정한 재전송 주기만 짧게 바꾼 규칙이다."""
+    return replace(_DECLARED, resend_interval_s=seconds)
+
+
+async def _wake_until(watch: WakingWatch, every: float) -> None:
+    """정본을 바꾸지 않고 신호만 되풀이해 재전송 시계를 흔든다."""
+    while True:
+        await asyncio.sleep(every)
+        watch.wake()

@@ -82,6 +82,7 @@ async def frames(
     signal = asyncio.Event()
     unsubscribe = _listen(watch, execution_id, signal)
     last = ""
+    resend_at = _now() + chat_stream_rules().resend_interval_s
     try:
         while True:
             # 구독보다 먼저 읽은 정본은 그 사이의 갱신을 놓치므로 첫 프레임도 이 자리에서 읽는다.
@@ -93,8 +94,9 @@ async def frames(
                 yield frame
             if snapshot.is_terminal():
                 return
-            if not await _await_change(signal):
+            if not await _await_change(signal, resend_at - _now()):
                 last = ""
+                resend_at = _now() + chat_stream_rules().resend_interval_s
     except ChatRejected:
         # 조회하던 실행이 사라졌으면 더 실을 것이 없으므로 연결을 닫는다.
         return
@@ -112,10 +114,17 @@ def _listen(watch: ChatExecutionUpdates | None, execution_id: str, signal: async
     return watch.subscribe(execution_id, signal.set)
 
 
-async def _await_change(signal: asyncio.Event) -> bool:
-    """신호를 받아 깨었으면 참을, 주기가 지나 깨었으면 거짓을 낸다."""
+def _now() -> float:
+    """재전송 시각을 재는 이 루프의 시계다."""
+    return asyncio.get_running_loop().time()
+
+
+async def _await_change(signal: asyncio.Event, remaining: float) -> bool:
+    """신호를 받아 깨었으면 참을, 재전송 시각이 지나 깨었으면 거짓을 낸다."""
+    if remaining <= 0:
+        return False
     try:
-        await asyncio.wait_for(signal.wait(), chat_stream_rules().resend_interval_s)
+        await asyncio.wait_for(signal.wait(), remaining)
     except TimeoutError:
         return False
     signal.clear()
