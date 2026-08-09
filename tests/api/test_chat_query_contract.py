@@ -10,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support.chat_surface import (
-    DRAFT_TOKEN_HASH,
     NOW,
     seed_execution,
     seed_memory,
@@ -65,7 +64,7 @@ def _seed_all(store: SqliteLedgerSql) -> None:
     )
     seed_message(store, "m3", "tool", "결과", offset=2, tool_call_id="call-1")
     seed_message(store, "m4", "user", "이어서", offset=3)
-    seed_execution(store, "e1", replay_anchor_message_id="m4", draft_token_hash=DRAFT_TOKEN_HASH)
+    seed_execution(store, "e1", replay_anchor_message_id="m4")
     seed_pending_tool(store)
     seed_step(
         store,

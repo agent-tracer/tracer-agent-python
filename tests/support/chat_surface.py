@@ -178,7 +178,6 @@ def seed_execution(
                 "draft_text": extra.get("draft_text", ""),
                 "draft_seq": extra.get("draft_seq", 0),
                 "attempt": extra.get("attempt", 1),
-                "draft_token_hash": extra.get("draft_token_hash"),
                 "usage": {},
                 "created_at": NOW + timedelta(seconds=extra.get("offset", 0)),
                 "updated_at": extra.get("updated_at", NOW),

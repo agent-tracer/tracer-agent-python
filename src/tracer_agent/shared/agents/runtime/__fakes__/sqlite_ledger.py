@@ -59,7 +59,6 @@ CREATE TABLE chat_executions (
     draft_text TEXT NOT NULL DEFAULT '',
     draft_seq INTEGER NOT NULL DEFAULT 0,
     attempt INTEGER NOT NULL DEFAULT 0,
-    draft_token_hash TEXT,
     assistant_message_id TEXT,
     model_used TEXT,
     cost_usd REAL,
