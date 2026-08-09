@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from tests.support.recipes import RecordingSearchIndex
-from tracer_agent.shared.agents.recipe.document import RECIPES_INDEX_ALIAS
+from tracer_agent.shared.agents.recipe.index import recipes_index_alias
 from tracer_agent.shared.agents.recipe.outbox import (
     INDEX_WRITE_FAILED,
     SearchOutboxDrain,
@@ -83,7 +83,7 @@ async def test_원장에_있는_레시피는_색인에_문서를_덮어쓴다(st
 
     assert drained == 1
     alias, document_id, document = index.indexed[0]
-    assert (alias, document_id) == (RECIPES_INDEX_ALIAS, "r1")
+    assert (alias, document_id) == (recipes_index_alias(), "r1")
     assert document["touchedFiles"] == ["docs/db.md"]
     assert store.rows("search_outbox") == []
 
@@ -95,7 +95,7 @@ async def test_조회에_잡히지_않는_대상은_색인에서_지운다(store
 
     await SearchOutboxDrain(OpenDrain(store), index).run_once()
 
-    assert index.deleted == [(RECIPES_INDEX_ALIAS, "r1")]
+    assert index.deleted == [(recipes_index_alias(), "r1")]
     assert store.rows("search_outbox") == []
 
 

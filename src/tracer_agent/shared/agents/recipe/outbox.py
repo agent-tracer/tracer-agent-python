@@ -9,7 +9,8 @@ from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from ..runtime.ledger import LedgerSql, SqlSource
-from .document import RECIPES_INDEX_ALIAS, SEARCH_OUTBOX_BATCH_SIZE, build_recipe_document
+from .document import SEARCH_OUTBOX_BATCH_SIZE, build_recipe_document
+from .index import recipes_index_alias
 from .search import SearchIndexWriterPort
 from .store import RecipeStore, SearchOutboxStore
 
@@ -86,10 +87,10 @@ class SearchOutboxDrain:
         try:
             recipe = await recipes.find_by_id(target_id)
             if recipe is None:
-                await self._search_index.delete_document(RECIPES_INDEX_ALIAS, target_id)
+                await self._search_index.delete_document(recipes_index_alias(), target_id)
                 return True
             await self._search_index.index_document(
-                RECIPES_INDEX_ALIAS, recipe.id, build_recipe_document(recipe)
+                recipes_index_alias(), recipe.id, build_recipe_document(recipe)
             )
         except Exception as failed:
             _log.error(

@@ -6,9 +6,6 @@ from ..shared.instant import iso
 from ..shared.json_view import JsonObject, JsonValue
 from .models import Recipe
 
-# 계약이 선언한 색인 별칭이며 문서 식별자는 레시피 원장의 식별자를 그대로 쓴다.
-RECIPES_INDEX_ALIAS = "recipes"
-
 # 배출 한 번이 읽는 아웃박스 행의 수이며 계약의 batchSize 와 같다.
 SEARCH_OUTBOX_BATCH_SIZE = 100
 

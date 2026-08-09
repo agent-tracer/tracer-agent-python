@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from tests.support.contract import wire_contract
-from tracer_agent.shared.agents.recipe.document import RECIPES_INDEX_ALIAS
+from tracer_agent.shared.agents.recipe.index import recipes_index_alias
 from tracer_agent.shared.agents.recipe.search import (
     MATCH_FIELDS,
     MINIMUM_SHOULD_MATCH,
@@ -61,7 +61,7 @@ async def test_채택된_자기_레시피만_대상으로_질의한다() -> None
     await OpenSearchRecipeSearch(client).search("user-1", "질의", 5)
 
     body = json.loads(seen[0].read())
-    assert seen[0].url.path == f"/{RECIPES_INDEX_ALIAS}/_search"
+    assert seen[0].url.path == f"/{recipes_index_alias()}/_search"
     assert body["size"] == 5
     assert body["query"]["bool"]["filter"] == [
         {"term": {"userId": "user-1"}},
@@ -104,7 +104,7 @@ async def test_이미_없는_문서를_지우는_것은_실패로_세지_않는�
 
     client, _ = _client(handle)
 
-    await OpenSearchIndexWriter(client).delete_document(RECIPES_INDEX_ALIAS, "r1")
+    await OpenSearchIndexWriter(client).delete_document(recipes_index_alias(), "r1")
 
 
 async def test_색인이_거절하면_부른_쪽이_다시_시도할_수_있게_올린다() -> None:
@@ -114,4 +114,4 @@ async def test_색인이_거절하면_부른_쪽이_다시_시도할_수_있게_
     client, _ = _client(handle)
 
     with pytest.raises(Exception, match="opensearch"):
-        await OpenSearchIndexWriter(client).index_document(RECIPES_INDEX_ALIAS, "r1", {})
+        await OpenSearchIndexWriter(client).index_document(recipes_index_alias(), "r1", {})

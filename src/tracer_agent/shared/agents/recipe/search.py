@@ -1,4 +1,4 @@
-"""레시피 색인의 질의와 문서 쓰기를 OpenSearch 창구로 구현한다."""
+"""레시피 색인을 세우는 일과 질의와 문서 쓰기를 OpenSearch 창구로 구현한다."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from ..shared.json_view import JsonObject, JsonValue, as_objects, text_list
-from .document import RECIPES_INDEX_ALIAS
+from .index import SearchIndexDefinition, recipes_index_alias
 from .models import RECIPE_STATUS_ACTIVE
 
 # 얇은 코퍼스에서 실측해 정한 값이며 계약의 wire/search.index.json 이 같은 수를 갖는다.
@@ -23,6 +23,9 @@ MATCH_FIELDS = ("title", "intent", "description", "useWhen", "summaryMd")
 
 _NOT_FOUND_STATUS = 404
 _CLIENT_ERROR = 400
+
+# 다른 축이 같은 색인을 먼저 세웠을 때 색인이 내는 사유다.
+_ALREADY_EXISTS = "resource_already_exists_exception"
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,9 @@ class OpenSearchClient:
         response = await self._client.request(method, f"{self._base_url}{path}", json=body)
         if response.status_code >= _CLIENT_ERROR:
             raise OpenSearchRejected(
-                response.status_code, f"opensearch {method} {path} responded {response.status_code}"
+                response.status_code,
+                f"opensearch {method} {path} responded {response.status_code}",
+                response.text,
             )
         if not response.text:
             return None
@@ -78,11 +83,12 @@ class OpenSearchClient:
 
 
 class OpenSearchRejected(Exception):
-    """색인이 요청을 받아들이지 않았으며 상태를 함께 싣는다."""
+    """색인이 요청을 받아들이지 않았으며 상태와 본문을 함께 싣는다."""
 
-    def __init__(self, status: int, message: str) -> None:
+    def __init__(self, status: int, message: str, body: str = "") -> None:
         super().__init__(message)
         self.status = status
+        self.body = body
 
 
 class OpenSearchRecipeSearch:
@@ -113,7 +119,7 @@ class OpenSearchRecipeSearch:
                 }
             },
         }
-        payload = await self._client.request("POST", f"/{RECIPES_INDEX_ALIAS}/_search", body)
+        payload = await self._client.request("POST", f"/{recipes_index_alias()}/_search", body)
         return [_to_hit(hit) for hit in apply_relative_cutoff(_hits(payload))]
 
 
@@ -134,6 +140,38 @@ class OpenSearchIndexWriter:
         except OpenSearchRejected as rejected:
             if rejected.status != _NOT_FOUND_STATUS:
                 raise
+
+
+class OpenSearchIndexAdmin:
+    """계약이 선언한 설정과 매핑으로 색인을 세우고 그 색인에 별칭을 건다."""
+
+    def __init__(self, client: OpenSearchClient) -> None:
+        self._client = client
+
+    async def ensure_index(self, definition: SearchIndexDefinition) -> None:
+        """두 축이 같은 순간에 세워도 색인이 하나만 서게 한다."""
+        if await self._found("GET", f"/{definition.index}"):
+            return
+        body: JsonObject = {"settings": definition.settings, "mappings": definition.mappings}
+        # 별칭 하나가 인덱스 둘을 가리키면 쓰기와 교체가 막히므로 이미 쓰인 별칭을 다시 걸지 않는다.
+        if not await self._found("GET", f"/_alias/{definition.alias}"):
+            body["aliases"] = {definition.alias: {}}
+        try:
+            await self._client.request("PUT", f"/{definition.index}", body)
+        except OpenSearchRejected as rejected:
+            # 다른 축이 먼저 세웠으면 세우려던 상태에 이미 이르렀다.
+            if _ALREADY_EXISTS not in rejected.body:
+                raise
+
+    async def _found(self, method: str, path: str) -> bool:
+        """색인이 그 자리를 안다고 답하면 참을 내고 없다고 답하면 거짓을 낸다."""
+        try:
+            await self._client.request(method, path)
+        except OpenSearchRejected as rejected:
+            if rejected.status == _NOT_FOUND_STATUS:
+                return False
+            raise
+        return True
 
 
 def apply_relative_cutoff(hits: list[JsonObject]) -> list[JsonObject]:
