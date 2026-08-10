@@ -18,10 +18,8 @@ from tracer_agent.shared.agents.cleanup.models import (
     CLEANUP_SUGGESTION_STATUSES,
     cleanup_suggestion_view,
 )
-from tracer_agent.shared.agents.recipe.document import (
-    SEARCH_OUTBOX_BATCH_SIZE,
-    build_recipe_document,
-)
+from tracer_agent.shared.agents.recipe.document import build_recipe_document
+from tracer_agent.shared.agents.recipe.index import search_outbox_batch_size
 from tracer_agent.shared.agents.recipe.models import (
     RECIPE_NOT_ACTIVE,
     RECIPE_NOT_CANDIDATE,
@@ -156,4 +154,4 @@ class Test색인_선언과_코드가_같은_값을_쓴다:
     def test_배출_한_번이_읽는_행의_수가_계약과_같다(self) -> None:
         drain = next(one for one in _SEARCH_INDEX["pipeline"]["stages"] if one["name"] == "drain")
 
-        assert drain["batchSize"] == SEARCH_OUTBOX_BATCH_SIZE
+        assert drain["batchSize"] == search_outbox_batch_size()

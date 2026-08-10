@@ -1,13 +1,11 @@
-"""recipes 색인 문서의 유일한 정의와 배출 한 번이 읽는 행의 수를 소유한다."""
+"""recipes 색인 문서 본문의 유일한 정의를 소유한다."""
 
 from __future__ import annotations
 
+from ..shared.axis import AGENT_BACKEND
 from ..shared.instant import iso
 from ..shared.json_view import JsonObject, JsonValue
 from .models import Recipe
-
-# 배출 한 번이 읽는 아웃박스 행의 수이며 계약의 batchSize 와 같다.
-SEARCH_OUTBOX_BATCH_SIZE = 100
 
 
 def touched_file_paths(touched_files: list[JsonValue]) -> list[str]:
@@ -25,6 +23,8 @@ def touched_file_paths(touched_files: list[JsonValue]) -> list[str]:
 def build_recipe_document(recipe: Recipe) -> JsonObject:
     """색인에 실리는 칸의 정본이며 계약의 wire/search.index.json 이 칸을 갖는다."""
     return {
+        "recipeId": recipe.id,
+        "backend": AGENT_BACKEND,
         "userId": recipe.user_id,
         "title": recipe.title,
         "intent": recipe.intent,

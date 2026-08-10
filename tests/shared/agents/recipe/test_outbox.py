@@ -7,14 +7,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.support.recipes import RecordingSearchIndex
-from tracer_agent.shared.agents.recipe.index import recipes_index_alias
+from tests.support.recipes import OTHER_AXIS, RecordingSearchIndex, seed_outbox
+from tracer_agent.shared.agents.recipe.index import (
+    recipe_document_id,
+    recipes_index_alias,
+    search_outbox_batch_size,
+)
 from tracer_agent.shared.agents.recipe.outbox import (
     INDEX_WRITE_FAILED,
     SearchOutboxDrain,
 )
 from tracer_agent.shared.agents.recipe.store import RecipeStore, SearchOutboxStore
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -83,9 +88,44 @@ async def test_원장에_있는_레시피는_색인에_문서를_덮어쓴다(st
 
     assert drained == 1
     alias, document_id, document = index.indexed[0]
-    assert (alias, document_id) == (recipes_index_alias(), "r1")
+    assert (alias, document_id) == (recipes_index_alias(), recipe_document_id("r1"))
     assert document["touchedFiles"] == ["docs/db.md"]
     assert store.rows("search_outbox") == []
+
+
+async def test_적재한_행에_자기_축을_적는다(store: SqliteLedgerSql) -> None:
+    await _enqueue(store, "o1", "r1")
+
+    assert store.rows("search_outbox")[0]["backend"] == AGENT_BACKEND
+
+
+async def test_상대_축이_적재한_행은_가져가지_않는다(store: SqliteLedgerSql) -> None:
+    # 축을 거르지 않으면 이 축이 상대 축의 행을 지워 상대 축의 색인 문서가 갱신되지 않는다.
+    _seed_recipe(store, "r1")
+    seed_outbox(store, "o-ts", "r1", backend=OTHER_AXIS)
+    index = RecordingSearchIndex()
+
+    drained = await SearchOutboxDrain(OpenDrain(store), index).run_once()
+
+    assert drained == 0
+    assert index.indexed == []
+    assert [row["id"] for row in store.rows("search_outbox")] == ["o-ts"]
+
+
+async def test_배출_한_번이_계약이_적은_수를_넘겨_읽지_않는다(store: SqliteLedgerSql) -> None:
+    limit = search_outbox_batch_size()
+    for index in range(limit + 1):
+        _seed_recipe(store, f"r{index}")
+        seed_outbox(
+            store,
+            f"o{index}",
+            f"r{index}",
+            created_at=f"2026-01-01T00:{index // 60:02d}:{index % 60:02d}.000000",
+        )
+
+    drained = await SearchOutboxDrain(OpenDrain(store), RecordingSearchIndex()).run_once()
+
+    assert drained == limit
 
 
 async def test_조회에_잡히지_않는_대상은_색인에서_지운다(store: SqliteLedgerSql) -> None:
@@ -95,14 +135,14 @@ async def test_조회에_잡히지_않는_대상은_색인에서_지운다(store
 
     await SearchOutboxDrain(OpenDrain(store), index).run_once()
 
-    assert index.deleted == [(recipes_index_alias(), "r1")]
+    assert index.deleted == [(recipes_index_alias(), recipe_document_id("r1"))]
     assert store.rows("search_outbox") == []
 
 
 async def test_색인이_받지_않으면_시도를_올리고_행을_남긴다(store: SqliteLedgerSql) -> None:
     _seed_recipe(store, "r1")
     await _enqueue(store, "o1", "r1")
-    index = RecordingSearchIndex(fail_on={"r1"})
+    index = RecordingSearchIndex(fail_on={recipe_document_id("r1")})
 
     drained = await SearchOutboxDrain(OpenDrain(store), index).run_once()
 
@@ -115,7 +155,7 @@ async def test_색인이_받지_않으면_시도를_올리고_행을_남긴다(s
 async def test_실패한_행은_다음_주기가_다시_가져간다(store: SqliteLedgerSql) -> None:
     _seed_recipe(store, "r1")
     await _enqueue(store, "o1", "r1")
-    index = RecordingSearchIndex(fail_on={"r1"})
+    index = RecordingSearchIndex(fail_on={recipe_document_id("r1")})
     drain = SearchOutboxDrain(OpenDrain(store), index)
     await drain.run_once()
 
@@ -132,7 +172,9 @@ async def test_한_행이_실패해도_같은_배치의_다른_행은_배출한�
     await _enqueue(store, "o1", "r1")
     await _enqueue(store, "o2", "r2")
 
-    drained = await SearchOutboxDrain(OpenDrain(store), RecordingSearchIndex(fail_on={"r1"})).run_once()
+    drained = await SearchOutboxDrain(
+        OpenDrain(store), RecordingSearchIndex(fail_on={recipe_document_id("r1")})
+    ).run_once()
 
     assert drained == 1
     assert [row["id"] for row in store.rows("search_outbox")] == ["o1"]

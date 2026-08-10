@@ -25,6 +25,8 @@ COVERED_BY: dict[str, str | None] = {
     "ai_job_steps_job_attempt_seq": _REFUSE,
     "cleanup_pending_task_kind_unique": _REFUSE,
     "search_outbox_target_check": _REFUSE,
+    "recipe_applications_backend_check": _REFUSE,
+    "search_outbox_backend_check": _REFUSE,
 }
 
 

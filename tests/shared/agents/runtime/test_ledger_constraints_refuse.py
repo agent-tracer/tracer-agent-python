@@ -233,11 +233,11 @@ class Test한_태스크와_한_종류에_대기_중인_제안은_하나:
         _suggestion(raw, "s2", "pending", task_id="t2")
 
 
-def _outbox(raw: Any, row_id: str, target: str) -> None:
+def _outbox(raw: Any, row_id: str, target: str, backend: str = "python") -> None:
     raw.execute(
-        "INSERT INTO search_outbox (id, user_id, target, target_id, attempts, created_at)"
-        " VALUES (?, 'u1', ?, 'recipe-1', 0, ?)",
-        (row_id, target, NOW),
+        "INSERT INTO search_outbox (id, backend, user_id, target, target_id, attempts, created_at)"
+        " VALUES (?, ?, 'u1', ?, 'recipe-1', 0, ?)",
+        (row_id, backend, target, NOW),
     )
 
 
@@ -251,3 +251,42 @@ class Test에이전트_원장이_소유한_색인_대상은_레시피_하나:
 
     def test_레시피_대상의_적재는_받는다(self, raw: Any) -> None:
         _outbox(raw, "o2", "recipe")
+
+
+def _application(raw: Any, row_id: str, backend: str, task_id: str = "t1") -> None:
+    raw.execute(
+        "INSERT INTO recipe_applications"
+        " (id, backend, user_id, recipe_id, task_id, injected_via, created_at)"
+        " VALUES (?, ?, 'u1', 'recipe-1', ?, 'pull', ?)",
+        (row_id, backend, task_id, NOW),
+    )
+
+
+class Test배경_작업의_행은_축을_갖는다:
+    def test_계약이_적지_않은_축의_적용_이력을_거절한다(self, raw: Any) -> None:
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _application(raw, "a1", "rust")
+
+        assert "recipe_applications_backend_check" in str(refused.value)
+
+    def test_계약이_적지_않은_축의_적재를_거절한다(self, raw: Any) -> None:
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _outbox(raw, "o3", "recipe", backend="rust")
+
+        assert "search_outbox_backend_check" in str(refused.value)
+
+    def test_두_축이_같은_식별자의_적용_이력을_함께_갖는다(self, raw: Any) -> None:
+        # 사건이 식별자를 싣고 오므로 기본 키가 축을 앞에 두지 않으면 뒤의 축이 앞의 행을 덮는다.
+        _application(raw, "a1", "ts")
+
+        _application(raw, "a1", "python")
+
+        assert len(raw.execute("SELECT id FROM recipe_applications").fetchall()) == 2
+
+    def test_같은_축의_같은_식별자를_두_번_적으면_거절한다(self, raw: Any) -> None:
+        _application(raw, "a1", "python")
+
+        with pytest.raises(sqlite3.IntegrityError) as refused:
+            _application(raw, "a1", "python", task_id="t2")
+
+        assert "recipe_applications.id" in str(refused.value)

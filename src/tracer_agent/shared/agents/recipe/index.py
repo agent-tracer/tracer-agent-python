@@ -1,4 +1,4 @@
-"""recipes 색인의 별칭과 물리 이름과 설정과 매핑을 계약에서 읽는다."""
+"""recipes 색인과 그 색인까지 가는 배출 단계의 값을 계약에서 읽는다."""
 
 from __future__ import annotations
 
@@ -7,16 +7,17 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Protocol
 
+from ..shared.axis import AGENT_BACKEND
 from ..shared.contract_root import CONTRACT_ROOT
-from ..shared.json_view import JsonObject, JsonValue, as_object
+from ..shared.json_view import JsonObject, as_object
 
 _SEARCH_INDEX_PATH = CONTRACT_ROOT / "wire" / "search.index.json"
 
-# 계약이 사람에게 뜻을 적는 칸이며 색인은 이 이름의 칸을 설정으로 받지 않는다.
-PROSE_KEY = "meaning"
+# 계약이 색인 반영 단계 가운데 아웃박스를 소진하는 단계에 붙인 이름이다.
+_DRAIN_STAGE = "drain"
 
-# 색인 매핑이 칸 하나에서 받는 선언이며 계약의 나머지 칸은 사람이 읽는 근거다.
-MAPPING_KEYS = ("type", "analyzer")
+# 계약이 배출 주기를 밀리초로 적고 이 구현은 초로 기다린다.
+_MILLIS_PER_SECOND = 1000.0
 
 
 @dataclass(frozen=True)
@@ -38,10 +39,19 @@ class SearchIndexAdminPort(Protocol):
 
 
 @lru_cache(maxsize=1)
+def _declared() -> dict[str, Any]:
+    payload: dict[str, Any] = json.loads(_SEARCH_INDEX_PATH.read_text(encoding="utf-8"))
+    return payload
+
+
 def _recipes() -> dict[str, Any]:
-    declared = json.loads(_SEARCH_INDEX_PATH.read_text(encoding="utf-8"))
-    index: dict[str, Any] = declared["indices"]["recipes"]
+    index: dict[str, Any] = _declared()["indices"]["recipes"]
     return index
+
+
+def _drain() -> dict[str, Any]:
+    stages: list[dict[str, Any]] = _declared()["pipeline"]["stages"]
+    return next(stage for stage in stages if stage["name"] == _DRAIN_STAGE)
 
 
 def recipes_index_alias() -> str:
@@ -55,23 +65,53 @@ def recipes_index_definition() -> SearchIndexDefinition:
     return SearchIndexDefinition(
         alias=str(declared["alias"]),
         index=str(declared["index"]),
-        settings=as_object(_without_prose(declared["settings"])),
+        settings=as_object(declared["settings"]),
         mappings={"properties": _properties(declared["document"]["fields"])},
     )
 
 
+def recipe_document_id(recipe_id: str) -> str:
+    """색인 문서 하나를 가리키는 식별자이며 축과 레시피 식별자를 계약의 template 으로 잇는다."""
+    declared = _recipes()["documentId"]
+    with_axis = str(declared["template"]).replace(str(declared["placeholder"]), AGENT_BACKEND)
+    return with_axis.format(recipeId=recipe_id)
+
+
+def recipes_index_bootstrap_steps() -> tuple[str, ...]:
+    """색인을 세우는 절차이며 두 축이 같은 순간에 세워도 한쪽이 실패하지 않게 한다."""
+    return tuple(str(step) for step in _recipes()["bootstrap"]["steps"])
+
+
+def projector_startup_order() -> tuple[str, ...]:
+    """배경 작업을 시작하는 순서이며 색인이 선 뒤에 문서를 쓰게 한다."""
+    return tuple(str(step) for step in _recipes()["bootstrap"]["startupOrder"])
+
+
+def search_outbox_batch_size() -> int:
+    """배출 한 번이 읽는 아웃박스 행의 수다."""
+    return int(_drain()["batchSize"])
+
+
+def search_outbox_drain_interval_s() -> float:
+    """배출을 다시 부르기까지 기다리는 시간이다."""
+    return float(_drain()["intervalMs"]) / _MILLIS_PER_SECOND
+
+
+def search_outbox_drain_lock_key() -> int:
+    """배출기가 잡는 자문 잠금 열쇠이며 축마다 다른 값이라 두 축이 서로를 기다리지 않는다."""
+    declared = _drain()["advisoryLock"]
+    return int(declared["base"]) + int(declared["axisOffset"][AGENT_BACKEND])
+
+
+def _mapping_keys() -> tuple[str, ...]:
+    """색인 매핑이 칸 하나에서 받는 선언의 이름이며 나머지는 사람이 읽는 산문이다."""
+    return tuple(str(key) for key in _declared()["bodyRule"]["mappingKeys"])
+
+
 def _properties(fields: dict[str, Any]) -> JsonObject:
-    return {name: _property(declared) for name, declared in fields.items()}
+    keys = _mapping_keys()
+    return {name: _property(declared, keys) for name, declared in fields.items()}
 
 
-def _property(declared: dict[str, Any]) -> JsonObject:
-    return {key: declared[key] for key in MAPPING_KEYS if key in declared}
-
-
-def _without_prose(value: JsonValue) -> JsonValue:
-    """계약이 뜻을 적은 칸을 제외한 나머지가 색인이 받는 설정이다."""
-    if isinstance(value, dict):
-        return {key: _without_prose(item) for key, item in value.items() if key != PROSE_KEY}
-    if isinstance(value, list):
-        return [_without_prose(item) for item in value]
-    return value
+def _property(declared: dict[str, Any], keys: tuple[str, ...]) -> JsonObject:
+    return {key: declared[key] for key in keys if key in declared}

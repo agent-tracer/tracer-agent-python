@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from tests.support.contract import conformance_case
+from tests.support.contract import conformance_case, wire_contract
+from tests.support.recipes import OTHER_AXIS, seed_application
 from tracer_agent.shared.agents.recipe.projection import (
     RECIPE_INJECTED_EVENT_KIND,
     RecipeProjection,
@@ -19,8 +20,10 @@ from tracer_agent.shared.agents.recipe.topic import (
     ledger_events_topic,
 )
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 _CASE = conformance_case("recipe.projection")
+_PROJECTOR_GROUPS = wire_contract("topics.json")["ledgerEvents"]["consumerGroups"]["agentProjector"]
 
 OCCURRED_AT = "2026-01-01T00:00:00.000Z"
 
@@ -54,8 +57,21 @@ async def _project(store: SqliteLedgerSql, **overrides: Any) -> None:
 
 def test_토픽과_소비자_그룹과_종류를_계약에서_읽는다() -> None:
     assert ledger_events_topic() == _CASE["source"]["topic"]
-    assert ledger_events_consumer_group() == _CASE["source"]["consumerGroup"]
+    assert ledger_events_consumer_group() == _CASE["source"]["consumerGroupByAxis"][AGENT_BACKEND]
     assert _CASE["selection"]["kind"] == RECIPE_INJECTED_EVENT_KIND
+
+
+def test_소비자_그룹의_이름이_상대_축의_이름과_다르다() -> None:
+    # 두 축이 한 그룹을 나눠 쓰면 한 사건을 한 축만 투영해 비교할 것이 남지 않는다.
+    assert ledger_events_consumer_group() != _PROJECTOR_GROUPS["byAxis"][OTHER_AXIS]
+
+
+def test_소비자_그룹의_이름을_계약의_자리표시자에서_만든다() -> None:
+    # 완성된 이름을 소스가 적으면 계약이 이름을 바꿔도 이 축만 옛 이름을 계속 쓴다.
+    placeholder = _PROJECTOR_GROUPS["placeholder"]
+
+    assert placeholder in _PROJECTOR_GROUPS["template"]
+    assert ledger_events_consumer_group() == _PROJECTOR_GROUPS["template"].replace(placeholder, AGENT_BACKEND)
 
 
 async def test_사건의_칸이_계약이_적은_열로_간다(store: SqliteLedgerSql) -> None:
@@ -107,6 +123,32 @@ async def test_같은_사건이_다시_와도_행이_늘지_않는다(store: Sql
     await _project(store)
 
     assert len(store.rows("recipe_applications")) == 1
+
+
+async def test_투영이_만든_행에_자기_축을_적는다(store: SqliteLedgerSql) -> None:
+    await _project(store)
+
+    assert store.rows("recipe_applications")[0]["backend"] == AGENT_BACKEND
+
+
+async def test_상대_축이_먼저_만든_행이_이_축의_행을_막지_않는다(store: SqliteLedgerSql) -> None:
+    # projectionAlreadyOpen 이 축을 거르지 않으면 먼저 투영한 축만 이력을 갖는다.
+    seed_application(store, "a-ts", "r1", backend=OTHER_AXIS, user_id="user-1")
+
+    await _project(store)
+
+    assert sorted(row["backend"] for row in store.rows("recipe_applications")) == sorted(
+        [OTHER_AXIS, AGENT_BACKEND]
+    )
+
+
+async def test_두_축이_같은_식별자를_받아도_앞선_축의_행이_남는다(store: SqliteLedgerSql) -> None:
+    # 사건이 식별자를 싣고 오므로 기본 키가 축을 앞에 두지 않으면 뒤의 축이 앞의 행을 덮는다.
+    seed_application(store, "a1", "r1", backend=OTHER_AXIS, user_id="user-1", task_id="task-9")
+
+    await _project(store)
+
+    assert len(store.rows("recipe_applications")) == 2
 
 
 async def test_같은_태스크의_다른_레시피는_행을_따로_만든다(store: SqliteLedgerSql) -> None:

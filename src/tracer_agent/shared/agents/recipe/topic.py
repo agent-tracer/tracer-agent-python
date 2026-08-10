@@ -6,6 +6,7 @@ import json
 from functools import lru_cache
 from typing import Any
 
+from ..shared.axis import AGENT_BACKEND
 from ..shared.contract_root import CONTRACT_ROOT
 
 _TOPICS_PATH = CONTRACT_ROOT / "wire" / "topics.json"
@@ -24,5 +25,6 @@ def ledger_events_topic() -> str:
 
 
 def ledger_events_consumer_group() -> str:
-    """추적 프로젝터와 그룹을 나누지 않으면 한쪽이 읽은 메시지를 다른 쪽이 받지 못한다."""
-    return str(_ledger_events()["consumerGroups"]["agentProjector"])
+    """이 축만 쓰는 소비자 그룹의 이름이며 계약의 template 에 자기 축을 넣어 만든다."""
+    declared = _ledger_events()["consumerGroups"]["agentProjector"]
+    return str(declared["template"]).replace(str(declared["placeholder"]), AGENT_BACKEND)

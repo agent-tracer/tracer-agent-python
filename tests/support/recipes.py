@@ -15,14 +15,20 @@ from tracer_agent.shared.agents.recipe.models import (
     RECIPE_EDITOR_AGENT,
     RECIPE_INJECTED_VIA_PULL,
     RECIPE_STATUS_CANDIDATE,
+    SEARCH_OUTBOX_TARGET_RECIPE,
     Recipe,
     RecipeApplication,
 )
 from tracer_agent.shared.agents.recipe.search import RecipeSearchHit
+from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND, declared_axes
 from tracer_agent.shared.agents.shared.json_view import JsonObject
 from tracer_agent.shared.agents.shared.tracer_window import UpstreamRejected
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
+# 이 구현이 아닌 축이며 두 축이 한 원장을 함께 보는 배치를 시험이 이 값으로 세운다.
+OTHER_AXIS = next(iter(declared_axes() - {AGENT_BACKEND}))
 
 
 def recipe_row(**overrides: Any) -> Recipe:
@@ -60,6 +66,61 @@ def application_row(**overrides: Any) -> RecipeApplication:
     for name, value in overrides.items():
         setattr(row, name, value)
     return row
+
+
+def seed_application(
+    store: SqliteLedgerSql,
+    row_id: str,
+    recipe_id: str,
+    *,
+    backend: str = AGENT_BACKEND,
+    user_id: str = "local",
+    task_id: str = "task-1",
+    outcome: str | None = None,
+    created_at: str = "2026-01-01T00:00:00.000000",
+) -> None:
+    """창구를 지나지 않고 적용 이력 한 행을 원장 대역에 적는다."""
+    store.seed(
+        "recipe_applications",
+        [
+            {
+                "id": row_id,
+                "backend": backend,
+                "user_id": user_id,
+                "recipe_id": recipe_id,
+                "task_id": task_id,
+                "injected_via": RECIPE_INJECTED_VIA_PULL,
+                "outcome": outcome,
+                "created_at": created_at,
+            }
+        ],
+    )
+
+
+def seed_outbox(
+    store: SqliteLedgerSql,
+    row_id: str,
+    recipe_id: str,
+    *,
+    backend: str = AGENT_BACKEND,
+    user_id: str = "user-1",
+    created_at: str = "2026-01-01T00:00:00.000000",
+) -> None:
+    """창구를 지나지 않고 색인 반영 요청 한 행을 원장 대역에 적는다."""
+    store.seed(
+        "search_outbox",
+        [
+            {
+                "id": row_id,
+                "backend": backend,
+                "user_id": user_id,
+                "target": SEARCH_OUTBOX_TARGET_RECIPE,
+                "target_id": recipe_id,
+                "attempts": 0,
+                "created_at": created_at,
+            }
+        ],
+    )
 
 
 def suggestion_row(**overrides: Any) -> CleanupSuggestion:

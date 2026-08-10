@@ -7,9 +7,15 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.support.recipes import RecordingSearch, RecordingTaskReader
+from tests.support.recipes import (
+    OTHER_AXIS,
+    RecordingSearch,
+    RecordingTaskReader,
+    seed_application,
+)
 from tracer_agent.shared.agents.recipe.search import RecipeSearchHit
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 NOW = "2026-01-01T00:00:00.000000"
 USER = "local"
@@ -48,21 +54,15 @@ def _seed(
     )
 
 
-def _application(store: SqliteLedgerSql, row_id: str, recipe_id: str, outcome: str | None) -> None:
-    store.seed(
-        "recipe_applications",
-        [
-            {
-                "id": row_id,
-                "user_id": USER,
-                "recipe_id": recipe_id,
-                "task_id": "task-1",
-                "injected_via": "pull",
-                "outcome": outcome,
-                "created_at": NOW,
-            }
-        ],
-    )
+def _application(
+    store: SqliteLedgerSql,
+    row_id: str,
+    recipe_id: str,
+    outcome: str | None,
+    *,
+    backend: str = AGENT_BACKEND,
+) -> None:
+    seed_application(store, row_id, recipe_id, backend=backend, user_id=USER, outcome=outcome, created_at=NOW)
 
 
 class Test목록:
@@ -99,6 +99,18 @@ class Test목록:
         stats = client.get("/api/agent/recipes").json()["data"]["items"][0]["stats"]
 
         assert stats == {"applicationCount": 3, "decidedCount": 2, "successRate": 0.5}
+
+    def test_통계가_상대_축이_만든_적용_이력을_세지_않는다(
+        self, client: TestClient, store: SqliteLedgerSql
+    ) -> None:
+        # listStats 가 축을 거르지 않으면 목록의 모든 레시피에서 통계가 두 축의 합이 된다.
+        _seed(store, "r1", "active")
+        _application(store, "a1", "r1", "completed")
+        _application(store, "a-ts", "r1", "abandoned", backend=OTHER_AXIS)
+
+        stats = client.get("/api/agent/recipes").json()["data"]["items"][0]["stats"]
+
+        assert stats == {"applicationCount": 1, "decidedCount": 1, "successRate": 1.0}
 
     def test_인용된_태스크를_한_번만_물어_제목_표를_채운다(
         self, client: TestClient, store: SqliteLedgerSql, recipe_tasks: RecordingTaskReader
@@ -183,6 +195,19 @@ class Test단건_조회:
         assert body["recipe"]["id"] == "r1"
         assert body["stats"]["decidedCount"] == 1
         assert [one["id"] for one in body["applications"]] == ["a1"]
+
+    def test_상대_축이_만든_적용_이력은_목록과_통계에서_빠진다(
+        self, client: TestClient, store: SqliteLedgerSql
+    ) -> None:
+        # detailApplications 와 detailStats 가 축을 거르지 않으면 한 태스크의 행이 두 번 실린다.
+        _seed(store, "r1", "active")
+        _application(store, "a1", "r1", "completed")
+        _application(store, "a-ts", "r1", "abandoned", backend=OTHER_AXIS)
+
+        body = client.get("/api/agent/recipes/r1").json()["data"]
+
+        assert [one["id"] for one in body["applications"]] == ["a1"]
+        assert body["stats"] == {"applicationCount": 1, "decidedCount": 1, "successRate": 1.0}
 
     def test_남의_레시피는_없는_것과_같은_거절을_낸다(
         self, client: TestClient, store: SqliteLedgerSql
@@ -365,6 +390,30 @@ class Test자기보고:
         row = store.rows("recipe_applications")[0]
         assert row["anchor_event_id"] is None
         assert row["anchor_seq"] is None
+
+    def test_상대_축의_열린_이력에는_결과를_적지_않는다(
+        self, client: TestClient, store: SqliteLedgerSql
+    ) -> None:
+        # outcomeOpenApplication 이 축을 거르지 않으면 상대 축의 행에 결과를 적는다.
+        _seed(store, "r1", "active")
+        _application(store, "a-ts", "r1", None, backend=OTHER_AXIS)
+
+        body = client.post(
+            "/api/agent/recipes/r1/outcome", json={"taskId": "task-1", "outcome": "completed"}
+        ).json()["data"]
+
+        assert body["application"]["injectedVia"] == "manual"
+        assert {row["backend"]: row["outcome"] for row in store.rows("recipe_applications")} == {
+            OTHER_AXIS: None,
+            AGENT_BACKEND: "completed",
+        }
+
+    def test_자기보고가_만든_행에_자기_축을_적는다(self, client: TestClient, store: SqliteLedgerSql) -> None:
+        _seed(store, "r1", "active")
+
+        client.post("/api/agent/recipes/r1/outcome", json={"taskId": "task-9", "outcome": "completed"})
+
+        assert store.rows("recipe_applications")[0]["backend"] == AGENT_BACKEND
 
     def test_같은_태스크에_다시_보고하면_앞의_결과를_덮는다(
         self, client: TestClient, store: SqliteLedgerSql

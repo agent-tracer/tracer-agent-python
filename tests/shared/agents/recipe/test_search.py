@@ -19,6 +19,7 @@ from tracer_agent.shared.agents.recipe.search import (
     OpenSearchRecipeSearch,
     apply_relative_cutoff,
 )
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
 _QUERY = wire_contract("search.index.json")["indices"]["recipes"]["query"]
 
@@ -52,7 +53,7 @@ def test_점수가_없으면_아무것도_버리지_않는다() -> None:
     assert apply_relative_cutoff(hits) == hits
 
 
-async def test_채택된_자기_레시피만_대상으로_질의한다() -> None:
+async def test_이_축이_색인한_채택된_자기_레시피만_대상으로_질의한다() -> None:
     def handle(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"hits": {"hits": []}})
 
@@ -65,11 +66,13 @@ async def test_채택된_자기_레시피만_대상으로_질의한다() -> None
     assert body["size"] == 5
     assert body["query"]["bool"]["filter"] == [
         {"term": {"userId": "user-1"}},
+        {"term": {"backend": AGENT_BACKEND}},
         {"term": {"status": "active"}},
     ]
 
 
 async def test_적중을_얇은_모양으로_옮긴다() -> None:
+    # 문서 식별자에 축이 붙었으므로 레시피의 식별자는 문서의 recipeId 칸에서 온다.
     def handle(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -77,9 +80,10 @@ async def test_적중을_얇은_모양으로_옮긴다() -> None:
                 "hits": {
                     "hits": [
                         {
-                            "_id": "r1",
+                            "_id": f"{AGENT_BACKEND}:r1",
                             "_score": 2.0,
                             "_source": {
+                                "recipeId": "r1",
                                 "title": "제목",
                                 "intent": "의도",
                                 "description": "설명",

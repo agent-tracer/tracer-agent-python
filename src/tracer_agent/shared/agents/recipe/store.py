@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..runtime.ledger import LedgerSql, SqlRow
+from ..shared.axis import AGENT_BACKEND
 from ..shared.json_view import JsonValue
 from .models import SEARCH_OUTBOX_TARGET_RECIPE, Recipe, RecipeApplication
 
@@ -51,17 +52,18 @@ ON CONFLICT (id) DO UPDATE SET
 
 _UPSERT_APPLICATION = """
 INSERT INTO recipe_applications (
-    id, user_id, recipe_id, task_id, injected_via, outcome, note, anchor_event_id, anchor_seq, created_at
+    id, backend, user_id, recipe_id, task_id, injected_via, outcome, note,
+    anchor_event_id, anchor_seq, created_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (id) DO UPDATE SET
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (backend, id) DO UPDATE SET
     injected_via = EXCLUDED.injected_via, outcome = EXCLUDED.outcome, note = EXCLUDED.note,
     anchor_event_id = EXCLUDED.anchor_event_id, anchor_seq = EXCLUDED.anchor_seq
 """
 
 _INSERT_OUTBOX = """
-INSERT INTO search_outbox (id, user_id, target, target_id, attempts, last_error, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO search_outbox (id, backend, user_id, target, target_id, attempts, last_error, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO NOTHING
 """
 
@@ -82,19 +84,20 @@ SELECT id FROM recipes WHERE user_id = $1 AND source_job_id = $2
 
 _SELECT_APPLICATIONS_BY_RECIPE = f"""
 SELECT {_APPLICATION_COLUMNS} FROM recipe_applications
- WHERE recipe_id = $1
+ WHERE recipe_id = $1 AND backend = $2
  ORDER BY created_at DESC
 """
 
 _SELECT_APPLICATIONS_BY_TASK = f"""
 SELECT {_APPLICATION_COLUMNS} FROM recipe_applications
- WHERE task_id = $1
+ WHERE task_id = $1 AND backend = $2
 """
 
 _SELECT_OUTBOX_BATCH = f"""
 SELECT {_OUTBOX_COLUMNS} FROM search_outbox
+ WHERE backend = $1
  ORDER BY created_at ASC
- LIMIT $1
+ LIMIT $2
 """
 
 _DELETE_OUTBOX = "DELETE FROM search_outbox WHERE id = $1 RETURNING id"
@@ -223,26 +226,27 @@ class RecipeStore:
 
 
 class RecipeApplicationStore:
-    """레시피 적용 이력의 조회와 저장을 제공한다."""
+    """레시피 적용 이력을 자기 축의 행으로만 읽고 자기 축의 행으로만 적는다."""
 
     def __init__(self, sql: LedgerSql) -> None:
         self._sql = sql
 
     async def find_by_recipe(self, recipe_id: str) -> list[RecipeApplication]:
         """그 레시피의 적용 이력을 만든 시각의 내림차순으로 읽는다."""
-        rows = await self._sql.fetch(_SELECT_APPLICATIONS_BY_RECIPE, recipe_id)
+        rows = await self._sql.fetch(_SELECT_APPLICATIONS_BY_RECIPE, recipe_id, AGENT_BACKEND)
         return [to_application(row) for row in rows]
 
     async def find_by_task(self, task_id: str) -> list[RecipeApplication]:
         """그 태스크에 남은 적용 이력을 읽는다."""
-        rows = await self._sql.fetch(_SELECT_APPLICATIONS_BY_TASK, task_id)
+        rows = await self._sql.fetch(_SELECT_APPLICATIONS_BY_TASK, task_id, AGENT_BACKEND)
         return [to_application(row) for row in rows]
 
     async def upsert(self, application: RecipeApplication) -> None:
-        """적용 이력 한 행을 적거나 같은 식별자의 행을 덮는다."""
+        """적용 이력 한 행을 적거나 같은 축의 같은 식별자를 가진 행을 덮는다."""
         await self._sql.fetch(
             _UPSERT_APPLICATION,
             application.id,
+            AGENT_BACKEND,
             application.user_id,
             application.recipe_id,
             application.task_id,
@@ -256,7 +260,7 @@ class RecipeApplicationStore:
 
 
 class SearchOutboxStore:
-    """색인 반영 요청을 적재하고 배출기가 읽고 지우는 자리를 갖는다."""
+    """색인 반영 요청을 자기 축의 행으로 적재하고 자기 축의 행만 배출에 낸다."""
 
     def __init__(self, sql: LedgerSql) -> None:
         self._sql = sql
@@ -264,17 +268,25 @@ class SearchOutboxStore:
     async def enqueue(self, row_id: str, user_id: str, recipe_id: str, now: datetime) -> None:
         """레시피 쓰기와 같은 커밋에 색인 반영 요청 한 줄을 남긴다."""
         await self._sql.fetch(
-            _INSERT_OUTBOX, row_id, user_id, SEARCH_OUTBOX_TARGET_RECIPE, recipe_id, 0, None, now
+            _INSERT_OUTBOX,
+            row_id,
+            AGENT_BACKEND,
+            user_id,
+            SEARCH_OUTBOX_TARGET_RECIPE,
+            recipe_id,
+            0,
+            None,
+            now,
         )
 
     async def find_batch(self, limit: int) -> list[SqlRow]:
         """오래된 것부터 배출해 색인이 원장의 순서를 따라가게 한다."""
-        return await self._sql.fetch(_SELECT_OUTBOX_BATCH, limit)
+        return await self._sql.fetch(_SELECT_OUTBOX_BATCH, AGENT_BACKEND, limit)
 
     async def delete(self, row_id: str) -> None:
-        """색인에 반영한 행을 지운다."""
+        """자기가 읽은 행을 식별자로 지목하므로 축을 다시 거르지 않는다."""
         await self._sql.fetch(_DELETE_OUTBOX, row_id)
 
     async def mark_failed(self, row_id: str, attempts: int, error: str) -> None:
-        """실패한 행은 남겨 다음 주기가 다시 가져가며 사유를 적어 반복 실패를 관측하게 한다."""
+        """자기가 읽은 행에 사유를 적어 반복 실패를 관측하게 하며 축을 다시 거르지 않는다."""
         await self._sql.fetch(_MARK_OUTBOX_FAILED, row_id, attempts, error)

@@ -9,8 +9,11 @@ import httpx
 import pytest
 
 from tests.support.contract import wire_contract
+from tests.support.recipes import OTHER_AXIS
 from tracer_agent.shared.agents.recipe.index import (
+    recipe_document_id,
     recipes_index_alias,
+    recipes_index_bootstrap_steps,
     recipes_index_definition,
 )
 from tracer_agent.shared.agents.recipe.search import (
@@ -18,9 +21,13 @@ from tracer_agent.shared.agents.recipe.search import (
     OpenSearchIndexAdmin,
     OpenSearchRejected,
 )
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 
-_DECLARED = wire_contract("search.index.json")["indices"]["recipes"]
+_SEARCH_INDEX = wire_contract("search.index.json")
+_BODY_RULE = _SEARCH_INDEX["bodyRule"]
+_DECLARED = _SEARCH_INDEX["indices"]["recipes"]
 _ANALYSIS = _DECLARED["settings"]["analysis"]
+_DOCUMENT_ID = _DECLARED["documentId"]
 
 # 색인이 없다고 답하는 상태와 본문이며 OpenSearch 는 없는 자리에 이 상태를 낸다.
 _MISSING = (404, {"error": {"type": "index_not_found_exception"}})
@@ -72,22 +79,42 @@ class Test정의가_계약이_선언한_값과_같다:
             "tokenizer": _ANALYSIS["tokenizer"],
         }
 
-    def test_매핑의_칸과_종류와_분석기가_계약이_선언한_것과_같다(self) -> None:
+    def test_매핑이_계약의_mappingKeys_가_적은_칸만_싣는다(self) -> None:
         properties = recipes_index_definition().mappings["properties"]
         declared = _DECLARED["document"]["fields"]
 
         assert properties == {
-            name: {key: field[key] for key in ("type", "analyzer") if key in field}
+            name: {key: field[key] for key in _BODY_RULE["mappingKeys"] if key in field}
             for name, field in declared.items()
         }
 
-    def test_계약이_산문으로_적은_형식을_매핑에_싣지_않는다(self) -> None:
+    def test_계약이_산문으로_적은_이름을_매핑에_싣지_않는다(self) -> None:
+        # 계약이 산문의 이름을 늘려도 매핑이 그 이름을 색인에 보내면 색인이 요청을 거절한다.
         properties = recipes_index_definition().mappings["properties"]
 
-        assert properties["updatedAt"] == {"type": "date"}
+        assert not {key for field in properties.values() for key in field} & set(_BODY_RULE["proseKeys"])
+
+
+class Test문서_식별자가_축을_담는다:
+    def test_계약의_template_로_축과_레시피_식별자를_잇는다(self) -> None:
+        expected = _DOCUMENT_ID["template"].replace(_DOCUMENT_ID["placeholder"], AGENT_BACKEND)
+
+        assert recipe_document_id("r1") == expected.replace("{recipeId}", "r1")
+
+    def test_상대_축의_문서_식별자와_다르다(self) -> None:
+        # 식별자가 레시피의 식별자뿐이면 뒤에 쓴 축이 앞선 축의 문서를 덮는다.
+        assert recipe_document_id("r1") != _DOCUMENT_ID["template"].replace(
+            _DOCUMENT_ID["placeholder"], OTHER_AXIS
+        ).replace("{recipeId}", "r1")
 
 
 class Test색인이_없을_때만_세운다:
+    def test_계약이_적은_절차마다_그것을_지나는_시험이_있다(self) -> None:
+        # 계약이 절차를 늘리면 여기가 서서 그 절차를 지나는 자리가 필요하다는 것을 알린다.
+        exercised = 3
+
+        assert len(recipes_index_bootstrap_steps()) == exercised
+
     async def test_색인이_없으면_계약이_정한_본문으로_세우고_별칭을_건다(self) -> None:
         client, seen = _client(_routed())
         definition = recipes_index_definition()

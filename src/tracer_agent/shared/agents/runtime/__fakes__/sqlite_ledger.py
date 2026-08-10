@@ -268,7 +268,8 @@ CREATE TABLE recipes (
 );
 
 CREATE TABLE recipe_applications (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL,
+    backend TEXT NOT NULL,
     user_id TEXT NOT NULL,
     recipe_id TEXT NOT NULL,
     task_id TEXT NOT NULL,
@@ -277,7 +278,10 @@ CREATE TABLE recipe_applications (
     note TEXT,
     anchor_event_id TEXT,
     anchor_seq INTEGER,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- 사건이 실은 식별자를 두 축이 함께 받으므로 축을 앞에 두어야 뒤의 축이 앞의 행을 덮지 않는다.
+    PRIMARY KEY (backend, id),
+    CONSTRAINT recipe_applications_backend_check CHECK (backend IN ('ts', 'python'))
 );
 
 CREATE TABLE task_cleanup_suggestions (
@@ -301,13 +305,15 @@ CREATE UNIQUE INDEX cleanup_pending_task_kind_unique
 
 CREATE TABLE search_outbox (
     id TEXT PRIMARY KEY,
+    backend TEXT NOT NULL,
     user_id TEXT NOT NULL,
     target TEXT NOT NULL,
     target_id TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     created_at TEXT NOT NULL,
-    CHECK (target = 'recipe')
+    CHECK (target = 'recipe'),
+    CONSTRAINT search_outbox_backend_check CHECK (backend IN ('ts', 'python'))
 );
 """
 

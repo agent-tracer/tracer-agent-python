@@ -13,22 +13,28 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.support.chat_surface import SingleSql
+from tests.support.contract import wire_contract
+from tests.support.recipes import OTHER_AXIS
 from tracer_agent.projector import app as app_module
 from tracer_agent.projector.runtime import ProjectorJobs, ProjectorResources, build_projector
 from tracer_agent.shared.agents.recipe.consumer import LedgerEventConsumer
 from tracer_agent.shared.agents.recipe.index import (
     SearchIndexDefinition,
+    projector_startup_order,
     recipes_index_definition,
+    search_outbox_drain_interval_s,
+    search_outbox_drain_lock_key,
 )
-from tracer_agent.shared.agents.recipe.outbox import (
-    DRAIN_INTERVAL_S,
-    DRAIN_LOCK_KEY,
-    SearchOutboxDrainScheduler,
-)
+from tracer_agent.shared.agents.recipe.outbox import SearchOutboxDrainScheduler
 from tracer_agent.shared.agents.recipe.search import OpenSearchIndexAdmin
 from tracer_agent.shared.agents.runtime.__fakes__.sqlite_ledger import SqliteLedgerSql
 from tracer_agent.shared.agents.runtime.ledger import LedgerPoolProvider, PooledSql
+from tracer_agent.shared.agents.shared.axis import AGENT_BACKEND
 from tracer_agent.shared.config import Settings
+
+_DRAIN = next(
+    stage for stage in wire_contract("search.index.json")["pipeline"]["stages"] if stage["name"] == "drain"
+)
 
 
 @dataclass
@@ -54,6 +60,20 @@ class RecordingDrain:
         """배출이 불렸다고 기록하고 아무 행도 배출하지 않았다고 낸다."""
         self.order.append("drain")
         return 0
+
+
+@dataclass
+class RecordingScheduler:
+    """배출을 실행하지 않고 시작하라는 요청의 차례만 기록한다."""
+
+    order: list[str]
+
+    def start(self) -> None:
+        """배출기를 시작했다고 기록한다."""
+        self.order.append("drain")
+
+    async def stop(self) -> None:
+        """멈추라는 요청에 아무것도 하지 않는다."""
 
 
 @dataclass
@@ -105,6 +125,22 @@ class Test기동이_배경_작업_셋을_모두_맡는다:
         assert "consumer" in order
         assert "drain" in order
 
+    async def test_시작하는_차례가_계약이_적은_순서와_같다(self) -> None:
+        # 색인이 서기 전에 배출기가 문서를 쓰면 동적 매핑이 계약의 분석기를 대신한다.
+        order: list[str] = []
+        consumer = SilentKafkaConsumer(order)
+        jobs = ProjectorJobs(
+            index_admin=RecordingAdmin(order),
+            drain=RecordingScheduler(order),
+            ledger_events=LedgerEventConsumer("broker:0", SingleSql(SqliteLedgerSql()), lambda *_: consumer),
+        )
+
+        await jobs.start()
+        await jobs.stop()
+
+        assert order == ["index", "drain", "consumer"]
+        assert len(order) == len(projector_startup_order())
+
     async def test_멈추면_배출이_더_불리지_않는다(self) -> None:
         order: list[str] = []
         jobs, _ = _jobs(order)
@@ -135,12 +171,18 @@ class Test배선이_계약이_정한_협력자를_세운다:
         assert isinstance(jobs.ledger_events, LedgerEventConsumer)
 
 
-class Test두_축이_같은_값을_쓴다:
-    def test_배출의_자문_잠금_열쇠가_두_축에서_같다(self) -> None:
-        assert DRAIN_LOCK_KEY == 8_140_101
+class Test축마다_다른_잠금과_같은_주기를_쓴다:
+    def test_자문_잠금_열쇠를_계약의_base_와_axisOffset_에서_만든다(self) -> None:
+        lock = _DRAIN["advisoryLock"]
 
-    def test_배출_주기가_두_축에서_같다(self) -> None:
-        assert DRAIN_INTERVAL_S == 2.0
+        assert search_outbox_drain_lock_key() == lock["base"] + lock["axisOffset"][AGENT_BACKEND]
+
+    def test_자문_잠금_열쇠가_상대_축의_열쇠와_다르다(self) -> None:
+        # 두 축이 같은 열쇠를 얻으려 하면 한 축이 배출하는 동안 다른 축이 아무것도 하지 못한다.
+        assert search_outbox_drain_lock_key() != _DRAIN["advisoryLock"]["byAxis"][OTHER_AXIS]
+
+    def test_배출_주기가_계약이_적은_밀리초와_같다(self) -> None:
+        assert search_outbox_drain_interval_s() * 1000 == _DRAIN["intervalMs"]
 
 
 @pytest.fixture

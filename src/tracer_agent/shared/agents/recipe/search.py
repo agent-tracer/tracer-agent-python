@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
+from ..shared.axis import AGENT_BACKEND
 from ..shared.json_view import JsonObject, JsonValue, as_objects, text_list
 from .index import SearchIndexDefinition, recipes_index_alias
 from .models import RECIPE_STATUS_ACTIVE
@@ -92,7 +93,7 @@ class OpenSearchRejected(Exception):
 
 
 class OpenSearchRecipeSearch:
-    """채택된 자기 레시피만 대상으로 본문 유사도를 질의한다."""
+    """이 축이 색인한 채택된 자기 레시피만 대상으로 본문 유사도를 질의한다."""
 
     def __init__(self, client: OpenSearchClient) -> None:
         self._client = client
@@ -114,6 +115,7 @@ class OpenSearchRecipeSearch:
                     ],
                     "filter": [
                         {"term": {"userId": user_id}},
+                        {"term": {"backend": AGENT_BACKEND}},
                         {"term": {"status": RECIPE_STATUS_ACTIVE}},
                     ],
                 }
@@ -124,7 +126,7 @@ class OpenSearchRecipeSearch:
 
 
 class OpenSearchIndexWriter:
-    """배출기가 낸 색인 쓰기를 원장의 식별자를 문서 식별자로 삼아 수행한다."""
+    """배출기가 정한 문서 식별자로 색인 쓰기를 수행한다."""
 
     def __init__(self, client: OpenSearchClient) -> None:
         self._client = client
@@ -198,10 +200,11 @@ def _score(hit: JsonObject) -> float:
 
 
 def _to_hit(hit: JsonObject) -> RecipeSearchHit:
+    """문서 식별자에 축이 붙어 있으므로 레시피의 식별자는 문서의 칸에서 읽는다."""
     source = hit.get("_source")
     fields: JsonObject = source if isinstance(source, dict) else {}
     return RecipeSearchHit(
-        id=str(hit.get("_id", "")),
+        id=_string(fields.get("recipeId")),
         title=_string(fields.get("title")),
         intent=_string(fields.get("intent")),
         description=_string(fields.get("description")),

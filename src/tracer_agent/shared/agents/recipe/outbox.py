@@ -9,18 +9,18 @@ from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from ..runtime.ledger import LedgerSql, SqlSource
-from .document import SEARCH_OUTBOX_BATCH_SIZE, build_recipe_document
-from .index import recipes_index_alias
+from .document import build_recipe_document
+from .index import (
+    recipe_document_id,
+    recipes_index_alias,
+    search_outbox_batch_size,
+    search_outbox_drain_interval_s,
+    search_outbox_drain_lock_key,
+)
 from .search import SearchIndexWriterPort
 from .store import RecipeStore, SearchOutboxStore
 
 _log = logging.getLogger(__name__)
-
-# 색인 배출의 자문 잠금 열쇠이며 이 값을 바꾸면 옛 배출기와 새 배출기가 함께 실행된다.
-DRAIN_LOCK_KEY = 8_140_101
-
-# 배출 주기이며 실패한 행은 다음 주기가 다시 가져간다.
-DRAIN_INTERVAL_S = 2.0
 
 _TRY_LOCK = "SELECT pg_try_advisory_xact_lock($1) AS locked"
 
@@ -50,7 +50,7 @@ class LedgerSearchOutboxDrain:
 
 
 async def _locked(sql: LedgerSql) -> bool:
-    rows = await sql.fetch(_TRY_LOCK, DRAIN_LOCK_KEY)
+    rows = await sql.fetch(_TRY_LOCK, search_outbox_drain_lock_key())
     return bool(rows and rows[0]["locked"])
 
 
@@ -72,7 +72,7 @@ class SearchOutboxDrain:
         return drained
 
     async def _drain_batch(self, recipes: RecipeStore, outbox: SearchOutboxStore) -> int:
-        rows = await outbox.find_batch(SEARCH_OUTBOX_BATCH_SIZE)
+        rows = await outbox.find_batch(search_outbox_batch_size())
         applied = 0
         for row in rows:
             if await self._apply(str(row["target"]), str(row["target_id"]), int(row["attempts"]), recipes):
@@ -87,10 +87,10 @@ class SearchOutboxDrain:
         try:
             recipe = await recipes.find_by_id(target_id)
             if recipe is None:
-                await self._search_index.delete_document(recipes_index_alias(), target_id)
+                await self._search_index.delete_document(recipes_index_alias(), recipe_document_id(target_id))
                 return True
             await self._search_index.index_document(
-                recipes_index_alias(), recipe.id, build_recipe_document(recipe)
+                recipes_index_alias(), recipe_document_id(recipe.id), build_recipe_document(recipe)
             )
         except Exception as failed:
             _log.error(
@@ -107,9 +107,9 @@ class SearchOutboxDrain:
 class SearchOutboxDrainScheduler:
     """배출을 주기로 부르며 한 주기의 실패가 다음 주기를 멈추지 않게 한다."""
 
-    def __init__(self, drain: SearchOutboxDrain, interval_s: float = DRAIN_INTERVAL_S) -> None:
+    def __init__(self, drain: SearchOutboxDrain, interval_s: float | None = None) -> None:
         self._drain = drain
-        self._interval_s = interval_s
+        self._interval_s = search_outbox_drain_interval_s() if interval_s is None else interval_s
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:

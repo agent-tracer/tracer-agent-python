@@ -13,7 +13,8 @@ import pytest
 
 from tests.support.contract import conformance_case
 from tracer_agent.shared.agents.cleanup.archiver import TracerTaskArchiver
-from tracer_agent.shared.agents.recipe.outbox import DRAIN_LOCK_KEY, LedgerSearchOutboxDrain
+from tracer_agent.shared.agents.recipe.index import search_outbox_drain_lock_key
+from tracer_agent.shared.agents.recipe.outbox import LedgerSearchOutboxDrain
 from tracer_agent.shared.agents.recipe.store import RecipeStore, SearchOutboxStore
 from tracer_agent.shared.agents.recipe.tasks import MAX_IDS_PER_CALL, TracerTaskReader
 from tracer_agent.shared.agents.runtime.ledger import LedgerSql, SqlRow
@@ -147,7 +148,7 @@ async def test_배출은_자문_잠금을_얻은_뒤에만_저장소를_연다()
 
     assert await LedgerSearchOutboxDrain(OneSql(sql)).with_lock(work) == 0
     assert opened == [1]
-    assert sql.statements[0][1] == (DRAIN_LOCK_KEY,)
+    assert sql.statements[0][1] == (search_outbox_drain_lock_key(),)
 
 
 async def test_잠금을_얻지_못하면_저장소를_열지_않는다() -> None:
